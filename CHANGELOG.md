@@ -7,6 +7,21 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.2] - 2026-06-30
+
+### Alterado
+- Painel de configuração expandido de 165px para 225px para acomodar 6 linhas sem cortar o conteúdo
+- Label "Senha:" adicionada na coluna 0 da linha 3 (campo de senha do usuário padrão), espelhando o layout dos demais campos
+- Checkbox "Usuário padrão não poderá alterar a senha" movido para linha própria (linha 4) com `SetColumnSpan(4)`, separado do campo de senha
+- Checkbox "Aplicar papel de parede personalizado" movido para linha 5 com `SetColumnSpan(4)` (válido para 4 colunas)
+- `RowCount` do `TableLayoutPanel` de configurações alterado de 5 para 6; loop de `RowStyles` atualizado para 6 iterações
+
+### Corrigido
+- Checkbox "Aplicar papel de parede personalizado" não aparecia: `SetColumnSpan(5)` ultrapassava as 4 colunas do `TableLayoutPanel`; corrigido para `SetColumnSpan(4)`
+- Altura do container (`leftSide`, linha 0) era insuficiente (165px) para 6 linhas de 32px + padding + header (~220px); aumentado para 225px
+
+---
+
 ## [2.0.0.1] - 2026-06-30
 
 ### Adicionado
@@ -129,6 +144,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - Renomeação de computador via WMIC
 - Aplicação de papel de parede personalizado com `wallpaper.cmd`
 
-[2.0.0.1]: https://github.com/usuario/auto-install/releases/tag/v2.0.0.1
+[2.0.0.2]: https://github.com/git-exahost/InstaladorAutomaticoExabit/releases/tag/v2.0.0.2
+[2.0.0.1]: https://github.com/git-exahost/InstaladorAutomaticoExabit/releases/tag/v2.0.0.1
 [2.0.0.0]: https://github.com/usuario/auto-install/releases/tag/v2.0.0.0
 [1.0.0.0]: https://github.com/usuario/auto-install/releases/tag/v1.0.0.0

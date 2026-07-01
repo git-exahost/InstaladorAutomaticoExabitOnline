@@ -136,7 +136,7 @@ namespace InstallerGUI.Forms
                 RowCount = 2,
                 BackColor = CorFundo,
             };
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, 195));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, 225));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             leftSide.Controls.Add(BuildConfigPanel(), 0, 0);
@@ -293,21 +293,23 @@ namespace InstallerGUI.Forms
             tbl.Controls.Add(_txtStandardUserSurname, 2, 2);
             tbl.SetColumnSpan(_txtStandardUserSurname, 2);
 
-            // Linha 3: Senha do usuário padrão
+            // Linha 3: Senha
+            tbl.Controls.Add(CreateLabel("Senha:"), 0, 3);
+
             _txtStandardUserPass = CreateTextBox("Senha (opcional)");
             _txtStandardUserPass.Text = "Senha";
             tbl.Controls.Add(_txtStandardUserPass, 1, 3);
             tbl.SetColumnSpan(_txtStandardUserPass, 3);
 
-            // Linha 4: Wallpaper
-            _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", true);
-            tbl.Controls.Add(_chkWallpaper, 0, 4);
-            tbl.SetColumnSpan(_chkWallpaper, 4);
-
-            // Linha 5: Usuário padrão não pode alterar senha
-            _chkStandardUserNoPwdChange = CreateCheckBox("Usuário padrão não pode alterar senha", true);
-            tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 5);
+            // Linha 4: Usuário padrão não pode alterar senha
+            _chkStandardUserNoPwdChange = CreateCheckBox("Usuário padrão não poderá alterar a senha", true);
+            tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 4);
             tbl.SetColumnSpan(_chkStandardUserNoPwdChange, 4);
+
+            // Linha 5: Wallpaper
+            _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", true);
+            tbl.Controls.Add(_chkWallpaper, 0, 5);
+            tbl.SetColumnSpan(_chkWallpaper, 4);
 
             group.Controls.Add(tbl);
             return group;
