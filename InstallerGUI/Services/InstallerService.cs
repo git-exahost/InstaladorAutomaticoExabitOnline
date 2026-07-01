@@ -114,8 +114,8 @@ namespace InstallerGUI.Services
                 if (code != 0)
                     await RunProcessAsync("net", "localgroup Administrators admin /add");
 
-                code = await RunProcessAsync("wmic",
-                    "useraccount where name=\"admin\" set PasswordExpires=False");
+                code = await RunProcessAsync("powershell",
+                    "-Command \"Set-LocalUser -Name 'admin' -PasswordNeverExpires $true\"", 10000);
 
                 if (code == 0)
                     Log("[ok] Senha do admin configurada para nunca expirar.", ConsoleColor.Green);
@@ -165,9 +165,9 @@ namespace InstallerGUI.Services
                     return;
                 }
 
-                await RunProcessAsync("wmic",
-                    string.Format("useraccount where name=\"{0}\" set PasswordExpires=False",
-                    username));
+                await RunProcessAsync("powershell",
+                    string.Format("-Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true\"",
+                    username.Replace("'", "''")), 10000);
 
                 // Adiciona ao grupo de Área de Trabalho Remota para permitir login via RDP
                 Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);
@@ -361,8 +361,8 @@ namespace InstallerGUI.Services
             Log("Removendo atalhos deixados pelos instaladores...", ConsoleColor.Yellow);
             CleanAllDesktops(stdUserName);
 
-            // Recria apenas os atalhos personalizados
-            await CreateDesktopShortcutsAsync(options.AdminPassword, stdUserName);
+            // Recria apenas os atalhos personalizados (conforme opções do usuário)
+            await CreateDesktopShortcutsAsync(options);
 
             Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
         }
@@ -439,15 +439,25 @@ namespace InstallerGUI.Services
 
         /// <summary>
         /// Cria atalhos de suporte na área de trabalho dos usuários criados
-        /// e no desktop público.
+        /// e no desktop público, conforme as opções selecionadas pelo usuário.
+        /// Se solicitado, também adiciona os atalhos no Menu Iniciar (Todos os Usuários).
         /// </summary>
-        private async Task CreateDesktopShortcutsAsync(string adminPassword, string standardUserName)
+        private async Task CreateDesktopShortcutsAsync(InstallationOptions options)
         {
-            var shortcuts = new Dictionary<string, string>
+            // Monta dicionário apenas com os atalhos selecionados
+            var shortcuts = new Dictionary<string, string>();
+            if (options.CreateDesktopShortcutSuporteNorte)
+                shortcuts.Add("Suporte Norte", "https://suporte.exabit.com.br");
+            if (options.CreateDesktopShortcutWebmailNortel)
+                shortcuts.Add("Webmail Nortel", "http://webmail.nortel.srv.br");
+            if (options.CreateDesktopShortcutWebmailTerceirizacao)
+                shortcuts.Add("Webmail Nortel Terceirização", "http://webmail.nortelterceirizacao.com.br");
+
+            if (shortcuts.Count == 0)
             {
-                { "Suporte Norte", "https://suporte.exabit.com.br" },
-                { "Webmail Nortel", "http://webmail.nortel.srv.br" },
-            };
+                Log("Nenhum atalho selecionado. Pulando...", ConsoleColor.Yellow);
+                return;
+            }
 
             // Coleta os caminhos dos desktops onde criar os atalhos
             var desktopPaths = new List<string>();
@@ -466,9 +476,10 @@ namespace InstallerGUI.Services
             desktopPaths.Add(Path.Combine(usersFolder, "admin", "Desktop"));
 
             // Desktop do usuário padrão
-            if (!string.IsNullOrWhiteSpace(standardUserName))
+            string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
+            if (!string.IsNullOrWhiteSpace(stdUserName))
             {
-                desktopPaths.Add(Path.Combine(usersFolder, standardUserName, "Desktop"));
+                desktopPaths.Add(Path.Combine(usersFolder, stdUserName, "Desktop"));
             }
 
             Log("Criando atalhos na área de trabalho...", ConsoleColor.Yellow);
@@ -492,6 +503,33 @@ namespace InstallerGUI.Services
                     Log(string.Format("X Aviso ao criar atalhos em {0}: {1}",
                         desktop, ex.Message), ConsoleColor.Yellow);
                 }
+            }
+
+            // Se solicitado, cria também no Menu Iniciar (Todos os Usuários)
+            if (options.AddShortcutsToStartMenu)
+            {
+                string startMenu = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+                    "Programs");
+
+                Log("Adicionando atalhos ao Menu Iniciar...", ConsoleColor.Yellow);
+
+                foreach (var kvp in shortcuts)
+                {
+                    string urlPath = Path.Combine(startMenu, kvp.Key + ".url");
+                    try
+                    {
+                        File.WriteAllText(urlPath,
+                            "[InternetShortcut]\r\nURL=" + kvp.Value);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(string.Format("X Aviso ao criar atalho no Menu Iniciar: {0}",
+                            ex.Message), ConsoleColor.Yellow);
+                    }
+                }
+
+                Log("[ok] Atalhos adicionados ao Menu Iniciar.", ConsoleColor.Green);
             }
 
             Log("[ok] Atalhos criados na área de trabalho.", ConsoleColor.Green);
@@ -602,6 +640,28 @@ namespace InstallerGUI.Services
         public bool StandardUserCannotChangePassword { get; set; }
 
         public bool SetWallpaper { get; set; }
+
+        // ─── Opções de atalhos de suporte ───
+
+        /// <summary>
+        /// Cria atalho "Suporte Norte" na área de trabalho.
+        /// </summary>
+        public bool CreateDesktopShortcutSuporteNorte { get; set; }
+
+        /// <summary>
+        /// Cria atalho "Webmail Nortel" na área de trabalho.
+        /// </summary>
+        public bool CreateDesktopShortcutWebmailNortel { get; set; }
+
+        /// <summary>
+        /// Cria atalho "Webmail Nortel Terceirização" na área de trabalho.
+        /// </summary>
+        public bool CreateDesktopShortcutWebmailTerceirizacao { get; set; }
+
+        /// <summary>
+        /// Adiciona os atalhos também no Menu Iniciar (Todos os Usuários).
+        /// </summary>
+        public bool AddShortcutsToStartMenu { get; set; }
 
         /// <summary>
         /// Lista dos programas selecionados para instalação.

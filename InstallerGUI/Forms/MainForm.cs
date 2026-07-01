@@ -47,6 +47,10 @@ namespace InstallerGUI.Forms
         private TextBox _txtStandardUserPass;
         private CheckBox _chkStandardUserNoPwdChange;
         private CheckBox _chkWallpaper;
+        private CheckBox _chkShortcutSuporteNorte;
+        private CheckBox _chkShortcutWebmailNortel;
+        private CheckBox _chkShortcutWebmailTerceirizacao;
+        private CheckBox _chkShortcutStartMenu;
         private Panel _pnlPrograms;
         private Button _btnInstall;
         private ProgressBar _progressBar;
@@ -65,8 +69,8 @@ namespace InstallerGUI.Forms
         {
             // Configurações da janela
             Text = "Instalador Automático de Programas - EXABIT Soluções em TI";
-            Size = new Size(1200, 700);
-            MinimumSize = new Size(1200, 700);
+            Size = new Size(1200, 750);
+            MinimumSize = new Size(1200, 750);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = CorFundo;
             ForeColor = CorTexto;
@@ -136,7 +140,7 @@ namespace InstallerGUI.Forms
                 RowCount = 2,
                 BackColor = CorFundo,
             };
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, 225));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, 365));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             leftSide.Controls.Add(BuildConfigPanel(), 0, 0);
@@ -253,7 +257,7 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
-                RowCount = 6,
+                RowCount = 10,
                 Padding = new Padding(8, 5, 8, 5),
                 BackColor = CorPainel,
             };
@@ -263,7 +267,7 @@ namespace InstallerGUI.Forms
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
 
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 10; i++)
                 tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
 
             // Linha 0: Nome do computador (vazio = não renomear)
@@ -310,6 +314,28 @@ namespace InstallerGUI.Forms
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", true);
             tbl.Controls.Add(_chkWallpaper, 0, 5);
             tbl.SetColumnSpan(_chkWallpaper, 4);
+
+            // ─── Atalhos de suporte ───
+
+            // Linha 6: Atalho Suporte Norte
+            _chkShortcutSuporteNorte = CreateCheckBox("Suporte Norte (suporte.exabit.com.br)", false);
+            tbl.Controls.Add(_chkShortcutSuporteNorte, 0, 6);
+            tbl.SetColumnSpan(_chkShortcutSuporteNorte, 4);
+
+            // Linha 7: Atalho Webmail Nortel
+            _chkShortcutWebmailNortel = CreateCheckBox("Webmail Nortel (webmail.nortel.srv.br)", false);
+            tbl.Controls.Add(_chkShortcutWebmailNortel, 0, 7);
+            tbl.SetColumnSpan(_chkShortcutWebmailNortel, 4);
+
+            // Linha 8: Atalho Webmail Nortel Terceirização
+            _chkShortcutWebmailTerceirizacao = CreateCheckBox("Webmail Nortel Terceirização (webmail.nortelterceirizacao.com.br)", false);
+            tbl.Controls.Add(_chkShortcutWebmailTerceirizacao, 0, 8);
+            tbl.SetColumnSpan(_chkShortcutWebmailTerceirizacao, 4);
+
+            // Linha 9: Opção de Menu Iniciar
+            _chkShortcutStartMenu = CreateCheckBox("Adicionar atalhos também no Menu Iniciar", false);
+            tbl.Controls.Add(_chkShortcutStartMenu, 0, 9);
+            tbl.SetColumnSpan(_chkShortcutStartMenu, 4);
 
             group.Controls.Add(tbl);
             return group;
@@ -566,6 +592,12 @@ namespace InstallerGUI.Forms
 
                 options.SetWallpaper = _chkWallpaper.Checked;
 
+                // ─── Atalhos de suporte ───
+                options.CreateDesktopShortcutSuporteNorte = _chkShortcutSuporteNorte.Checked;
+                options.CreateDesktopShortcutWebmailNortel = _chkShortcutWebmailNortel.Checked;
+                options.CreateDesktopShortcutWebmailTerceirizacao = _chkShortcutWebmailTerceirizacao.Checked;
+                options.AddShortcutsToStartMenu = _chkShortcutStartMenu.Checked;
+
                 // Coleta os programas marcados
                 foreach (Control c in _pnlPrograms.Controls)
                 {
@@ -583,27 +615,12 @@ namespace InstallerGUI.Forms
 
                 // Log final
                 AppendLog("", null);
-                AppendLog("O sistema será reiniciado em 10 segundos...", ConsoleColor.Cyan);
-
-                // Pergunta se quer reiniciar
-                var restart = MessageBox.Show(
-                    "Instalação concluída com sucesso!\n\n" +
-                    "Deseja reiniciar o computador agora?",
+                AppendLog("Instalação concluída com sucesso!", ConsoleColor.Green);
+                MessageBox.Show(
+                    "Instalação concluída com sucesso!",
                     "Concluído",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question);
-
-                if (restart == DialogResult.Yes)
-                {
-                    // Reinicia com 10 segundos de tolerância
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = "shutdown",
-                        Arguments = "/r /t 10 /c \"Reiniciando para concluir as instalações\"",
-                        UseShellExecute = true,
-                        Verb = "runas",
-                    });
-                }
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {

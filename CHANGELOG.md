@@ -7,6 +7,38 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.9] - 2026-07-01
+
+### Alterado
+- Atalhos de suporte (Suporte Norte, Webmail Nortel, Webmail Nortel Terceirização) agora iniciam **desmarcados** por padrão — o usuário marca apenas os que deseja
+- Removida a pergunta "Deseja reiniciar o computador?" ao final da instalação; agora apenas exibe mensagem de conclusão
+
+---
+
+## [2.0.0.8] - 2026-07-01
+
+### Adicionado
+- Atalho "Webmail Nortel Terceirização" (`http://webmail.nortelterceirizacao.com.br`) — novo link de suporte
+- Checkboxes individuais na interface para ativar/desativar cada atalho de suporte (Suporte Norte, Webmail Nortel, Webmail Nortel Terceirização)
+- Checkbox "Adicionar atalhos também no Menu Iniciar" — cria os atalhos em `C:\ProgramData\Microsoft\Windows\Start Menu\Programs` além da área de trabalho
+
+### Alterado
+- `CreateDesktopShortcutsAsync` agora recebe `InstallationOptions` em vez de parâmetros avulsos, lê quais atalhos criar e se deve incluir no Menu Iniciar
+- Altura do painel de configuração ajustada de 225px para 365px para acomodar as novas opções de atalhos
+
+---
+
+## [2.0.0.7] - 2026-07-01
+
+### Corrigido
+- Erro "O sistema não pode encontrar o arquivo especificado" ao configurar expiração de senha no Windows 11 Home (`wmic.exe` não está disponível nesta edição)
+- Substituídas chamadas ao `wmic` por PowerShell `Set-LocalUser -PasswordNeverExpires`, compatível com Windows 10/11 Home e Pro
+
+### Alterado
+- `RunProcessAsync("wmic", ...)` substituído por `RunProcessAsync("powershell", "-Command \"Set-LocalUser ...\"")` nos métodos `CreateAdminUserAsync` e `CreateStandardUserAsync`
+
+---
+
 ## [2.0.0.6] - 2026-07-01
 
 ### Corrigido
