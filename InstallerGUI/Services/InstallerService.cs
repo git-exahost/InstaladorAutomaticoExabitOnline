@@ -242,7 +242,8 @@ namespace InstallerGUI.Services
 
                 if (program.FireAndForget)
                 {
-                    // Inicia e não aguarda (programas que ficam em execução)
+                    // Inicia e aguarda um tempo para o instalador trabalhar em segundo plano
+                    int delay = program.TimeoutMs > 0 ? program.TimeoutMs : 30000;
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = fullPath,
@@ -250,7 +251,8 @@ namespace InstallerGUI.Services
                         WorkingDirectory = procWorkDir ?? string.Empty,
                         UseShellExecute = true,
                     });
-                    await Task.Delay(30000);
+                    Log(string.Format("  Aguardando {0} segundos para conclusão...", delay / 1000), ConsoleColor.Gray);
+                    await Task.Delay(delay);
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName),
                         ConsoleColor.Green);
                 }

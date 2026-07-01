@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.5] - 2026-06-30
+
+### Corrigido
+- Office (`setup.exe /configure configuration.xml`) agora usa `FireAndForget` com 10 minutos de espera; antes o ODT iniciava a instalação e saía imediatamente com código 0, fazendo o programa registrar "instalação concluída" antes do Office terminar de instalar
+- Bloco `FireAndForget` no `InstallerService` agora respeita a propriedade `TimeoutMs` do programa (antes usava 30 segundos fixos)
+
+---
+
 ## [2.0.0.4] - 2026-06-30
 
 ### Adicionado

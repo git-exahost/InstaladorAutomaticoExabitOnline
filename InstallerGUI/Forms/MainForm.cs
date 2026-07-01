@@ -768,7 +768,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("rustdesk",    "RustDesk",              "rustdesk_x86_64.exe",                "--silent-install") { FireAndForget = true },
                 new ProgramInfo("winrar",      "WinRAR",                "winrar.exe",                         "/S"),
                 new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView","DWGTrueView\\Setup.exe",              "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
-                new ProgramInfo("office",      "Microsoft Office",      "Office\\setup.exe",                  "/configure configuration.xml") { ProcessWorkingDir = "Office" },
+                new ProgramInfo("office",      "Microsoft Office",      "Office\\setup.exe",                  "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000 },
             };
         }
     }
