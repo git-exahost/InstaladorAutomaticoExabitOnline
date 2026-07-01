@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.3] - 2026-06-30
+
+### Corrigido
+- Criação do usuário padrão agora verifica individualmente se os campos "Nome" e "Sobrenome" foram preenchidos com valores diferentes dos placeholders padrão; se ambos estiverem em branco ou com valores padrão, o usuário não é criado e a senha é ignorada
+
+---
+
 ## [2.0.0.2] - 2026-06-30
 
 ### Alterado

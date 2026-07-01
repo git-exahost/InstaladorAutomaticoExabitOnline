@@ -553,12 +553,16 @@ namespace InstallerGUI.Forms
                 options.CreateAdmin = true;
                 options.AdminPassword = _txtAdminPass.Text;
 
-                string stdUserName = (_txtStandardUserName.Text.Trim() + " " + _txtStandardUserSurname.Text.Trim()).Trim();
-                options.CreateStandardUser = !string.IsNullOrWhiteSpace(stdUserName)
-                    && stdUserName != "Sobrenome";
-                options.StandardUserName = options.CreateStandardUser ? stdUserName : null;
-                options.StandardUserPassword = _txtStandardUserPass.Text;
-                options.StandardUserCannotChangePassword = _chkStandardUserNoPwdChange.Checked;
+                string stdName = _txtStandardUserName.Text.Trim();
+                string stdSurname = _txtStandardUserSurname.Text.Trim();
+                bool nomePreenchido = !string.IsNullOrWhiteSpace(stdName) && stdName != "Nome";
+                bool sobrenomePreenchido = !string.IsNullOrWhiteSpace(stdSurname) && stdSurname != "Sobrenome";
+                bool criarUsuarioPadrao = nomePreenchido || sobrenomePreenchido;
+
+                options.CreateStandardUser = criarUsuarioPadrao;
+                options.StandardUserName = criarUsuarioPadrao ? (stdName + " " + stdSurname).Trim() : null;
+                options.StandardUserPassword = criarUsuarioPadrao ? _txtStandardUserPass.Text : null;
+                options.StandardUserCannotChangePassword = criarUsuarioPadrao && _chkStandardUserNoPwdChange.Checked;
 
                 options.SetWallpaper = _chkWallpaper.Checked;
 
