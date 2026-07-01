@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.4] - 2026-06-30
+
+### Adicionado
+- Usuário padrão agora é adicionado automaticamente ao grupo "Usuários da Área de Trabalho Remota" (Remote Desktop Users) para permitir login via RDP
+
+---
+
 ## [2.0.0.3] - 2026-06-30
 
 ### Corrigido

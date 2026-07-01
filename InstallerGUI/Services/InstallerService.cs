@@ -169,6 +169,19 @@ namespace InstallerGUI.Services
                     string.Format("useraccount where name=\"{0}\" set PasswordExpires=False",
                     username));
 
+                // Adiciona ao grupo de Área de Trabalho Remota para permitir login via RDP
+                Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);
+                int rdpCode = await RunProcessAsync("net",
+                    string.Format("localgroup \"Usuários da Área de Trabalho Remota\" \"{0}\" /add", username));
+                if (rdpCode != 0)
+                    rdpCode = await RunProcessAsync("net",
+                        string.Format("localgroup \"Remote Desktop Users\" \"{0}\" /add", username));
+
+                if (rdpCode == 0)
+                    Log("[ok] Usuário adicionado ao grupo de área de trabalho remota.", ConsoleColor.Green);
+                else
+                    Log("X Aviso: Não foi possível adicionar ao grupo de área de trabalho remota.", ConsoleColor.Yellow);
+
                 Log(string.Format("[ok] Usuário \"{0}\" criado.", username), ConsoleColor.Green);
             }
             catch (Exception ex)
