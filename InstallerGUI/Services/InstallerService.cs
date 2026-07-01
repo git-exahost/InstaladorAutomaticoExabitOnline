@@ -343,6 +343,11 @@ namespace InstallerGUI.Services
                 await SetWallpaperAsync();
             }
 
+            // Limpa todas as áreas de trabalho ANTES de instalar programas,
+            // pois alguns instaladores criam atalhos imediatamente.
+            string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
+            CleanAllDesktops(stdUserName);
+
             // 5. Instalar cada programa selecionado
             foreach (var program in options.SelectedPrograms)
             {
@@ -351,43 +356,85 @@ namespace InstallerGUI.Services
                 await InstallProgramAsync(program);
             }
 
-            // Finaliza
-            currentStep++;
-            ReportProgress(currentStep, totalSteps);
+            // Limpa NOVAMENTE após a instalação para remover atalhos
+            // criados por processos-filho ou ações adiadas dos instaladores.
+            Log("Removendo atalhos deixados pelos instaladores...", ConsoleColor.Yellow);
+            CleanAllDesktops(stdUserName);
 
-            Log("", null);
-
-            // Limpa atalhos do desktop público e cria os personalizados
-            CleanPublicDesktop();
-            await CreateDesktopShortcutsAsync(options.AdminPassword,
-                options.CreateStandardUser ? options.StandardUserName : null);
+            // Recria apenas os atalhos personalizados
+            await CreateDesktopShortcutsAsync(options.AdminPassword, stdUserName);
 
             Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
         }
 
         /// <summary>
-        /// Remove todos os atalhos (.lnk) do desktop público para deixar
-        /// a área de trabalho limpa após a instalação.
+        /// Remove todos os atalhos (.lnk e .url) da área de trabalho de todos
+        /// os perfis (público, admin, usuário padrão e Default) para deixar apenas
+        /// os que serão criados pelo método <see cref="CreateDesktopShortcutsAsync"/>.
+        /// 
+        /// Também limpa o template Default\Desktop para que novos usuários
+        /// que ainda não fizeram login também recebam a área limpa.
         /// </summary>
-        private void CleanPublicDesktop()
+        private void CleanAllDesktops(string standardUserName)
         {
-            Log("Limpando atalhos do Desktop público...", ConsoleColor.Yellow);
+            Log("Limpando atalhos de todas as áreas de trabalho...", ConsoleColor.Yellow);
 
+            var desktopPaths = new List<string>();
+
+            // Desktop público (afeta todos os usuários)
             try
             {
-                string publicDesktop = Environment.GetFolderPath(
-                    Environment.SpecialFolder.CommonDesktopDirectory);
-
-                foreach (string file in Directory.GetFiles(publicDesktop, "*.lnk"))
-                    File.Delete(file);
-
-                Log("[ok] Desktop público limpo.", ConsoleColor.Green);
+                desktopPaths.Add(Environment.GetFolderPath(
+                    Environment.SpecialFolder.CommonDesktopDirectory));
             }
-            catch (Exception ex)
+            catch { }
+
+            string usersFolder = Environment.GetEnvironmentVariable("SystemDrive") + "\\Users";
+
+            // Desktop do admin
+            desktopPaths.Add(Path.Combine(usersFolder, "admin", "Desktop"));
+
+            // Desktop do usuário padrão (se já existir)
+            if (!string.IsNullOrWhiteSpace(standardUserName))
             {
-                Log(string.Format("X Aviso ao limpar Desktop: {0}", ex.Message),
-                    ConsoleColor.Yellow);
+                desktopPaths.Add(Path.Combine(usersFolder, standardUserName, "Desktop"));
             }
+
+            // Template Default - usado para criar desktop de NOVOS usuários
+            desktopPaths.Add(Path.Combine(usersFolder, "Default", "Desktop"));
+
+            foreach (string desktop in desktopPaths)
+            {
+                try
+                {
+                    if (!Directory.Exists(desktop))
+                    {
+                        // Cria o diretório se não existir (ex: Default\Desktop ou usuário que nunca logou)
+                        Directory.CreateDirectory(desktop);
+                    }
+
+                    // Remove atalhos .lnk (programas)
+                    foreach (string file in Directory.GetFiles(desktop, "*.lnk"))
+                    {
+                        try { File.Delete(file); }
+                        catch { }
+                    }
+
+                    // Remove atalhos .url (websites)
+                    foreach (string file in Directory.GetFiles(desktop, "*.url"))
+                    {
+                        try { File.Delete(file); }
+                        catch { }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("X Aviso ao limpar {0}: {1}", desktop, ex.Message),
+                        ConsoleColor.Yellow);
+                }
+            }
+
+            Log("[ok] Áreas de trabalho limpas.", ConsoleColor.Green);
         }
 
         /// <summary>

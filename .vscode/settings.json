@@ -1,0 +1,15 @@
+{
+    // Projeto usa build.bat (csc.exe), não SDK-style projects.
+    // Força uso do OmniSharp (em vez do Roslyn LSP) e desliga ele,
+    // assim nenhum servidor de linguagem tenta carregar o .csproj.
+    "dotnet.server.useOmnisharp": true,
+    "omnisharp.autoStart": false,
+    "omnisharp.enableRoslynAnalyzers": false,
+    "omnisharp.enableEditorConfigSupport": false,
+    "omnisharp.enableDecompilationSupport": false,
+    "csharp.semanticSearch.onlyBuildWithMSBuild": false,
+    "dotnet.codeLens.enableReferencesCodeLens": false,
+    // Suprime notificações de erro do LSP para projetos que não carregam
+    "dotnet.server.suppressLspErrorToasts": true,
+    "dotnet.server.suppressMiscellaneousFilesToasts": true
+}

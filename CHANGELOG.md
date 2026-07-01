@@ -7,6 +7,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.6] - 2026-07-01
+
+### Corrigido
+- Limpeza de atalhos da área de trabalho agora é feita em **DOIS momentos**: antes e depois da instalação dos programas, garantindo que atalhos criados por processos-filho ou ações adiadas dos instaladores sejam removidos
+- `CleanAllDesktops` agora também limpa o template `C:\Users\Default\Desktop` para que **novos usuários** que ainda não fizeram login também herdem o desktop limpo
+- Se o diretório do desktop do usuário padrão não existir (nunca fez login), o método agora o **cria antes de limpar**
+- Cada deleção de atalho agora possui try/catch individual para evitar que um arquivo protegido interrompa a limpeza dos demais
+
+### Alterado
+- `CleanPublicDesktop()` substituído por `CleanAllDesktops()` que remove atalhos `.lnk` e `.url` de **todos** os perfis: público, admin, usuário padrão e Default (template)
+
+---
+
 ## [2.0.0.5] - 2026-06-30
 
 ### Corrigido
