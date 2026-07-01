@@ -1,0 +1,29 @@
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>InstallerGUI</RootNamespace>
+    <AssemblyName>install</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <OutputPath>bin\Release\</OutputPath>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Forms\MainForm.cs" />
+    <Compile Include="Models\ProgramInfo.cs" />
+    <Compile Include="Services\InstallerService.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <Target Name="Build">
+    <Csc Sources="@(Compile)" References="@(Reference)" OutputAssembly="$(OutputPath)$(AssemblyName).exe" TargetType="exe" Optimize="true" Win32Icon="install.ico" />
+  </Target>
+</Project>

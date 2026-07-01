@@ -1,0 +1,21 @@
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="Current" SourcePath="." AllowCdnFallback="False">
+    <!--
+      Product ID padrão = ProPlusRetail (Office 2016/2019/2021)
+      Caso não instale, experimente:
+        - O365ProPlusRetail (Microsoft 365)
+        - ProPlus2021Volume (Office LTSC 2021)
+        - StandardRetail (Office Standard)
+        - ProfessionalRetail (Office Professional)
+
+      Para descobrir o Product ID correto, veja um Office já instalado
+      em: Arquivo > Conta > Sobre o Office
+    -->
+    <Product ID="ProPlusRetail">
+      <Language ID="pt-br" />
+    </Product>
+  </Add>
+  <Display Level="None" AcceptEULA="TRUE" />
+  <Property Name="AUTOACTIVATE" Value="0" />
+  <Updates Enabled="FALSE" />
+</Configuration>

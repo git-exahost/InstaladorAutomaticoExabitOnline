@@ -1,0 +1,19 @@
+# Build output
+InstallerGUI/bin/
+InstallerGUI/obj/
+
+# Generated files
+dist/build_info.txt
+dist/install.exe
+
+# Binary installers (distributed via release, not git)
+dist/Programas/*.exe
+dist/Programas/*.msi
+dist/Programas/*.iso
+dist/Programas/DWGTrueView/
+dist/Programas/Office/office/
+
+# VS user options
+*.suo
+*.user
+*.vs/
