@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.10] - 2026-07-01
+
+### Alterado
+- Senha padrão do usuário admin alterada de `EXA@admin#202_` para `NT@admin#`
+- Senha padrão do usuário padrão alterada de `Senha` para `NT@colaborador` (já preenchida no campo)
+
+---
+
 ## [2.0.0.9] - 2026-07-01
 
 ### Alterado

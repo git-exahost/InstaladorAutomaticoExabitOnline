@@ -281,7 +281,7 @@ namespace InstallerGUI.Forms
             tbl.Controls.Add(CreateLabel("Criar usuário admin:"), 0, 1);
 
             _txtAdminPass = CreateTextBox("Senha do admin");
-            _txtAdminPass.Text = "EXA@admin#202_";
+            _txtAdminPass.Text = "NT@admin#";
             tbl.Controls.Add(_txtAdminPass, 1, 1);
             tbl.SetColumnSpan(_txtAdminPass, 3);
 
@@ -301,7 +301,7 @@ namespace InstallerGUI.Forms
             tbl.Controls.Add(CreateLabel("Senha:"), 0, 3);
 
             _txtStandardUserPass = CreateTextBox("Senha (opcional)");
-            _txtStandardUserPass.Text = "Senha";
+            _txtStandardUserPass.Text = "NT@colaborador";
             tbl.Controls.Add(_txtStandardUserPass, 1, 3);
             tbl.SetColumnSpan(_txtStandardUserPass, 3);
 

@@ -324,7 +324,7 @@ namespace InstallerGUI.Services
             {
                 currentStep++;
                 ReportProgress(currentStep, totalSteps);
-                await CreateAdminUserAsync(options.AdminPassword ?? "EXA@admin#202_");
+                await CreateAdminUserAsync(options.AdminPassword ?? "NT@admin#");
             }
 
             // 3. Criar usuário padrão
