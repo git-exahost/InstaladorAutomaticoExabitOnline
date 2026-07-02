@@ -413,7 +413,7 @@ namespace InstallerGUI.Forms
                 var chk = new CheckBox
                 {
                     Text = prog.DisplayName,
-                    Checked = true,
+                    Checked = prog.Id != "office" && prog.Id != "radmin",
                     Tag = prog,
                     ForeColor = CorTexto,
                     BackColor = Color.Transparent,

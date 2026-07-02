@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.11] - 2026-07-01
+
+### Alterado
+- Microsoft Office e Radmin VPN agora iniciam **desmarcados** na lista de programas (o usuário marca se quiser instalar)
+
+---
+
 ## [2.0.0.10] - 2026-07-01
 
 ### Alterado
