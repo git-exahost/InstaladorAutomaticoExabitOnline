@@ -53,6 +53,7 @@ namespace InstallerGUI.Forms
         private CheckBox _chkShortcutStartMenu;
         private Panel _pnlPrograms;
         private Button _btnInstall;
+        private Button _btnStop;
         private ProgressBar _progressBar;
         private Label _lblProgress;
         private RichTextBox _txtLog;
@@ -509,17 +510,18 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 3,
+                RowCount = 4,
                 BackColor = CorFundo,
             };
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // Programas
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55)); // Botão
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 55)); // Botão Instalar
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); // Botão Parar
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 35)); // Progresso
 
             layout.Controls.Add(BuildProgramsPanel(), 0, 0);
 
             // ─── Botão Instalar ───
-            var btnPanel = new Panel
+            var btnInstallPanel = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorFundo,
@@ -539,10 +541,36 @@ namespace InstallerGUI.Forms
             };
             _btnInstall.FlatAppearance.MouseOverBackColor = Color.FromArgb(0, 180, 70);
             _btnInstall.Click += BtnInstall_Click;
-            btnPanel.Controls.Add(_btnInstall);
+            btnInstallPanel.Controls.Add(_btnInstall);
 
-            layout.Controls.Add(btnPanel, 0, 1);
-            layout.Controls.Add(BuildProgressBar(), 0, 2);
+            layout.Controls.Add(btnInstallPanel, 0, 1);
+
+            // ─── Botão Parar ───
+            var btnStopPanel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorFundo,
+                Padding = new Padding(0, 2, 0, 2),
+            };
+
+            _btnStop = new Button
+            {
+                Text = "PARAR",
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = CorTexto,
+                BackColor = Color.FromArgb(180, 50, 0),
+                FlatStyle = FlatStyle.Flat,
+                FlatAppearance = { BorderSize = 0 },
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Fill,
+                Enabled = false,
+            };
+            _btnStop.FlatAppearance.MouseOverBackColor = Color.FromArgb(200, 70, 0);
+            _btnStop.Click += BtnStop_Click;
+            btnStopPanel.Controls.Add(_btnStop);
+
+            layout.Controls.Add(btnStopPanel, 0, 2);
+            layout.Controls.Add(BuildProgressBar(), 0, 3);
 
             panel.Controls.Add(layout);
             return panel;
@@ -566,10 +594,14 @@ namespace InstallerGUI.Forms
             _installing = true;
             _btnInstall.Enabled = false;
             _btnInstall.Text = "INSTALANDO...";
+            _btnStop.Enabled = true;
             _txtLog.Clear();
 
             try
             {
+                // Inicia a instalação no serviço
+                _service.StartInstallation();
+
                 // Monta as opções com base no que o usuário selecionou
                 var options = new InstallationOptions();
 
@@ -612,15 +644,6 @@ namespace InstallerGUI.Forms
 
                 // Executa toda a instalação
                 await _service.RunFullInstallationAsync(options);
-
-                // Log final
-                AppendLog("", null);
-                AppendLog("Instalação concluída com sucesso!", ConsoleColor.Green);
-                MessageBox.Show(
-                    "Instalação concluída com sucesso!",
-                    "Concluído",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
@@ -635,6 +658,29 @@ namespace InstallerGUI.Forms
                 _installing = false;
                 _btnInstall.Enabled = true;
                 _btnInstall.Text = "INICIAR INSTALAÇÃO";
+                _btnStop.Enabled = false;
+            }
+        }
+
+        /// <summary>
+        /// Disparado ao clicar no botão "PARAR".
+        /// Solicita o cancelamento da instalação.
+        /// </summary>
+        private void BtnStop_Click(object sender, EventArgs e)
+        {
+            if (!_installing) return;
+
+            var result = MessageBox.Show(
+                "Tem certeza que deseja parar a instalação?",
+                "Confirmar parada",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                _service.CancelInstallation();
+                _btnStop.Enabled = false;
+                AppendLog("Solicitação de parada enviada...", ConsoleColor.Yellow);
             }
         }
 

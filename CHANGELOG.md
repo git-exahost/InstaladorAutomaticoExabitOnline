@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.12] - 2026-07-03
+
+### Adicionado
+- Botão "PARAR" para cancelar a instalação em andamento
+
+### Alterado
+- Botão "PARAR" não remove mais os usuários já criados ao cancelar a instalação
+
+---
+
 ## [2.0.0.11] - 2026-07-01
 
 ### Alterado

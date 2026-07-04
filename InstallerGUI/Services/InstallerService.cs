@@ -40,6 +40,11 @@ namespace InstallerGUI.Services
         /// </summary>
         private readonly string _basePath;
 
+        /// <summary>
+        /// Token para cancelar a instalação.
+        /// </summary>
+        private System.Threading.CancellationTokenSource _cancellationTokenSource;
+
         // ──────────────────────────────────────────────
         // Construtor
         // ──────────────────────────────────────────────
@@ -55,6 +60,25 @@ namespace InstallerGUI.Services
         public InstallerService(string basePath)
         {
             _basePath = basePath;
+        }
+
+        /// <summary>
+        /// Inicia uma nova instalação (cria token de cancelamento).
+        /// </summary>
+        public void StartInstallation()
+        {
+            _cancellationTokenSource = new System.Threading.CancellationTokenSource();
+        }
+
+        /// <summary>
+        /// Solicita o cancelamento da instalação.
+        /// </summary>
+        public void CancelInstallation()
+        {
+            if (_cancellationTokenSource != null)
+            {
+                _cancellationTokenSource.Cancel();
+            }
         }
 
         // ──────────────────────────────────────────────
@@ -306,65 +330,117 @@ namespace InstallerGUI.Services
             totalSteps += options.SelectedPrograms.Count;
 
             int currentStep = 0;
+            bool cancelled = false;
 
             Log("=== INICIANDO INSTALAÇÃO ===", ConsoleColor.Cyan);
             Log(string.Format("Data: {0:dd/MM/yyyy HH:mm:ss}", DateTime.Now), ConsoleColor.Gray);
             Log("", null);
 
-            // 1. Renomear computador
-            if (options.RenameComputer && !string.IsNullOrWhiteSpace(options.ComputerName))
+            try
             {
-                currentStep++;
-                ReportProgress(currentStep, totalSteps);
-                await RenameComputerAsync(options.ComputerName);
-            }
+                // 1. Renomear computador
+                if (!cancelled && options.RenameComputer && !string.IsNullOrWhiteSpace(options.ComputerName))
+                {
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        cancelled = true;
 
-            // 2. Criar usuário admin
-            if (options.CreateAdmin)
+                    if (!cancelled)
+                    {
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        await RenameComputerAsync(options.ComputerName);
+                    }
+                }
+
+                // 2. Criar usuário admin
+                if (!cancelled && options.CreateAdmin)
+                {
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        cancelled = true;
+
+                    if (!cancelled)
+                    {
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        await CreateAdminUserAsync(options.AdminPassword ?? "NT@admin#");
+                    }
+                }
+
+                // 3. Criar usuário padrão
+                if (!cancelled && options.CreateStandardUser)
+                {
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        cancelled = true;
+
+                    if (!cancelled)
+                    {
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        await CreateStandardUserAsync(options.StandardUserName, options.StandardUserPassword, options.StandardUserCannotChangePassword);
+                    }
+                }
+
+                // 4. Wallpaper
+                if (!cancelled && options.SetWallpaper)
+                {
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        cancelled = true;
+
+                    if (!cancelled)
+                    {
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        await SetWallpaperAsync();
+                    }
+                }
+
+                // Limpa todas as áreas de trabalho ANTES de instalar programas,
+                // pois alguns instaladores criam atalhos imediatamente.
+                if (!cancelled)
+                {
+                    string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
+                    CleanAllDesktops(stdUserName);
+                }
+
+                // 5. Instalar cada programa selecionado
+                if (!cancelled)
+                {
+                    foreach (var program in options.SelectedPrograms)
+                    {
+                        if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        {
+                            cancelled = true;
+                            break;
+                        }
+
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        await InstallProgramAsync(program);
+                    }
+                }
+
+                if (!cancelled)
+                {
+                    // Limpa NOVAMENTE após a instalação para remover atalhos
+                    // criados por processos-filho ou ações adiadas dos instaladores.
+                    Log("Removendo atalhos deixados pelos instaladores...", ConsoleColor.Yellow);
+                    string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
+                    CleanAllDesktops(stdUserName);
+
+                    // Recria apenas os atalhos personalizados (conforme opções do usuário)
+                    await CreateDesktopShortcutsAsync(options);
+
+                    Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
+                }
+                else
+                {
+                    Log("=== INSTALAÇÃO CANCELADA ===", ConsoleColor.Yellow);
+                }
+            }
+            catch (OperationCanceledException)
             {
-                currentStep++;
-                ReportProgress(currentStep, totalSteps);
-                await CreateAdminUserAsync(options.AdminPassword ?? "NT@admin#");
+                Log("=== INSTALAÇÃO CANCELADA ===", ConsoleColor.Yellow);
             }
-
-            // 3. Criar usuário padrão
-            if (options.CreateStandardUser)
-            {
-                currentStep++;
-                ReportProgress(currentStep, totalSteps);
-                await CreateStandardUserAsync(options.StandardUserName, options.StandardUserPassword, options.StandardUserCannotChangePassword);
-            }
-
-            // 4. Wallpaper
-            if (options.SetWallpaper)
-            {
-                currentStep++;
-                ReportProgress(currentStep, totalSteps);
-                await SetWallpaperAsync();
-            }
-
-            // Limpa todas as áreas de trabalho ANTES de instalar programas,
-            // pois alguns instaladores criam atalhos imediatamente.
-            string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
-            CleanAllDesktops(stdUserName);
-
-            // 5. Instalar cada programa selecionado
-            foreach (var program in options.SelectedPrograms)
-            {
-                currentStep++;
-                ReportProgress(currentStep, totalSteps);
-                await InstallProgramAsync(program);
-            }
-
-            // Limpa NOVAMENTE após a instalação para remover atalhos
-            // criados por processos-filho ou ações adiadas dos instaladores.
-            Log("Removendo atalhos deixados pelos instaladores...", ConsoleColor.Yellow);
-            CleanAllDesktops(stdUserName);
-
-            // Recria apenas os atalhos personalizados (conforme opções do usuário)
-            await CreateDesktopShortcutsAsync(options);
-
-            Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
         }
 
         /// <summary>
