@@ -11,6 +11,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Adicionado
 - Botão "PARAR" para cancelar a instalação em andamento
+- Citrix Workspace adicionado à lista de programas com instalação silenciosa completa (instalador `CitrixWorkspaceFullInstaller_x64.exe`)
 
 ### Alterado
 - Botão "PARAR" não remove mais os usuários já criados ao cancelar a instalação

@@ -828,6 +828,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("googleearth", "Google Earth Pro",      "googleearthprowin.exe",              "OMAHA=1"),
                 new ProgramInfo("java",        "Java JRE 8",            "jre-windows-x64.exe",                "/s"),
                 new ProgramInfo("radmin",      "Radmin VPN",            "Radmin_VPN.exe",                     "/VERYSILENT /NORESTART"),
+                new ProgramInfo("citrix",      "Citrix Workspace",      "CitrixWorkspaceFullInstaller_x64.exe", "/silent /includeSSON /norestart"),
                 new ProgramInfo("rustdesk",    "RustDesk",              "rustdesk_x86_64.exe",                "--silent-install") { FireAndForget = true },
                 new ProgramInfo("winrar",      "WinRAR",                "winrar.exe",                         "/S"),
                 new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView","DWGTrueView\\Setup.exe",              "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
