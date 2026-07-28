@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.13] - 2026-07-27
+
+### Adicionado
+- AnyDesk (`AnyDesk.exe`) adicionado à lista de programas com instalação silenciosa (`--install "C:\Program Files (x86)\AnyDesk" --start-with-win --silent`)
+
+### Alterado
+- AnyDesk agora inicia **desmarcado** por padrão na lista de programas (o usuário marca se quiser instalar)
+
+---
+
 ## [2.0.0.12] - 2026-07-03
 
 ### Adicionado

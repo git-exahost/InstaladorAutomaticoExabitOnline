@@ -414,7 +414,7 @@ namespace InstallerGUI.Forms
                 var chk = new CheckBox
                 {
                     Text = prog.DisplayName,
-                    Checked = prog.Id != "office" && prog.Id != "radmin",
+                    Checked = prog.Id != "office" && prog.Id != "radmin" && prog.Id != "anydesk",
                     Tag = prog,
                     ForeColor = CorTexto,
                     BackColor = Color.Transparent,
@@ -822,6 +822,7 @@ namespace InstallerGUI.Forms
             {
                 new ProgramInfo("7zip",        "7-Zip",                 "7z.msi",                             "/qn /norestart"),
                 new ProgramInfo("adobereader", "Adobe Acrobat Reader",  "AcroRdrDC.exe",                      "/sAll /msi EULA_ACCEPT=YES /qn /norestart"),
+                new ProgramInfo("anydesk",     "AnyDesk",               "AnyDesk.exe",                        "--install \"C:\\Program Files (x86)\\AnyDesk\" --start-with-win --silent"),
                 new ProgramInfo("brave",       "Brave Browser",         "BraveBrowserSetup.exe",              "/silent /install"),
                 new ProgramInfo("chrome",      "Google Chrome",         "ChromeStandaloneSetup64.exe",         "/silent /install"),
                 new ProgramInfo("firefox",     "Mozilla Firefox",       "Firefox_Setup.msi",                  "/qn /norestart"),
