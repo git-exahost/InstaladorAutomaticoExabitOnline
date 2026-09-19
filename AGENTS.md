@@ -50,6 +50,7 @@ Models/ProgramInfo.cs     → DADOS - Estrutura dos programas
 - A comunicação entre service e UI é feita **exclusivamente por eventos**:
   - `OnLog(string, ConsoleColor?)` → para mensagens no log
   - `OnProgress(int, int)` → para atualizar a barra de progresso
+  - `OnInstallationCompleted()` → disparado quando a instalação é concluída com sucesso
 - Para acessar a UI com segurança de thread: `Invoke(new Action(...))`
 
 ## Convenções de Código

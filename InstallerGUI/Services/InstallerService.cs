@@ -30,6 +30,11 @@ namespace InstallerGUI.Services
         /// </summary>
         public event Action<int, int> OnProgress;
 
+        /// <summary>
+        /// Disparado quando toda a instalação é concluída com sucesso.
+        /// </summary>
+        public event Action OnInstallationCompleted;
+
         // ──────────────────────────────────────────────
         // Campos
         // ──────────────────────────────────────────────
@@ -431,6 +436,12 @@ namespace InstallerGUI.Services
                     await CreateDesktopShortcutsAsync(options);
 
                     Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
+
+                    var handler = OnInstallationCompleted;
+                    if (handler != null)
+                    {
+                        handler();
+                    }
                 }
                 else
                 {

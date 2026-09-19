@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.14] - 2026-09-18
+
+### Adicionado
+- Som personalizado do R2-D2 (`R2D2.mp3`) reproduzido automaticamente após a conclusão com sucesso de toda a instalação de programas e configurações
+- Embutido o áudio `R2D2.mp3` como recurso no executável (`install.exe`) e distribuído na pasta `dist/Sound/`, garantindo a execução independente do ambiente
+- Evento `OnInstallationCompleted` no `InstallerService` para notificar a interface sobre o término da instalação
+- Fallback automático para sons do Windows (`tada.wav` / som de alerta) caso o subsistema de mídia não esteja disponível
+
+---
+
 ## [2.0.0.13] - 2026-07-27
 
 ### Adicionado

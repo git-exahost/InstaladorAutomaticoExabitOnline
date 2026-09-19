@@ -17,6 +17,7 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
@@ -26,6 +27,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <EmbeddedResource Include="Image\logo_exabit.png">
       <LogicalName>InstallerGUI.logo_exabit.png</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Sound\R2D2.mp3">
+      <LogicalName>InstallerGUI.R2D2.mp3</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

@@ -3,7 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Media;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using InstallerGUI.Models;
 using InstallerGUI.Services;
@@ -93,6 +96,7 @@ namespace InstallerGUI.Forms
             // Conecta os eventos do serviço aos métodos da UI
             _service.OnLog += AppendLog;
             _service.OnProgress += UpdateProgress;
+            _service.OnInstallationCompleted += HandleInstallationCompleted;
 
             // Monta todos os controles na tela
             BuildUI();
@@ -737,6 +741,156 @@ namespace InstallerGUI.Forms
             _txtLog.SelectionColor = cor;
             _txtLog.AppendText(message + "\n");
             _txtLog.ScrollToCaret();
+        }
+
+        /// <summary>
+        /// Manipulador do evento disparado quando a instalação é concluída com sucesso.
+        /// Garante execução na thread de UI e reproduz o som de notificação.
+        /// </summary>
+        private void HandleInstallationCompleted()
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(HandleInstallationCompleted));
+                return;
+            }
+
+            PlayNotificationSound();
+        }
+
+        /// <summary>
+        /// Reproduz o áudio personalizado do R2D2 ao finalizar as instalações.
+        /// Tenta reproduzir o arquivo MP3 usando o Windows Media Player COM e,
+        /// caso não seja possível, recorre a sons de notificação do Windows.
+        /// </summary>
+        private void PlayNotificationSound()
+        {
+            Task.Run(new Action(() =>
+            {
+                bool played = false;
+
+                try
+                {
+                    string soundPath = GetR2D2SoundPath();
+                    if (!string.IsNullOrEmpty(soundPath) && File.Exists(soundPath))
+                    {
+                        Type wmpType = Type.GetTypeFromProgID("WMPlayer.OCX");
+                        if (wmpType != null)
+                        {
+                            dynamic wmp = Activator.CreateInstance(wmpType);
+                            try
+                            {
+                                wmp.settings.volume = 100;
+                                wmp.URL = soundPath;
+                                wmp.controls.play();
+                                System.Threading.Thread.Sleep(3500);
+                                played = true;
+                            }
+                            finally
+                            {
+                                try
+                                {
+                                    wmp.close();
+                                }
+                                catch
+                                {
+                                }
+                                Marshal.ReleaseComObject(wmp);
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                if (!played)
+                {
+                    PlayFallbackSystemSound();
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Localiza o arquivo de áudio R2D2.mp3 no disco ou o extrai dos recursos
+        /// embutidos no executável para o diretório temporário.
+        /// </summary>
+        private static string GetR2D2SoundPath()
+        {
+            string localPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Sound", "R2D2.mp3");
+            if (File.Exists(localPath))
+            {
+                return localPath;
+            }
+
+            string projectPath = @"D:\OneDrive\Programas\ISO\Personalização de ISO\Auto Install\InstallerGUI\Sound\R2D2.mp3";
+            if (File.Exists(projectPath))
+            {
+                return projectPath;
+            }
+
+            try
+            {
+                var assembly = Assembly.GetExecutingAssembly();
+                using (var stream = assembly.GetManifestResourceStream("InstallerGUI.R2D2.mp3"))
+                {
+                    if (stream != null)
+                    {
+                        string tempPath = Path.Combine(Path.GetTempPath(), "R2D2.mp3");
+                        using (var fileStream = File.Create(tempPath))
+                        {
+                            stream.CopyTo(fileStream);
+                        }
+                        return tempPath;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Reproduz som padrão do Windows como fallback caso o áudio R2D2 não possa ser tocado.
+        /// </summary>
+        private static void PlayFallbackSystemSound()
+        {
+            try
+            {
+                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                string[] candidates = new string[]
+                {
+                    Path.Combine(winDir, "Media", "tada.wav"),
+                    Path.Combine(winDir, "Media", "Windows Notify System Generic.wav"),
+                    Path.Combine(winDir, "Media", "notify.wav")
+                };
+
+                foreach (var soundPath in candidates)
+                {
+                    if (File.Exists(soundPath))
+                    {
+                        using (var player = new SoundPlayer(soundPath))
+                        {
+                            player.PlaySync();
+                        }
+                        return;
+                    }
+                }
+
+                SystemSounds.Exclamation.Play();
+            }
+            catch
+            {
+                try
+                {
+                    SystemSounds.Exclamation.Play();
+                }
+                catch
+                {
+                }
+            }
         }
 
         /// <summary>
