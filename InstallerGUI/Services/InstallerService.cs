@@ -195,8 +195,13 @@ namespace InstallerGUI.Services
                 }
 
                 await RunProcessAsync("powershell",
-                    string.Format("-Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true\"",
-                    username.Replace("'", "''")), 10000);
+                    string.Format("-Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true -UserMayNotChangePassword ${1}\"",
+                    username.Replace("'", "''"), cannotChangePassword ? "true" : "false"), 10000);
+
+                if (cannotChangePassword)
+                    Log("[ok] Restrição aplicada: usuário impedido de alterar a senha.", ConsoleColor.Green);
+                else
+                    Log("[ok] Permissão de senha: usuário poderá alterar a própria senha.", ConsoleColor.Green);
 
                 // Adiciona ao grupo de Área de Trabalho Remota para permitir login via RDP
                 Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);

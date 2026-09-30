@@ -7,6 +7,18 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.15] - 2026-09-29
+
+### Adicionado
+- Mensagens de log detalhadas informando explicitamente se o usuário comum criado tem permissão de troca de senha ou restrição aplicada
+- Sincronização robusta da restrição de senha via PowerShell (`Set-LocalUser -UserMayNotChangePassword`) e `net user /passwordchg`
+
+### Alterado
+- O checkbox de restrição de senha foi renomeado para *"Impedir que o usuário altere a senha"* e agora inicia **desmarcado por padrão** (o usuário comum pode alterar sua senha normalmente, a menos que o técnico marque a opção)
+- Mantido o layout visual original do painel de configurações conforme solicitado pelo usuário
+
+---
+
 ## [2.0.0.14] - 2026-09-18
 
 ### Adicionado

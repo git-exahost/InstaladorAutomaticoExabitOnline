@@ -310,8 +310,8 @@ namespace InstallerGUI.Forms
             tbl.Controls.Add(_txtStandardUserPass, 1, 3);
             tbl.SetColumnSpan(_txtStandardUserPass, 3);
 
-            // Linha 4: Usuário padrão não pode alterar senha
-            _chkStandardUserNoPwdChange = CreateCheckBox("Usuário padrão não poderá alterar a senha", true);
+            // Linha 4: Impedir que o usuário altere a senha (desmarcado por padrão)
+            _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
             tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 4);
             tbl.SetColumnSpan(_chkStandardUserNoPwdChange, 4);
 
