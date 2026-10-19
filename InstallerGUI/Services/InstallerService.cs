@@ -130,8 +130,12 @@ namespace InstallerGUI.Services
 
             try
             {
-                int code = await RunProcessAsync("net",
-                    string.Format("user admin \"{0}\" /add", password), 10000);
+                int code;
+                if (string.IsNullOrWhiteSpace(password))
+                    code = await RunProcessAsync("net", "user admin \"\" /add", 10000);
+                else
+                    code = await RunProcessAsync("net",
+                        string.Format("user admin \"{0}\" /add", password), 10000);
 
                 if (code == 0)
                     Log("[ok] Usuário 'admin' criado.", ConsoleColor.Green);
@@ -372,7 +376,7 @@ namespace InstallerGUI.Services
                     {
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
-                        await CreateAdminUserAsync(options.AdminPassword ?? "NT@admin#");
+                        await CreateAdminUserAsync(options.AdminPassword);
                     }
                 }
 

@@ -10,6 +10,7 @@ dist/install.exe
 dist/Programas/*.exe
 dist/Programas/*.msi
 dist/Programas/*.iso
+dist/Programas/*.img
 dist/Programas/DWGTrueView/
 dist/Programas/Office/office/
 

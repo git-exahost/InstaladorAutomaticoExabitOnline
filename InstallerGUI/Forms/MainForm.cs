@@ -46,7 +46,6 @@ namespace InstallerGUI.Forms
         private TextBox _txtComputerName;
         private TextBox _txtAdminPass;
         private TextBox _txtStandardUserName;
-        private TextBox _txtStandardUserSurname;
         private TextBox _txtStandardUserPass;
         private CheckBox _chkStandardUserNoPwdChange;
         private CheckBox _chkWallpaper;
@@ -75,6 +74,8 @@ namespace InstallerGUI.Forms
             Text = "Instalador Automático de Programas - EXABIT Soluções em TI";
             Size = new Size(1200, 750);
             MinimumSize = new Size(1200, 750);
+            MinimizeBox = false;
+            MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = CorFundo;
             ForeColor = CorTexto;
@@ -100,6 +101,51 @@ namespace InstallerGUI.Forms
 
             // Monta todos os controles na tela
             BuildUI();
+        }
+
+        // ──────────────────────────────────────────────
+        // P/Invoke DWM e Customização da Barra de Título
+        // ──────────────────────────────────────────────
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        private const int DWMWA_CAPTION_COLOR = 35;
+        private const int DWMWA_TEXT_COLOR = 36;
+
+        /// <summary>
+        /// Aplica tema escuro nativo e cor personalizada à barra de título assim que a janela é criada.
+        /// </summary>
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplyDarkTitleBar();
+        }
+
+        /// <summary>
+        /// Configura os atributos DWM para renderizar a barra de título em modo escuro/preto com título branco.
+        /// </summary>
+        private void ApplyDarkTitleBar()
+        {
+            try
+            {
+                int useDarkMode = 1;
+                if (DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDarkMode, sizeof(int)) != 0)
+                {
+                    DwmSetWindowAttribute(Handle, DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1, ref useDarkMode, sizeof(int));
+                }
+
+                int captionColor = ColorTranslator.ToWin32(CorFundo);
+                DwmSetWindowAttribute(Handle, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+
+                int textColor = ColorTranslator.ToWin32(Color.White);
+                DwmSetWindowAttribute(Handle, DWMWA_TEXT_COLOR, ref textColor, sizeof(int));
+            }
+            catch
+            {
+            }
         }
 
         // ══════════════════════════════════════════════
@@ -145,7 +191,7 @@ namespace InstallerGUI.Forms
                 RowCount = 2,
                 BackColor = CorFundo,
             };
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, 365));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, 215));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             leftSide.Controls.Add(BuildConfigPanel(), 0, 0);
@@ -243,8 +289,9 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria o painel de configurações do sistema:
-        /// nome do computador, criação de usuários e wallpaper.
+        /// Cria o painel de configurações do sistema dividido em duas colunas:
+        /// Lado esquerdo: campos de texto (nome do computador, senhas, usuário padrão)
+        /// Lado direito: opções selecionáveis (restrição de senha, papel de parede, atalhos)
         /// </summary>
         private GroupBox BuildConfigPanel()
         {
@@ -258,91 +305,102 @@ namespace InstallerGUI.Forms
                 BackColor = CorPainel,
             };
 
-            var tbl = new TableLayoutPanel
+            var mainTbl = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 4,
-                RowCount = 10,
+                ColumnCount = 2,
+                RowCount = 1,
                 Padding = new Padding(8, 5, 8, 5),
                 BackColor = CorPainel,
             };
+            mainTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
+            mainTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
+            mainTbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            // ─── Lado Esquerdo: Campos de Texto (Nome do PC e Usuários) ───
+            var tblInputs = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 5,
+                BackColor = CorPainel,
+                Margin = new Padding(0, 0, 10, 0),
+            };
+            tblInputs.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 185));
+            tblInputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-            for (int i = 0; i < 10; i++)
-                tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            for (int i = 0; i < 4; i++)
+                tblInputs.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            tblInputs.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             // Linha 0: Nome do computador (vazio = não renomear)
-            tbl.Controls.Add(CreateLabel("Nome do computador:"), 0, 0);
+            tblInputs.Controls.Add(CreateLabel("Nome do computador:"), 0, 0);
             _txtComputerName = CreateTextBox("Em branco = não renomear");
             _txtComputerName.Text = "";
-            tbl.Controls.Add(_txtComputerName, 1, 0);
-            tbl.SetColumnSpan(_txtComputerName, 3);
+            tblInputs.Controls.Add(_txtComputerName, 1, 0);
 
-            // Linha 1: Criar admin
-            tbl.Controls.Add(CreateLabel("Criar usuário admin:"), 0, 1);
-
+            // Linha 1: Senha do usuário Admin
+            tblInputs.Controls.Add(CreateLabel("Senha do usuário Admin:"), 0, 1);
             _txtAdminPass = CreateTextBox("Senha do admin");
-            _txtAdminPass.Text = "NT@admin#";
-            tbl.Controls.Add(_txtAdminPass, 1, 1);
-            tbl.SetColumnSpan(_txtAdminPass, 3);
+            _txtAdminPass.Text = "";
+            tblInputs.Controls.Add(_txtAdminPass, 1, 1);
 
-            // Linha 2: Criar usuário padrão (Nome + Sobrenome)
-            tbl.Controls.Add(CreateLabel("Criar usuário padrão:"), 0, 2);
+            // Linha 2: Criar usuário padrão (Nome do usuário)
+            tblInputs.Controls.Add(CreateLabel("Criar usuário padrão:"), 0, 2);
+            _txtStandardUserName = CreateTextBox("Nome do usuário");
+            _txtStandardUserName.Text = "";
+            tblInputs.Controls.Add(_txtStandardUserName, 1, 2);
 
-            _txtStandardUserName = CreateTextBox("Nome");
-            _txtStandardUserName.Text = "Nome";
-            tbl.Controls.Add(_txtStandardUserName, 1, 2);
-
-            _txtStandardUserSurname = CreateTextBox("Sobrenome");
-            _txtStandardUserSurname.Text = "Sobrenome";
-            tbl.Controls.Add(_txtStandardUserSurname, 2, 2);
-            tbl.SetColumnSpan(_txtStandardUserSurname, 2);
-
-            // Linha 3: Senha
-            tbl.Controls.Add(CreateLabel("Senha:"), 0, 3);
-
+            // Linha 3: Senha do usuário
+            tblInputs.Controls.Add(CreateLabel("Senha do usuário:"), 0, 3);
             _txtStandardUserPass = CreateTextBox("Senha (opcional)");
-            _txtStandardUserPass.Text = "NT@colaborador";
-            tbl.Controls.Add(_txtStandardUserPass, 1, 3);
-            tbl.SetColumnSpan(_txtStandardUserPass, 3);
+            _txtStandardUserPass.Text = "";
+            tblInputs.Controls.Add(_txtStandardUserPass, 1, 3);
 
-            // Linha 4: Impedir que o usuário altere a senha (desmarcado por padrão)
+            mainTbl.Controls.Add(tblInputs, 0, 0);
+
+            // ─── Lado Direito: Opções Selecionáveis (Checkboxes) ───
+            var tblChecks = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 7,
+                BackColor = CorPainel,
+                Margin = new Padding(5, 0, 0, 0),
+            };
+            tblChecks.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            for (int i = 0; i < 6; i++)
+                tblChecks.RowStyles.Add(new RowStyle(SizeType.Absolute, 27));
+            tblChecks.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            // Linha 0: Impedir que o usuário altere a senha
             _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
-            tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 4);
-            tbl.SetColumnSpan(_chkStandardUserNoPwdChange, 4);
+            tblChecks.Controls.Add(_chkStandardUserNoPwdChange, 0, 0);
 
-            // Linha 5: Wallpaper
-            _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", true);
-            tbl.Controls.Add(_chkWallpaper, 0, 5);
-            tbl.SetColumnSpan(_chkWallpaper, 4);
+            // Linha 1: Wallpaper
+            _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
+            tblChecks.Controls.Add(_chkWallpaper, 0, 1);
 
-            // ─── Atalhos de suporte ───
-
-            // Linha 6: Atalho Suporte Norte
+            // Linha 2: Atalho Suporte Norte
             _chkShortcutSuporteNorte = CreateCheckBox("Suporte Norte (suporte.exabit.com.br)", false);
-            tbl.Controls.Add(_chkShortcutSuporteNorte, 0, 6);
-            tbl.SetColumnSpan(_chkShortcutSuporteNorte, 4);
+            tblChecks.Controls.Add(_chkShortcutSuporteNorte, 0, 2);
 
-            // Linha 7: Atalho Webmail Nortel
+            // Linha 3: Atalho Webmail Nortel
             _chkShortcutWebmailNortel = CreateCheckBox("Webmail Nortel (webmail.nortel.srv.br)", false);
-            tbl.Controls.Add(_chkShortcutWebmailNortel, 0, 7);
-            tbl.SetColumnSpan(_chkShortcutWebmailNortel, 4);
+            tblChecks.Controls.Add(_chkShortcutWebmailNortel, 0, 3);
 
-            // Linha 8: Atalho Webmail Nortel Terceirização
+            // Linha 4: Atalho Webmail Nortel Terceirização
             _chkShortcutWebmailTerceirizacao = CreateCheckBox("Webmail Nortel Terceirização (webmail.nortelterceirizacao.com.br)", false);
-            tbl.Controls.Add(_chkShortcutWebmailTerceirizacao, 0, 8);
-            tbl.SetColumnSpan(_chkShortcutWebmailTerceirizacao, 4);
+            tblChecks.Controls.Add(_chkShortcutWebmailTerceirizacao, 0, 4);
 
-            // Linha 9: Opção de Menu Iniciar
+            // Linha 5: Opção de Menu Iniciar
             _chkShortcutStartMenu = CreateCheckBox("Adicionar atalhos também no Menu Iniciar", false);
-            tbl.Controls.Add(_chkShortcutStartMenu, 0, 9);
-            tbl.SetColumnSpan(_chkShortcutStartMenu, 4);
+            tblChecks.Controls.Add(_chkShortcutStartMenu, 0, 5);
 
-            group.Controls.Add(tbl);
+            mainTbl.Controls.Add(tblChecks, 1, 0);
+
+            group.Controls.Add(mainTbl);
             return group;
         }
 
@@ -418,7 +476,7 @@ namespace InstallerGUI.Forms
                 var chk = new CheckBox
                 {
                     Text = prog.DisplayName,
-                    Checked = prog.Id != "office" && prog.Id != "radmin" && prog.Id != "anydesk",
+                    Checked = prog.Id != "office" && prog.Id != "radmin" && prog.Id != "anydesk" && prog.Id != "artcraft",
                     Tag = prog,
                     ForeColor = CorTexto,
                     BackColor = Color.Transparent,
@@ -597,6 +655,7 @@ namespace InstallerGUI.Forms
             // Prepara a interface para a instalação
             _installing = true;
             _btnInstall.Enabled = false;
+            _btnInstall.BackColor = Color.FromArgb(0, 75, 25);
             _btnInstall.Text = "INSTALANDO...";
             _btnStop.Enabled = true;
             _txtLog.Clear();
@@ -616,13 +675,10 @@ namespace InstallerGUI.Forms
                 options.AdminPassword = _txtAdminPass.Text;
 
                 string stdName = _txtStandardUserName.Text.Trim();
-                string stdSurname = _txtStandardUserSurname.Text.Trim();
-                bool nomePreenchido = !string.IsNullOrWhiteSpace(stdName) && stdName != "Nome";
-                bool sobrenomePreenchido = !string.IsNullOrWhiteSpace(stdSurname) && stdSurname != "Sobrenome";
-                bool criarUsuarioPadrao = nomePreenchido || sobrenomePreenchido;
+                bool criarUsuarioPadrao = !string.IsNullOrWhiteSpace(stdName);
 
                 options.CreateStandardUser = criarUsuarioPadrao;
-                options.StandardUserName = criarUsuarioPadrao ? (stdName + " " + stdSurname).Trim() : null;
+                options.StandardUserName = criarUsuarioPadrao ? stdName : null;
                 options.StandardUserPassword = criarUsuarioPadrao ? _txtStandardUserPass.Text : null;
                 options.StandardUserCannotChangePassword = criarUsuarioPadrao && _chkStandardUserNoPwdChange.Checked;
 
@@ -661,6 +717,7 @@ namespace InstallerGUI.Forms
             {
                 _installing = false;
                 _btnInstall.Enabled = true;
+                _btnInstall.BackColor = Color.FromArgb(0, 150, 50);
                 _btnInstall.Text = "INICIAR INSTALAÇÃO";
                 _btnStop.Enabled = false;
             }
@@ -988,6 +1045,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("winrar",      "WinRAR",                "winrar.exe",                         "/S"),
                 new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView","DWGTrueView\\Setup.exe",              "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
                 new ProgramInfo("office",      "Microsoft Office",      "Office\\setup.exe",                  "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000 },
+                new ProgramInfo("artcraft",    "ArtCraft",              "ArtCraft_setup.exe",                 "/S"),
             };
         }
     }

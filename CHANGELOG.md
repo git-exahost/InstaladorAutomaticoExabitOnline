@@ -7,6 +7,65 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.21] - 2026-10-19
+
+### Alterado
+- Barra de título do Windows integrada ao tema escuro da aplicação via API nativa do Desktop Window Manager (DWM), pintando-a de preto/escuro (`CorFundo`) com título em branco
+- Removidos os botões de minimizar e maximizar da barra de título (`MinimizeBox = false` e `MaximizeBox = false`), mantendo unicamente o botão de fechar ("X")
+
+---
+
+## [2.0.0.20] - 2026-10-19
+
+### Alterado
+- Corrigido o espaçamento vertical entre os campos "Criar usuário padrão" e "Senha do usuário" através da fixação de altura das linhas com preenchimento percentual no rodapé
+- Rótulo "Senha / usuário padrão:" renomeado para "Senha do usuário:"
+- Altura do painel de configurações refinada para 215px
+
+---
+
+## [2.0.0.19] - 2026-10-19
+
+### Alterado
+- Painel "Configurações do Sistema" reformulado em duas colunas:
+  - Lado esquerdo: campos de texto (Nome do computador, Senha do usuário Admin, Criar usuário padrão e Senha / usuário padrão)
+  - Lado direito: opções selecionáveis (Impedir que o usuário altere a senha, Papel de parede e atalhos de suporte)
+- Altura do painel de configurações reduzida de 365px para 220px, proporcionando muito mais espaço vertical para o painel de log
+
+---
+
+## [2.0.0.18] - 2026-10-19
+
+### Adicionado
+- ArtCraft (`ArtCraft_setup.exe`) adicionado como último item da lista de programas com instalação silenciosa (`/S`)
+
+### Alterado
+- Rótulo "Criar usuário admin:" alterado para "Senha do usuário Admin:"
+- Rótulo "Senha:" do usuário comum alterado para "Senha / usuário padrão:"
+- ArtCraft agora inicia **desmarcado por padrão** na lista de programas
+- Botão "INICIAR INSTALAÇÃO" agora altera sua cor para um verde mais escuro enquanto estiver desabilitado durante a instalação, sendo restaurado e reativado ao finalizar
+
+---
+
+## [2.0.0.17] - 2026-10-19
+
+### Alterado
+- Campo "Criar usuário padrão" unificado em um único campo ("Nome do usuário"), removendo o campo separado de Sobrenome
+- Campo "Nome do usuário" agora inicia totalmente em branco por padrão
+- O usuário padrão só é criado caso o campo de nome seja preenchido; se deixado em branco, a criação do usuário é ignorada
+
+---
+
+## [2.0.0.16] - 2026-10-19
+
+### Alterado
+- Campo "Criar usuário admin" agora inicia em branco por padrão (não preenche mais automaticamente com `NT@admin#`), permitindo preenchimento no momento do uso
+- Se o campo de senha do admin for deixado em branco, o usuário `admin` é criado sem senha no sistema
+- Campo de senha do usuário padrão ("Senha:") agora inicia em branco por padrão (não preenche mais automaticamente com `NT@colaborador`)
+- Checkbox "Aplicar papel de parede personalizado" agora inicia **desmarcado por padrão** (o técnico marca apenas se desejar aplicar)
+
+---
+
 ## [2.0.0.15] - 2026-09-29
 
 ### Adicionado
