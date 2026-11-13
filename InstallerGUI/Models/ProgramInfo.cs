@@ -62,6 +62,16 @@ namespace InstallerGUI.Models
         public bool UseShellExecute { get; set; }
 
         /// <summary>
+        /// Se true, exige conexão ativa com a internet para instalar.
+        /// </summary>
+        public bool RequiresInternet { get; set; }
+
+        /// <summary>
+        /// Define se o programa inicia marcado por padrão na interface.
+        /// </summary>
+        public bool DefaultChecked { get; set; }
+
+        /// <summary>
         /// Cria um novo programa para instalação.
         /// </summary>
         /// <param name="id">Identificador único (ex: "winrar")</param>
@@ -76,6 +86,7 @@ namespace InstallerGUI.Models
             FileName = fileName;
             Arguments = arguments;
             WorkingDirectory = workingDir;
+            DefaultChecked = true;
         }
 
         /// <summary>

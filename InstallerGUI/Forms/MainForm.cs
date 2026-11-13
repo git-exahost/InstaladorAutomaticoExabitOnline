@@ -476,7 +476,7 @@ namespace InstallerGUI.Forms
                 var chk = new CheckBox
                 {
                     Text = prog.DisplayName,
-                    Checked = prog.Id != "office" && prog.Id != "radmin" && prog.Id != "anydesk" && prog.Id != "artcraft",
+                    Checked = prog.DefaultChecked,
                     Tag = prog,
                     ForeColor = CorTexto,
                     BackColor = Color.Transparent,
@@ -652,16 +652,55 @@ namespace InstallerGUI.Forms
             // Evita cliques duplos durante a instalação
             if (_installing) return;
 
+            var selectedPrograms = new List<ProgramInfo>();
+            bool requiresInternet = false;
+            foreach (Control c in _pnlPrograms.Controls)
+            {
+                var chk = c as CheckBox;
+                if (chk != null && chk.Checked)
+                {
+                    var prog = chk.Tag as ProgramInfo;
+                    if (prog != null)
+                    {
+                        selectedPrograms.Add(prog);
+                        if (prog.RequiresInternet)
+                            requiresInternet = true;
+                    }
+                }
+            }
+
             // Prepara a interface para a instalação
             _installing = true;
             _btnInstall.Enabled = false;
             _btnInstall.BackColor = Color.FromArgb(0, 75, 25);
-            _btnInstall.Text = "INSTALANDO...";
-            _btnStop.Enabled = true;
             _txtLog.Clear();
 
             try
             {
+                if (requiresInternet)
+                {
+                    _btnInstall.Text = "VERIFICANDO INTERNET...";
+                    while (!await _service.HasInternetConnectionAsync())
+                    {
+                        var retryResult = MessageBox.Show(
+                            "Sem conexão com a internet.\n\n" +
+                            "A instalação do Microsoft Office 365 (Online) requer acesso ativo à internet.\n\n" +
+                            "Conecte-se à internet antes de instalar e clique em \"Repetir\", ou em \"Cancelar\" para voltar.",
+                            "Conexão com a internet necessária",
+                            MessageBoxButtons.RetryCancel,
+                            MessageBoxIcon.Warning);
+
+                        if (retryResult != DialogResult.Retry)
+                        {
+                            AppendLog("X Instalação cancelada: conecte-se à internet antes de instalar.", ConsoleColor.Yellow);
+                            return;
+                        }
+                    }
+                }
+
+                _btnInstall.Text = "INSTALANDO...";
+                _btnStop.Enabled = true;
+
                 // Inicia a instalação no serviço
                 _service.StartInstallation();
 
@@ -690,17 +729,7 @@ namespace InstallerGUI.Forms
                 options.CreateDesktopShortcutWebmailTerceirizacao = _chkShortcutWebmailTerceirizacao.Checked;
                 options.AddShortcutsToStartMenu = _chkShortcutStartMenu.Checked;
 
-                // Coleta os programas marcados
-                foreach (Control c in _pnlPrograms.Controls)
-                {
-                    var chk = c as CheckBox;
-                    if (chk != null && chk.Checked)
-                    {
-                        var prog = chk.Tag as ProgramInfo;
-                        if (prog != null)
-                            options.SelectedPrograms.Add(prog);
-                    }
-                }
+                options.SelectedPrograms.AddRange(selectedPrograms);
 
                 // Executa toda a instalação
                 await _service.RunFullInstallationAsync(options);
@@ -1031,21 +1060,23 @@ namespace InstallerGUI.Forms
         {
             return new List<ProgramInfo>
             {
-                new ProgramInfo("7zip",        "7-Zip",                 "7z.msi",                             "/qn /norestart"),
-                new ProgramInfo("adobereader", "Adobe Acrobat Reader",  "AcroRdrDC.exe",                      "/sAll /msi EULA_ACCEPT=YES /qn /norestart"),
-                new ProgramInfo("anydesk",     "AnyDesk",               "AnyDesk.exe",                        "--install \"C:\\Program Files (x86)\\AnyDesk\" --start-with-win --silent"),
-                new ProgramInfo("brave",       "Brave Browser",         "BraveBrowserSetup.exe",              "/silent /install"),
-                new ProgramInfo("chrome",      "Google Chrome",         "ChromeStandaloneSetup64.exe",         "/silent /install"),
-                new ProgramInfo("firefox",     "Mozilla Firefox",       "Firefox_Setup.msi",                  "/qn /norestart"),
-                new ProgramInfo("googleearth", "Google Earth Pro",      "googleearthprowin.exe",              "OMAHA=1"),
-                new ProgramInfo("java",        "Java JRE 8",            "jre-windows-x64.exe",                "/s"),
-                new ProgramInfo("radmin",      "Radmin VPN",            "Radmin_VPN.exe",                     "/VERYSILENT /NORESTART"),
-                new ProgramInfo("citrix",      "Citrix Workspace",      "CitrixWorkspaceFullInstaller_x64.exe", "/silent /includeSSON /norestart"),
-                new ProgramInfo("rustdesk",    "RustDesk",              "rustdesk_x86_64.exe",                "--silent-install") { FireAndForget = true },
-                new ProgramInfo("winrar",      "WinRAR",                "winrar.exe",                         "/S"),
-                new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView","DWGTrueView\\Setup.exe",              "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
-                new ProgramInfo("office",      "Microsoft Office",      "Office\\setup.exe",                  "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000 },
-                new ProgramInfo("artcraft",    "ArtCraft",              "ArtCraft_setup.exe",                 "/S"),
+                new ProgramInfo("7zip",        "7-Zip",                           "7z.msi",                               "/qn /norestart"),
+                new ProgramInfo("adobereader", "Adobe Acrobat Reader",            "AcroRdrDC.exe",                        "/sAll /msi EULA_ACCEPT=YES /qn /norestart"),
+                new ProgramInfo("anydesk",     "AnyDesk",                         "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --start-with-win --silent") { DefaultChecked = false },
+                new ProgramInfo("brave",       "Brave Browser",                   "BraveBrowserSetup.exe",                "/silent /install"),
+                new ProgramInfo("chrome",      "Google Chrome",                   "ChromeStandaloneSetup64.exe",           "/silent /install"),
+                new ProgramInfo("firefox",     "Mozilla Firefox",                 "Firefox_Setup.msi",                    "/qn /norestart"),
+                new ProgramInfo("googleearth", "Google Earth Pro",                "googleearthprowin.exe",                "OMAHA=1"),
+                new ProgramInfo("java",        "Java JRE 8",                      "jre-windows-x64.exe",                  "/s"),
+                new ProgramInfo("radmin",      "Radmin VPN",                      "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART") { DefaultChecked = false },
+                new ProgramInfo("citrix",      "Citrix Workspace",                "CitrixWorkspaceFullInstaller_x64.exe", "/silent /includeSSON /norestart"),
+                new ProgramInfo("rustdesk",    "RustDesk",                        "rustdesk_x86_64.exe",                  "--silent-install") { FireAndForget = true },
+                new ProgramInfo("winrar",      "WinRAR",                          "winrar.exe",                           "/S"),
+                new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",           "DWGTrueView\\Setup.exe",               "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
+                new ProgramInfo("office",      "Microsoft Office",                "Office\\setup.exe",                    "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000, DefaultChecked = false },
+                new ProgramInfo("office365",   "Microsoft Office 365 (Online)",   "OfficeSetup.exe",                      "") { UseShellExecute = true, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",      "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1") { TimeoutMs = 600000, DefaultChecked = false },
+                new ProgramInfo("artcraft",    "ArtCraft",                        "ArtCraft_setup.exe",                   "/S") { DefaultChecked = false },
             };
         }
     }

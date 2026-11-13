@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using InstallerGUI.Models;
 
@@ -120,52 +122,110 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Cria o usuário administrador "admin" com a senha fornecida
-        /// e o adiciona ao grupo de administradores locais.
+        /// Cria o usuário administrador "admin" com a senha fornecida e o adiciona
+        /// ao grupo de administradores locais, ou apenas altera sua senha caso já exista.
         /// </summary>
         /// <param name="password">Senha do usuário admin</param>
         public async Task CreateAdminUserAsync(string password)
         {
-            Log("Criando usuário 'admin'...", ConsoleColor.Yellow);
-
             try
             {
-                int code;
-                if (string.IsNullOrWhiteSpace(password))
-                    code = await RunProcessAsync("net", "user admin \"\" /add", 10000);
+                bool exists = await UserExistsAsync("admin");
+                if (exists)
+                    await UpdateExistingAdminPasswordAsync(password);
                 else
-                    code = await RunProcessAsync("net",
-                        string.Format("user admin \"{0}\" /add", password), 10000);
-
-                if (code == 0)
-                    Log("[ok] Usuário 'admin' criado.", ConsoleColor.Green);
-                else
-                    Log("X Usuário 'admin' já existe ou acesso negado.", ConsoleColor.Yellow);
-
-                Log("Adicionando 'admin' aos administradores...", ConsoleColor.Yellow);
-                code = await RunProcessAsync("net", "localgroup Administradores admin /add");
-                if (code != 0)
-                    await RunProcessAsync("net", "localgroup Administrators admin /add");
-
-                code = await RunProcessAsync("powershell",
-                    "-Command \"Set-LocalUser -Name 'admin' -PasswordNeverExpires $true\"", 10000);
-
-                if (code == 0)
-                    Log("[ok] Senha do admin configurada para nunca expirar.", ConsoleColor.Green);
-                else
-                    Log("X Aviso: Não foi possível configurar a senha.", ConsoleColor.Yellow);
+                    await CreateNewAdminUserAsync(password);
             }
             catch (Exception ex)
             {
-                Log(string.Format("X Erro ao criar admin: {0}", ex.Message), ConsoleColor.Red);
+                Log(string.Format("X Erro ao configurar admin: {0}", ex.Message), ConsoleColor.Red);
             }
 
             await Task.Delay(500);
         }
 
+        private async Task<bool> UserExistsAsync(string username)
+        {
+            int code = await RunProcessAsync(
+                "net",
+                string.Format("user {0}", QuoteProcessArgument(username)),
+                10000,
+                null,
+                false,
+                true);
+            return code == 0;
+        }
+
+        private async Task UpdateExistingAdminPasswordAsync(string password)
+        {
+            if (!string.IsNullOrWhiteSpace(password))
+            {
+                Log("Usuário 'admin' já existe. Alterando a senha...", ConsoleColor.Yellow);
+
+                int code = await RunProcessAsync(
+                    "net",
+                    string.Format("user admin {0}", QuoteProcessArgument(password)),
+                    10000);
+
+                if (code == 0)
+                    Log("[ok] Senha do usuário 'admin' alterada com sucesso.", ConsoleColor.Green);
+                else
+                    Log("X Não foi possível alterar a senha do usuário 'admin'.", ConsoleColor.Red);
+            }
+            else
+            {
+                Log("Usuário 'admin' já existe e nenhuma senha foi informada. Mantendo senha atual.", ConsoleColor.Yellow);
+            }
+
+            await EnsureAdminPasswordNeverExpiresAsync();
+        }
+
+        private async Task CreateNewAdminUserAsync(string password)
+        {
+            Log("Criando usuário 'admin'...", ConsoleColor.Yellow);
+
+            string passwordArg = string.IsNullOrWhiteSpace(password)
+                ? "\"\""
+                : QuoteProcessArgument(password);
+
+            int code = await RunProcessAsync(
+                "net",
+                string.Format("user admin {0} /add", passwordArg),
+                10000);
+
+            if (code != 0)
+            {
+                Log("X Não foi possível criar o usuário 'admin'.", ConsoleColor.Red);
+                return;
+            }
+
+            Log("[ok] Usuário 'admin' criado.", ConsoleColor.Green);
+
+            Log("Adicionando 'admin' aos administradores...", ConsoleColor.Yellow);
+            code = await RunProcessAsync("net", "localgroup Administradores admin /add", 600000, null, false, true);
+            if (code != 0)
+                code = await RunProcessAsync("net", "localgroup Administrators admin /add");
+
+            if (code != 0)
+                Log("X Aviso: Não foi possível adicionar 'admin' ao grupo de administradores.", ConsoleColor.Yellow);
+
+            await EnsureAdminPasswordNeverExpiresAsync();
+        }
+
+        private async Task EnsureAdminPasswordNeverExpiresAsync()
+        {
+            int code = await RunProcessAsync("powershell",
+                "-Command \"Set-LocalUser -Name 'admin' -PasswordNeverExpires $true\"", 10000);
+
+            if (code == 0)
+                Log("[ok] Senha do admin configurada para nunca expirar.", ConsoleColor.Green);
+            else
+                Log("X Aviso: Não foi possível configurar a senha do admin para nunca expirar.", ConsoleColor.Yellow);
+        }
+
         /// <summary>
-        /// Cria um usuário padrão com nome e senha fornecidos.
-        /// Se a senha estiver vazia, o usuário poderá definir a própria senha no login.
+        /// Cria um usuário padrão com nome e senha fornecidos (ou atualiza caso já exista),
+        /// garantindo que a senha nunca expire e aplicando a política de alteração de senha.
         /// </summary>
         /// <param name="username">Nome do usuário</param>
         /// <param name="password">Senha do usuário (opcional)</param>
@@ -178,57 +238,104 @@ namespace InstallerGUI.Services
                 return;
             }
 
-            Log(string.Format("Criando usuário \"{0}\"...", username), ConsoleColor.Yellow);
-
             try
             {
-                int code;
-                string pwdChg = cannotChangePassword ? "/passwordchg:no" : "/passwordchg:yes";
-                if (string.IsNullOrWhiteSpace(password))
-                    code = await RunProcessAsync("net",
-                        string.Format("user \"{0}\" /add {1}", username, pwdChg));
+                bool exists = await UserExistsAsync(username);
+                if (exists)
+                    await UpdateExistingStandardUserAsync(username, password, cannotChangePassword);
                 else
-                    code = await RunProcessAsync("net",
-                        string.Format("user \"{0}\" \"{1}\" /add {2}", username, password, pwdChg));
-
-                if (code != 0)
-                {
-                    Log(string.Format("X Falha ao criar \"{0}\". Acesso negado ou usuário já existe.",
-                        username), ConsoleColor.Yellow);
-                    return;
-                }
-
-                await RunProcessAsync("powershell",
-                    string.Format("-Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true -UserMayNotChangePassword ${1}\"",
-                    username.Replace("'", "''"), cannotChangePassword ? "true" : "false"), 10000);
-
-                if (cannotChangePassword)
-                    Log("[ok] Restrição aplicada: usuário impedido de alterar a senha.", ConsoleColor.Green);
-                else
-                    Log("[ok] Permissão de senha: usuário poderá alterar a própria senha.", ConsoleColor.Green);
-
-                // Adiciona ao grupo de Área de Trabalho Remota para permitir login via RDP
-                Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);
-                int rdpCode = await RunProcessAsync("net",
-                    string.Format("localgroup \"Usuários da Área de Trabalho Remota\" \"{0}\" /add", username));
-                if (rdpCode != 0)
-                    rdpCode = await RunProcessAsync("net",
-                        string.Format("localgroup \"Remote Desktop Users\" \"{0}\" /add", username));
-
-                if (rdpCode == 0)
-                    Log("[ok] Usuário adicionado ao grupo de área de trabalho remota.", ConsoleColor.Green);
-                else
-                    Log("X Aviso: Não foi possível adicionar ao grupo de área de trabalho remota.", ConsoleColor.Yellow);
-
-                Log(string.Format("[ok] Usuário \"{0}\" criado.", username), ConsoleColor.Green);
+                    await CreateNewStandardUserAsync(username, password, cannotChangePassword);
             }
             catch (Exception ex)
             {
-                Log(string.Format("X Erro ao criar \"{0}\": {1}", username, ex.Message),
+                Log(string.Format("X Erro ao configurar \"{0}\": {1}", username, ex.Message),
                     ConsoleColor.Red);
             }
 
             await Task.Delay(500);
+        }
+
+        private async Task CreateNewStandardUserAsync(string username, string password, bool cannotChangePassword)
+        {
+            Log(string.Format("Criando usuário \"{0}\"...", username), ConsoleColor.Yellow);
+
+            string pwdChg = cannotChangePassword ? "/passwordchg:no" : "/passwordchg:yes";
+            int code;
+            if (string.IsNullOrWhiteSpace(password))
+                code = await RunProcessAsync("net",
+                    string.Format("user {0} /add {1}", QuoteProcessArgument(username), pwdChg));
+            else
+                code = await RunProcessAsync("net",
+                    string.Format("user {0} {1} /add {2}", QuoteProcessArgument(username), QuoteProcessArgument(password), pwdChg));
+
+            if (code != 0)
+            {
+                Log(string.Format("X Não foi possível criar o usuário \"{0}\".", username), ConsoleColor.Red);
+                return;
+            }
+
+            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword);
+
+            Log(string.Format("[ok] Usuário \"{0}\" criado.", username), ConsoleColor.Green);
+        }
+
+        private async Task UpdateExistingStandardUserAsync(string username, string password, bool cannotChangePassword)
+        {
+            string pwdChg = cannotChangePassword ? "/passwordchg:no" : "/passwordchg:yes";
+
+            if (!string.IsNullOrWhiteSpace(password))
+            {
+                Log(string.Format("Usuário \"{0}\" já existe. Alterando a senha...", username), ConsoleColor.Yellow);
+                int code = await RunProcessAsync("net",
+                    string.Format("user {0} {1} {2}", QuoteProcessArgument(username), QuoteProcessArgument(password), pwdChg));
+
+                if (code == 0)
+                    Log(string.Format("[ok] Senha do usuário \"{0}\" alterada com sucesso.", username), ConsoleColor.Green);
+                else
+                    Log(string.Format("X Não foi possível alterar a senha do usuário \"{0}\".", username), ConsoleColor.Red);
+            }
+            else
+            {
+                Log(string.Format("Usuário \"{0}\" já existe e nenhuma senha foi informada. Mantendo senha atual.", username), ConsoleColor.Yellow);
+                await RunProcessAsync("net",
+                    string.Format("user {0} {1}", QuoteProcessArgument(username), pwdChg));
+            }
+
+            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword);
+        }
+
+        private async Task ConfigureStandardUserSettingsAsync(string username, bool cannotChangePassword)
+        {
+            int code = await RunProcessAsync("powershell",
+                string.Format("-Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true -UserMayNotChangePassword ${1}\"",
+                username.Replace("'", "''"), cannotChangePassword ? "true" : "false"), 10000);
+
+            if (code == 0)
+            {
+                Log(string.Format("[ok] Senha do usuário \"{0}\" configurada para nunca expirar.", username), ConsoleColor.Green);
+                if (cannotChangePassword)
+                    Log("[ok] Restrição aplicada: usuário impedido de alterar a senha.", ConsoleColor.Green);
+                else
+                    Log("[ok] Permissão de senha: usuário poderá alterar a própria senha.", ConsoleColor.Green);
+            }
+            else
+            {
+                Log(string.Format("X Aviso: Não foi possível configurar expiração/restrição de senha para \"{0}\".", username), ConsoleColor.Yellow);
+            }
+
+            Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);
+            int rdpCode = await RunProcessAsync("net",
+                string.Format("localgroup \"Usuários da Área de Trabalho Remota\" {0} /add", QuoteProcessArgument(username)),
+                600000, null, false, true);
+            if (rdpCode != 0)
+                rdpCode = await RunProcessAsync("net",
+                    string.Format("localgroup \"Remote Desktop Users\" {0} /add", QuoteProcessArgument(username)),
+                    600000, null, false, true);
+
+            if (rdpCode == 0)
+                Log("[ok] Usuário adicionado ao grupo de área de trabalho remota.", ConsoleColor.Green);
+            else
+                Log("X Aviso: Não foi possível adicionar ao grupo de área de trabalho remota.", ConsoleColor.Yellow);
         }
 
         /// <summary>
@@ -255,6 +362,78 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Verifica se há conexão ativa com a internet.
+        /// </summary>
+        /// <returns>true se houver conectividade com a internet; caso contrário, false.</returns>
+        public async Task<bool> HasInternetConnectionAsync()
+        {
+            return await Task.Run(new Func<bool>(() => CheckInternetConnectivity()));
+        }
+
+        private static bool CheckInternetConnectivity()
+        {
+            if (TryHttpGetContains("http://www.msftconnecttest.com/connecttest.txt", "Microsoft Connect Test"))
+                return true;
+
+            return TryHttpHead("https://www.microsoft.com");
+        }
+
+        private static bool TryHttpGetContains(string url, string expectedText)
+        {
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create(url);
+                request.Method = "GET";
+                request.Timeout = 4000;
+                request.ReadWriteTimeout = 4000;
+                request.AllowAutoRedirect = false;
+
+                using (var response = (HttpWebResponse)request.GetResponse())
+                {
+                    if (response.StatusCode != HttpStatusCode.OK)
+                        return false;
+
+                    using (var stream = response.GetResponseStream())
+                    {
+                        if (stream == null)
+                            return false;
+
+                        using (var reader = new StreamReader(stream))
+                        {
+                            string body = reader.ReadToEnd();
+                            return body.IndexOf(expectedText, StringComparison.OrdinalIgnoreCase) >= 0;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool TryHttpHead(string url)
+        {
+            try
+            {
+                var request = (HttpWebRequest)WebRequest.Create(url);
+                request.Method = "HEAD";
+                request.Timeout = 4000;
+                request.AllowAutoRedirect = true;
+
+                using (var response = (HttpWebResponse)request.GetResponse())
+                {
+                    int code = (int)response.StatusCode;
+                    return code >= 200 && code < 400;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Instala um programa específico com base nas informações do <see cref="ProgramInfo"/>.
         /// Suporta arquivos .exe e .msi com parâmetros de instalação silenciosa.
         /// </summary>
@@ -268,6 +447,13 @@ namespace InstallerGUI.Services
             if (!File.Exists(fullPath))
             {
                 Log(string.Format("X Arquivo não encontrado: {0}", fullPath), ConsoleColor.Red);
+                return;
+            }
+
+            if (program.RequiresInternet && !await HasInternetConnectionAsync())
+            {
+                Log(string.Format("X {0} requer conexão com a internet. Conecte-se à internet antes de instalar.", program.DisplayName),
+                    ConsoleColor.Red);
                 return;
             }
 
@@ -642,11 +828,14 @@ namespace InstallerGUI.Services
         /// </summary>
         /// <param name="fileName">Executável ou comando</param>
         /// <param name="arguments">Argumentos da linha de comando</param>
-        /// <param name="timeoutMs">Tempo máximo de espera (padrão: 2 minutos)</param>
-        /// <returns>Código de saída do processo</returns>
         /// <param name="timeoutMs">Tempo máximo de espera (padrão: 10 minutos)</param>
+        /// <param name="workingDirectory">Diretório de trabalho do processo</param>
+        /// <param name="useShell">Define se usa UseShellExecute</param>
+        /// <param name="suppressStdErrLog">Se true, não registra saída de erro padrão no log</param>
+        /// <returns>Código de saída do processo</returns>
         private async Task<int> RunProcessAsync(string fileName, string arguments,
-            int timeoutMs = 600000, string workingDirectory = null, bool useShell = false)
+            int timeoutMs = 600000, string workingDirectory = null, bool useShell = false,
+            bool suppressStdErrLog = false)
         {
             var psi = new ProcessStartInfo
             {
@@ -687,12 +876,52 @@ namespace InstallerGUI.Services
                 {
                     string stdOut = await process.StandardOutput.ReadToEndAsync();
                     string stdErr = await process.StandardError.ReadToEndAsync();
-                    if (!string.IsNullOrWhiteSpace(stdErr))
+                    if (!suppressStdErrLog && !string.IsNullOrWhiteSpace(stdErr))
                         Log(string.Format("  {0}", stdErr.Trim()), ConsoleColor.Yellow);
                 }
 
                 return process.ExitCode;
             }
+        }
+
+        private static string QuoteProcessArgument(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "\"\"";
+
+            var sb = new StringBuilder();
+            sb.Append('"');
+
+            int backslashCount = 0;
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (c == '\\')
+                {
+                    backslashCount++;
+                }
+                else if (c == '"')
+                {
+                    sb.Append('\\', backslashCount * 2 + 1);
+                    sb.Append('"');
+                    backslashCount = 0;
+                }
+                else
+                {
+                    if (backslashCount > 0)
+                    {
+                        sb.Append('\\', backslashCount);
+                        backslashCount = 0;
+                    }
+                    sb.Append(c);
+                }
+            }
+
+            if (backslashCount > 0)
+                sb.Append('\\', backslashCount * 2);
+
+            sb.Append('"');
+            return sb.ToString();
         }
 
         /// <summary>

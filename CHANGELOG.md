@@ -7,6 +7,32 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.24] - 2026-11-12
+
+### Alterado
+- Garantida a ativação de **"A senha nunca expira"** (`PasswordNeverExpires $true`) para o usuário `admin` mesmo quando ele já existir no sistema (com ou sem alteração de senha)
+- Garantida a ativação de **"A senha nunca expira"** para o usuário padrão tanto na criação quanto caso o usuário já exista, com registro explícito no log
+
+---
+
+## [2.0.0.23] - 2026-11-12
+
+### Adicionado
+- **Microsoft Power BI Desktop** (`PBIDesktopSetup_x64.exe`) adicionado à lista de programas com instalação silenciosa (`-quiet -norestart ACCEPT_EULA=1`), desmarcado por padrão
+- **Microsoft Office 365 (Online)** (`OfficeSetup.exe`) adicionado à lista de programas (desmarcado por padrão) com exigência de conexão ativa com a internet
+- Verificação prévia de conexão com a internet antes de iniciar a instalação quando algum programa online (como o Office 365 Online) estiver selecionado, exibindo aviso solicitando conexão (com opções Repetir / Cancelar) caso esteja offline
+- Propriedades `RequiresInternet` e `DefaultChecked` no modelo `ProgramInfo` e método `HasInternetConnectionAsync()` no `InstallerService`
+
+---
+
+## [2.0.0.22] - 2026-11-11
+
+### Alterado
+- Quando o usuário `admin` já existe no sistema e uma senha é informada no campo "Senha do usuário Admin:", o instalador agora altera apenas a senha do usuário existente em vez de tentar recriá-lo e exibir erro no log
+- Se o usuário `admin` já existir e o campo de senha estiver em branco, a senha atual é preservada sem tentativa de recriação ou limpeza acidental
+
+---
+
 ## [2.0.0.21] - 2026-10-19
 
 ### Alterado
