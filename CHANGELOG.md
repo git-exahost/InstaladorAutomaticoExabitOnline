@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.34] - 2026-11-16
+
+### Corrigido
+- **Papel de Parede - Correção de Sintaxe PowerShell no Script `apply_wallpapers.ps1`**: Corrigida a interpolação de string na linha 242 (`$($tName):` em vez de `$tName:`), eliminando o erro de análise `InvalidVariableReferenceWithDrive` / `Referência de variável inválida` causado pela interpretação do caractere de dois pontos (`:`) como escopo de variável/drive pelo PowerShell
+
+---
+
 ## [2.0.0.33] - 2026-11-16
 
 ### Corrigido
@@ -23,6 +30,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **Power BI Desktop - Área Limpa de Preparação (Staging Local)**: O instalador agora copia previamente o pacote para `C:\ProgramData\EXABIT\Setup\PBIDesktopSetup_x64.exe`, eliminando o bug de encoding ANSI do WiX Burn 3.14 ao lidar com caracteres acentuados (`ç`, `õ` na pasta "Soluções") e contornando bloqueios de pontos de nova análise/reparse points do OneDrive
 - **Power BI Desktop - Modo de Recuperação com Barra de Progresso (`-passive`)**: Caso a instalação silenciosa (`-quiet`) não conclua ou não crie os arquivos esperados, o serviço executa automaticamente uma segunda tentativa em modo passivo (`-passive`), exibindo a barra de progresso nativa do instalador da Microsoft sem exigir interação do usuário
 - **Power BI Desktop - Diagnóstico Detalhado de Falhas**: Implementado analisador de log de instalação (`powerbi_install.log`) via `ExtractPowerBILogSummary`, extraindo automaticamente a mensagem de erro exata e o código HRESULT caso ocorra qualquer imprevisto ambiental
+
+---
+
+## [2.0.0.34] - 2026-11-16
+
+### Corrigido
+- **Papel de Parede - Correção de Sintaxe PowerShell no Script `apply_wallpapers.ps1`**: Corrigida a interpolação de string na linha 242 (`$($tName):` em vez de `$tName:`), eliminando o erro de análise `InvalidVariableReferenceWithDrive` / `Referência de variável inválida` causado pela interpretação do caractere de dois pontos (`:`) como escopo de variável/drive pelo PowerShell
 
 ---
 
