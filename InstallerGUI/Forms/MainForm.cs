@@ -1062,20 +1062,20 @@ namespace InstallerGUI.Forms
             {
                 new ProgramInfo("7zip",        "7-Zip",                           "7z.msi",                               "/qn /norestart"),
                 new ProgramInfo("adobereader", "Adobe Acrobat Reader",            "AcroRdrDC.exe",                        "/sAll /msi EULA_ACCEPT=YES /qn /norestart"),
-                new ProgramInfo("anydesk",     "AnyDesk",                         "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --start-with-win --silent") { DefaultChecked = false },
+                new ProgramInfo("anydesk",     "AnyDesk",                         "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --silent --start-with-win --create-shortcuts --create-desktop-icon") { ProcessWorkingDir = "Programas", UseShellExecute = true, DefaultChecked = false },
                 new ProgramInfo("brave",       "Brave Browser",                   "BraveBrowserSetup.exe",                "/silent /install"),
                 new ProgramInfo("chrome",      "Google Chrome",                   "ChromeStandaloneSetup64.exe",           "/silent /install"),
                 new ProgramInfo("firefox",     "Mozilla Firefox",                 "Firefox_Setup.msi",                    "/qn /norestart"),
                 new ProgramInfo("googleearth", "Google Earth Pro",                "googleearthprowin.exe",                "OMAHA=1"),
                 new ProgramInfo("java",        "Java JRE 8",                      "jre-windows-x64.exe",                  "/s"),
                 new ProgramInfo("radmin",      "Radmin VPN",                      "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART") { DefaultChecked = false },
-                new ProgramInfo("citrix",      "Citrix Workspace",                "CitrixWorkspaceFullInstaller_x64.exe", "/silent /includeSSON /norestart"),
+                new ProgramInfo("citrix",      "Citrix Workspace",                "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot"),
                 new ProgramInfo("rustdesk",    "RustDesk",                        "rustdesk_x86_64.exe",                  "--silent-install") { FireAndForget = true },
                 new ProgramInfo("winrar",      "WinRAR",                          "winrar.exe",                           "/S"),
                 new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",           "DWGTrueView\\Setup.exe",               "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
                 new ProgramInfo("office",      "Microsoft Office",                "Office\\setup.exe",                    "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000, DefaultChecked = false },
                 new ProgramInfo("office365",   "Microsoft Office 365 (Online)",   "OfficeSetup.exe",                      "") { UseShellExecute = true, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",      "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1") { TimeoutMs = 600000, DefaultChecked = false },
+                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",      "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1") { ProcessWorkingDir = "Programas", UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = false },
                 new ProgramInfo("artcraft",    "ArtCraft",                        "ArtCraft_setup.exe",                   "/S") { DefaultChecked = false },
             };
         }

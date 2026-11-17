@@ -7,6 +7,116 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.33] - 2026-11-16
+
+### Corrigido
+- **AnyDesk - Correção de Instalação Silenciosa e Validação Real**: Corrigida a instalação silenciosa do AnyDesk (`AnyDesk.exe`), padronizando os parâmetros CLI conforme especificação oficial (`--install "C:\Program Files (x86)\AnyDesk" --silent --start-with-win --create-shortcuts --create-desktop-icon`), com `ProcessWorkingDir = "Programas"` e `UseShellExecute = true` (com elevação `runas`)
+- **AnyDesk - Área Limpa de Preparação e Finalização de Processos Prévios**: O instalador agora encerra processos orfãos ou em segundo plano do `AnyDesk` e copia o executável para uma pasta local limpa (`C:\ProgramData\EXABIT\Setup\AnyDesk.exe`) antes de disparar a instalação, eliminando conflitos de bloqueio de I/O em pastas sincronizadas
+- **AnyDesk - Verificação Pós-Instalação (`IsAnyDeskInstalled`)**: Implementada checagem real no sistema de arquivos (`C:\Program Files (x86)\AnyDesk\AnyDesk.exe` e `Program Files`) e no registro do Windows (64-bit e 32-bit), evitando relatar falso sucesso quando o instalador termina sem ter copiado os binários
+
+---
+
+## [2.0.0.32] - 2026-11-16
+
+### Corrigido
+- **Power BI Desktop - Preservação de Privilégios de Administrador (`Verb = runas`)**: Identificado que executáveis com manifesto `asInvoker` (como o bootstrapper WiX Burn do Power BI Desktop) sofrem de-elevação pelo Windows Shell quando iniciados com `UseShellExecute = true` sem o verbo `runas` explícito, executando em integridade média e falhando silenciosamente com `0x80070032` (`ERROR_NOT_SUPPORTED`) ao tentar elevar em modo silencioso (`-quiet`). Adicionado `psi.Verb = "runas"` em `RunProcessAsync` quando `useShell = true` para garantir execução com token administrativo completo
+- **Power BI Desktop - Área Limpa de Preparação (Staging Local)**: O instalador agora copia previamente o pacote para `C:\ProgramData\EXABIT\Setup\PBIDesktopSetup_x64.exe`, eliminando o bug de encoding ANSI do WiX Burn 3.14 ao lidar com caracteres acentuados (`ç`, `õ` na pasta "Soluções") e contornando bloqueios de pontos de nova análise/reparse points do OneDrive
+- **Power BI Desktop - Modo de Recuperação com Barra de Progresso (`-passive`)**: Caso a instalação silenciosa (`-quiet`) não conclua ou não crie os arquivos esperados, o serviço executa automaticamente uma segunda tentativa em modo passivo (`-passive`), exibindo a barra de progresso nativa do instalador da Microsoft sem exigir interação do usuário
+- **Power BI Desktop - Diagnóstico Detalhado de Falhas**: Implementado analisador de log de instalação (`powerbi_install.log`) via `ExtractPowerBILogSummary`, extraindo automaticamente a mensagem de erro exata e o código HRESULT caso ocorra qualquer imprevisto ambiental
+
+---
+
+## [2.0.0.33] - 2026-11-16
+
+### Corrigido
+- **AnyDesk - Correção de Instalação Silenciosa e Validação Real**: Corrigida a instalação silenciosa do AnyDesk (`AnyDesk.exe`), padronizando os parâmetros CLI conforme especificação oficial (`--install "C:\Program Files (x86)\AnyDesk" --silent --start-with-win --create-shortcuts --create-desktop-icon`), com `ProcessWorkingDir = "Programas"` e `UseShellExecute = true` (com elevação `runas`)
+- **AnyDesk - Área Limpa de Preparação e Finalização de Processos Prévios**: O instalador agora encerra processos orfãos ou em segundo plano do `AnyDesk` e copia o executável para uma pasta local limpa (`C:\ProgramData\EXABIT\Setup\AnyDesk.exe`) antes de disparar a instalação, eliminando conflitos de bloqueio de I/O em pastas sincronizadas
+- **AnyDesk - Verificação Pós-Instalação (`IsAnyDeskInstalled`)**: Implementada checagem real no sistema de arquivos (`C:\Program Files (x86)\AnyDesk\AnyDesk.exe` e `Program Files`) e no registro do Windows (64-bit e 32-bit), evitando relatar falso sucesso quando o instalador termina sem ter copiado os binários
+
+---
+
+## [2.0.0.32] - 2026-11-16
+
+### Corrigido
+- **Power BI Desktop - Preservação de Privilégios de Administrador (`Verb = runas`)**: Identificado que executáveis com manifesto `asInvoker` (como o bootstrapper WiX Burn do Power BI Desktop) sofrem de-elevação pelo Windows Shell quando iniciados com `UseShellExecute = true` sem o verbo `runas` explícito, executando em integridade média e falhando silenciosamente com `0x80070032` (`ERROR_NOT_SUPPORTED`) ao tentar elevar em modo silencioso (`-quiet`). Adicionado `psi.Verb = "runas"` em `RunProcessAsync` quando `useShell = true` para garantir execução com token administrativo completo
+- **Power BI Desktop - Área Limpa de Preparação (Staging Local)**: O instalador agora copia previamente o pacote para `C:\ProgramData\EXABIT\Setup\PBIDesktopSetup_x64.exe`, eliminando o bug de encoding ANSI do WiX Burn 3.14 ao lidar com caracteres acentuados (`ç`, `õ` na pasta "Soluções") e contornando bloqueios de pontos de nova análise/reparse points do OneDrive
+- **Power BI Desktop - Modo de Recuperação com Barra de Progresso (`-passive`)**: Caso a instalação silenciosa (`-quiet`) não conclua ou não crie os arquivos esperados, o serviço executa automaticamente uma segunda tentativa em modo passivo (`-passive`), exibindo a barra de progresso nativa do instalador da Microsoft sem exigir interação do usuário
+- **Power BI Desktop - Diagnóstico Detalhado de Falhas**: Implementado analisador de log de instalação (`powerbi_install.log`) via `ExtractPowerBILogSummary`, extraindo automaticamente a mensagem de erro exata e o código HRESULT caso ocorra qualquer imprevisto ambiental
+
+---
+
+## [2.0.0.31] - 2026-11-16
+
+### Alterado
+- **Papel de Parede Personalizado em Todos os Temas**: A opção "Aplicar papel de parede personalizado" agora detecta e processa automaticamente **todos os arquivos de imagem** presentes na pasta `Wallpapers` (`dist\Wallpapers` e `dist\Scripts\Wallpapers`), aplicando-os de forma integrada a **todos os temas do Windows** (Aero/Claro, Dark/Escuro, Spotlight, ThemeA, ThemeB, ThemeC e ThemeD)
+- **Apresentação de Slides e Temas Nativos**: Atualizados os arquivos de definição de tema em `C:\Windows\Resources\Themes\`, adicionando a seção `[Slideshow]` para alternância automática de todas as imagens personalizadas em qualquer tema escolhido pelo usuário
+- **Pastas de Sistema e Cache 4K**: Todas as imagens da pasta `Wallpapers` são copiadas para `C:\Windows\Web\Wallpaper\Personalizado\` e para as pastas temáticas do Windows (`Windows`, `ThemeA`, `ThemeB`, `ThemeC`, `ThemeD`, `Spotlight`), substituindo as imagens padrão (`img0.jpg`, `img19.jpg`, `img20..35`, `img50`, `img100`), o cache 4K (`C:\Windows\Web\4K\Wallpaper\Windows\`) e a tela de bloqueio (`C:\Windows\Web\Screen\img100.jpg`)
+- **Perfis de Usuário**: Configurado o registro do usuário atual (`HKCU\Control Panel\Desktop` e `Desktop Slideshow`), atualizado o cache `TranscodedWallpaper`, configurado o perfil padrão `C:\Users\Default\NTUSER.DAT` (para que novos usuários já nasçam com todos os papéis de parede aplicados) e propagado para perfis existentes
+- **Script Especializado**: Criado `dist\Scripts\apply_wallpapers.ps1` com controle de permissões por SID (`*S-1-5-32-544`), atualização de `.theme`, integração P/Invoke `SystemParametersInfoW` e assinatura digital corporativa Authenticode
+
+---
+
+## [2.0.0.30] - 2026-11-16
+
+### Alterado
+- **Power BI Desktop - Correção de Instalação e Bloqueio WiX Burn**: Configurado `UseShellExecute = true` e `ProcessWorkingDir = "Programas"` na definição do Microsoft Power BI Desktop (`PBIDesktopSetup_x64.exe`). Com `UseShellExecute = true`, o processo é iniciado pelo subsistema Shell do Windows sem redirecionamento de pipes anônimos (`stdout`/`stderr`), eliminando o erro interno Win32 `0x80070032` (`ERROR_NOT_SUPPORTED`) na elevação do motor Burn
+- **Power BI Desktop - Eliminação de Falso Positivo**: Em versões anteriores, o bootstrapper WiX Burn encerrava em menos de 2 segundos retornando código `0x0` em modo `-quiet` após a falha de elevação, levando o serviço a registrar falsamente `[ok] instalado com sucesso`. Implementada verificação física no disco (`C:\Program Files\Microsoft Power BI Desktop\bin\PBIDesktop.exe`) e no Registro do Windows, garantindo que o status de sucesso só seja reportado se o aplicativo foi realmente instalado
+- **Power BI Desktop - Detecção Prévia**: Adicionada verificação prévia para evitar reinstalação redundante caso o Power BI Desktop já esteja presente no sistema operacional
+- **Geral - Diretório de Trabalho Padrão**: Padronizado o diretório de trabalho padrão dos instaladores em `InstallerService.cs` para a pasta onde o próprio instalador está localizado (`Path.GetDirectoryName(fullPath)`), evitando falhas de resolução de dependências e arquivos auxiliares
+
+---
+
+## [2.0.0.29] - 2026-11-16
+
+### Alterado
+- **Citrix Workspace - Correção de Instalação e Código -2147467259**: Ajustados os parâmetros padrão para `/silent /noreboot`, removendo o switch `/norestart` e o componente `/includeSSON` (Single Sign-On / logon pass-through de domínio), cuja tentativa de registro em máquinas recém-formatadas fora de domínio causava falha fatal `0x80004005` (`-2147467259`)
+- **Citrix Workspace - Verificação e Atualização Online**: Implementada verificação prévia de conectividade com a internet antes da instalação; quando conectado, consulta a página oficial (`https://www.citrix.com/downloads/workspace-app/windows/workspace-app-for-windows-latest.html`), compara a versão online com a versão do instalador local (`dist\Programas\CitrixWorkspaceFullInstaller_x64.exe`) e, se o arquivo local estiver desatualizado ou ausente, faz o download automático da versão mais recente para x64
+- **Citrix Workspace - Otimização de Download**: Se a versão local já for igual ou mais recente que a versão disponível no portal da Citrix, utiliza o instalador local imediatamente, evitando download redundante de ~874 MB
+- **Citrix Workspace - Resiliência e Códigos de Retorno**: Trata o código de saída `3010` (`ERROR_SUCCESS_REBOOT_REQUIRED`) como sucesso com reinicialização pendente; adicionada rotina de autorrecuperação para códigos de erro `-2147467259` ou `1603` com segunda tentativa automática com `/forceinstall` e sem `/includeSSON`. Finalização preventiva de processos remanescentes (`CitrixWorkspaceApp`, `Receiver`, `wfcrun32`) antes da execução do instalador
+
+---
+
+## [2.0.0.28] - 2026-11-16
+
+### Alterado
+- **Segurança e Anti-Falso Positivo**: Embutido manifesto de aplicação nativo (`app.manifest`) com declaração explícita de `requireAdministrator`, identificador corporativo da aplicação e suporte a Windows 10 e Windows 11, evitando alertas de elevação não manifestada
+- **Metadados do Executável**: Preenchidos todos os atributos de assembly em `AssemblyInfo.cs` (`AssemblyCompany`, `AssemblyProduct`, `AssemblyCopyright`, `AssemblyTrademark`) com os dados oficiais da EXABIT Soluções em TI, eliminando penalidades de reputação por metadados vazios
+- **Mitigação de Heurística de Dropper**: Atualizado o local de download de executáveis atualizados (como o RustDesk) para a pasta legítima da aplicação (`Programas` ou `%LOCALAPPDATA%\Exabit\AutoInstall\Updates`), removendo a execução direta a partir da pasta temporária `%TEMP%`
+- **Mitigação de Alertas AMSI**: Simplificada a chamada de configuração de contas locais no PowerShell via `Set-LocalUser`, removendo injeções complexas de scripts e chamadas obsoletas ao `wmic`
+- **Assinatura Digital Authenticode**: Integrada rotina de assinatura digital corporativa com certificado SHA-256 e carimbo de tempo RFC 3161 (DigiCert) diretamente no script de compilação `build.bat`, assinando tanto o executável `install.exe` quanto os scripts PowerShell auxiliares
+- **Script de Confiança**: Adicionado script `dist\Instalar_Certificado_EXABIT.cmd` para instalação com 1 clique do certificado público em "Editores Confiáveis" e "Raiz Confiável" das máquinas clientes
+
+---
+
+## [2.0.0.27] - 2026-11-16
+
+### Alterado
+- **Contas de Usuário**: Garantida a ativação obrigatória e permanente da opção **"A senha nunca expira"** (`PasswordNeverExpires`) para todos os usuários criados ou atualizados (`admin` e usuário padrão), com verificação em múltiplas camadas (PowerShell `Set-LocalUser`, ADSI com flag `0x10000` (`ADS_UF_DONT_EXPIRE_PASSWORD`) e fallback WMIC)
+- **Política de Senhas do Windows**: Aplicação automática da política de máquina `net accounts /maxpwage:unlimited` tanto no início do processo de instalação quanto na criação dos usuários, assegurando que a duração máxima de senhas locais no Windows seja ilimitada e eliminando riscos de senhas expiradas
+- **Correção**: Corrigido parâmetro no `Set-LocalUser` para controle de alteração de senha do usuário padrão (`-UserMayChangePassword`), que causava falha silenciosa na aplicação do `PasswordNeverExpires`
+
+---
+
+## [2.0.0.26] - 2026-11-16
+
+### Alterado
+- **RustDesk**: Verificação prévia de conectividade com a internet antes de instalar o arquivo local da pasta `Programas`; se houver conexão ativa, baixa e instala automaticamente a versão mais recente para Windows x86_64 diretamente do GitHub Releases, atualizando o instalador local em `Programas` quando possível, com fallback para o instalador local caso offline ou em caso de falha de download
+- **RustDesk**: Configuração de permissões de acesso para liberar conexões com senha temporária, aprovação do usuário (clique) ou senha definitiva (`approve-mode = 'password-click'` e `verification-method = 'use-both-passwords'`)
+- **RustDesk**: Definição da senha definitiva (acesso unattended) utilizando a mesma senha informada no campo "Senha do usuário Admin:" da interface, aplicada via linha de comando (`--password`) e replicada nos arquivos de configuração TOML
+- Script auxiliar `dist\Scripts\rustdesk_server.ps1` atualizado com suporte a download/instalação da versão mais recente, configuração dos modos de permissão e parâmetro `-AdminPassword` para definição da senha definitiva
+
+---
+
+## [2.0.0.25] - 2026-11-15
+
+### Adicionado
+- Configuração automática do servidor próprio da EXABIT para o **RustDesk** (`rustdesk.exabit.com.br`) aplicada imediatamente após a sua instalação
+- Definição do servidor EXABIT como padrão para todos os perfis (`LocalService`, `Default` template e perfis em `C:\Users`) via gravação de `RustDesk2.toml` com codificação UTF-8 sem BOM
+- Limpeza preventiva de tokens de autenticação/sessão anteriores em `RustDesk.toml`, `RustDesk_default.toml` e `RustDesk_local.toml`
+- Script auxiliar de PowerShell disponibilizado em `dist\Scripts\rustdesk_server.ps1` para aplicação manual avulsa
+
+---
+
 ## [2.0.0.24] - 2026-11-12
 
 ### Alterado

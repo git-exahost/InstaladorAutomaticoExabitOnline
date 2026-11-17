@@ -1,9 +1,9 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
-title Compilando Instalador Automático...
+title Compilando Instalador AutomÃ¡tico...
 
 echo ============================================
-echo  Compilando Instalador Automático (C# WinForms)
+echo  Compilando Instalador AutomÃ¡tico (C# WinForms)
 echo ============================================
 echo.
 
@@ -16,12 +16,15 @@ if not exist %CSC% (
 echo Compilador: %CSC%
 echo.
 
-REM Cria diretório de saída se não existir
+REM Cria diretÃ³rio de saÃ­da se nÃ£o existir
 if not exist "bin\Release" mkdir "bin\Release"
 
 REM Compila todos os arquivos .cs
 %CSC% /target:winexe ^
       /out:bin\Release\install.exe ^
+      /win32manifest:app.manifest ^
+      /platform:anycpu ^
+      /highentropyva+ ^
       /reference:System.dll ^
       /reference:System.Core.dll ^
       /reference:System.Drawing.dll ^
@@ -59,6 +62,11 @@ if %errorlevel% equ 0 (
     for %%I in ("bin\Release\install.exe") do echo Tamanho: %%~zI bytes
     echo.
     echo %DATE% %TIME% > "..\dist\build_info.txt"
+
+    REM Assinatura digital Authenticode corporativa
+    echo Aplicando assinatura digital Authenticode...
+    powershell -NoProfile -ExecutionPolicy Bypass -File sign.ps1
+    echo.
 ) else (
     echo.
     echo  X  Erro na compilacao. Verifique os erros acima.

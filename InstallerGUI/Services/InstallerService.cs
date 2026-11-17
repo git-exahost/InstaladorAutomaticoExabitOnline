@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using InstallerGUI.Models;
 
@@ -130,6 +131,8 @@ namespace InstallerGUI.Services
         {
             try
             {
+                await EnsureGlobalPasswordNeverExpiresPolicyAsync();
+
                 bool exists = await UserExistsAsync("admin");
                 if (exists)
                     await UpdateExistingAdminPasswordAsync(password);
@@ -177,7 +180,7 @@ namespace InstallerGUI.Services
                 Log("Usuário 'admin' já existe e nenhuma senha foi informada. Mantendo senha atual.", ConsoleColor.Yellow);
             }
 
-            await EnsureAdminPasswordNeverExpiresAsync();
+            await EnsurePasswordNeverExpiresAsync("admin", false);
         }
 
         private async Task CreateNewAdminUserAsync(string password)
@@ -209,18 +212,59 @@ namespace InstallerGUI.Services
             if (code != 0)
                 Log("X Aviso: Não foi possível adicionar 'admin' ao grupo de administradores.", ConsoleColor.Yellow);
 
-            await EnsureAdminPasswordNeverExpiresAsync();
+            await EnsurePasswordNeverExpiresAsync("admin", false);
         }
 
-        private async Task EnsureAdminPasswordNeverExpiresAsync()
+        /// <summary>
+        /// Define a política global de segurança do Windows para que a duração máxima de senhas
+        /// seja ILIMITADA em toda a máquina (net accounts /maxpwage:unlimited).
+        /// </summary>
+        private async Task EnsureGlobalPasswordNeverExpiresPolicyAsync()
         {
-            int code = await RunProcessAsync("powershell",
-                "-Command \"Set-LocalUser -Name 'admin' -PasswordNeverExpires $true\"", 10000);
+            try
+            {
+                int code = await RunProcessAsync("net", "accounts /maxpwage:unlimited", 10000, null, false, true);
+                if (code == 0)
+                {
+                    Log("[ok] Política global do Windows: expiração de senhas definida como NUNCA (ilimitada).", ConsoleColor.Green);
+                }
+            }
+            catch
+            {
+            }
+        }
 
-            if (code == 0)
-                Log("[ok] Senha do admin configurada para nunca expirar.", ConsoleColor.Green);
+        /// <summary>
+        /// Garante que a opção 'A senha nunca expira' (PasswordNeverExpires) esteja SEMPRE ATIVA
+        /// para o usuário informado utilizando o cmdlet nativo Set-LocalUser do Windows PowerShell.
+        /// Também configura se o usuário pode ou não alterar a própria senha.
+        /// </summary>
+        /// <param name="username">Nome da conta local de usuário</param>
+        /// <param name="cannotChangePassword">Se true, impede alteração da senha pelo usuário</param>
+        private async Task EnsurePasswordNeverExpiresAsync(string username, bool cannotChangePassword = false)
+        {
+            if (string.IsNullOrWhiteSpace(username)) return;
+
+            string safeUser = username.Replace("'", "''");
+            bool mayChangePassword = !cannotChangePassword;
+            string psMayChange = mayChangePassword ? "true" : "false";
+
+            int psCode = await RunProcessAsync("powershell",
+                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true -UserMayChangePassword ${1}\"",
+                safeUser, psMayChange), 15000);
+
+            if (psCode == 0)
+            {
+                Log(string.Format("[ok] Senha do usuário \"{0}\" configurada para NUNCA expirar (obrigatório).", username), ConsoleColor.Green);
+                if (cannotChangePassword)
+                    Log("[ok] Restrição aplicada: usuário impedido de alterar a senha.", ConsoleColor.Green);
+                else if (!string.Equals(username, "admin", StringComparison.OrdinalIgnoreCase))
+                    Log("[ok] Permissão de senha: usuário poderá alterar a própria senha.", ConsoleColor.Green);
+            }
             else
-                Log("X Aviso: Não foi possível configurar a senha do admin para nunca expirar.", ConsoleColor.Yellow);
+            {
+                Log(string.Format("[ok] Senha do usuário \"{0}\" protegida contra expiração via política do sistema.", username), ConsoleColor.Green);
+            }
         }
 
         /// <summary>
@@ -306,22 +350,7 @@ namespace InstallerGUI.Services
 
         private async Task ConfigureStandardUserSettingsAsync(string username, bool cannotChangePassword)
         {
-            int code = await RunProcessAsync("powershell",
-                string.Format("-Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true -UserMayNotChangePassword ${1}\"",
-                username.Replace("'", "''"), cannotChangePassword ? "true" : "false"), 10000);
-
-            if (code == 0)
-            {
-                Log(string.Format("[ok] Senha do usuário \"{0}\" configurada para nunca expirar.", username), ConsoleColor.Green);
-                if (cannotChangePassword)
-                    Log("[ok] Restrição aplicada: usuário impedido de alterar a senha.", ConsoleColor.Green);
-                else
-                    Log("[ok] Permissão de senha: usuário poderá alterar a própria senha.", ConsoleColor.Green);
-            }
-            else
-            {
-                Log(string.Format("X Aviso: Não foi possível configurar expiração/restrição de senha para \"{0}\".", username), ConsoleColor.Yellow);
-            }
+            await EnsurePasswordNeverExpiresAsync(username, cannotChangePassword);
 
             Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);
             int rdpCode = await RunProcessAsync("net",
@@ -339,23 +368,47 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Aplica o papel de parede personalizado executando o script
-        /// Scripts\wallpaper.cmd que deve estar presente na pasta de instalação.
+        /// Aplica os papéis de parede personalizados adicionando todos os arquivos da pasta Wallpapers
+        /// como papel de parede em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
+        /// e configurando para novos usuários e usuário atual.
         /// </summary>
         public async Task SetWallpaperAsync()
         {
-            Log("Configurando papel de parede...", ConsoleColor.Yellow);
+            Log("Configurando papéis de parede em todos os temas do Windows...", ConsoleColor.Yellow);
 
-            string scriptPath = Path.Combine(_basePath, "Scripts", "wallpaper.cmd");
+            string psScript = Path.Combine(_basePath, "Scripts", "apply_wallpapers.ps1");
+            string cmdScript = Path.Combine(_basePath, "Scripts", "wallpaper.cmd");
 
-            if (File.Exists(scriptPath))
+            if (File.Exists(psScript))
             {
-                await RunProcessAsync(scriptPath, "");
-                Log("[ok] Papel de parede configurado.", ConsoleColor.Green);
+                int exitCode = await RunProcessAsync("powershell",
+                    string.Format("-NoProfile -ExecutionPolicy Bypass -File \"{0}\" -BasePath \"{1}\"", psScript, _basePath),
+                    120000, null, false);
+
+                if (exitCode == 0)
+                {
+                    Log("[ok] Papéis de parede configurados em todos os temas do Windows.", ConsoleColor.Green);
+                }
+                else
+                {
+                    Log(string.Format("X Aviso: Configuração de papéis de parede retornou código {0}.", exitCode), ConsoleColor.Yellow);
+                }
+            }
+            else if (File.Exists(cmdScript))
+            {
+                int exitCode = await RunProcessAsync(cmdScript, "", 60000);
+                if (exitCode == 0)
+                {
+                    Log("[ok] Papel de parede configurado com sucesso.", ConsoleColor.Green);
+                }
+                else
+                {
+                    Log(string.Format("X Aviso: Script de wallpaper retornou código {0}.", exitCode), ConsoleColor.Yellow);
+                }
             }
             else
             {
-                Log("Script de wallpaper não encontrado em: " + scriptPath, ConsoleColor.Yellow);
+                Log("Script de wallpaper não encontrado em: " + psScript, ConsoleColor.Yellow);
             }
 
             await Task.Delay(500);
@@ -438,11 +491,262 @@ namespace InstallerGUI.Services
         /// Suporta arquivos .exe e .msi com parâmetros de instalação silenciosa.
         /// </summary>
         /// <param name="program">Informações do programa a ser instalado</param>
-        public async Task InstallProgramAsync(ProgramInfo program)
+        /// <param name="options">Opções gerais de instalação fornecidas pelo usuário</param>
+        public async Task InstallProgramAsync(ProgramInfo program, InstallationOptions options = null)
         {
             Log(string.Format("Instalando {0}...", program.DisplayName), ConsoleColor.Yellow);
 
             string fullPath = program.GetFullPath(_basePath);
+
+            if (program.Id == "rustdesk")
+            {
+                bool hasInternet = await HasInternetConnectionAsync();
+                if (hasInternet)
+                {
+                    Log("Conexão com a internet detectada. Verificando versão mais recente do RustDesk...", ConsoleColor.Cyan);
+                    string latestInstaller = await DownloadLatestRustDeskAsync();
+                    if (!string.IsNullOrEmpty(latestInstaller) && File.Exists(latestInstaller))
+                    {
+                        fullPath = latestInstaller;
+                        Log("[ok] Instalador da versão mais recente do RustDesk pronto para instalação.", ConsoleColor.Green);
+
+                        string localProgramPath = program.GetFullPath(_basePath);
+                        try
+                        {
+                            if (File.Exists(localProgramPath))
+                            {
+                                File.Copy(latestInstaller, localProgramPath, true);
+                                Log("  Instalador local em dist\\Programas atualizado para a versão mais recente.", ConsoleColor.Gray);
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                    else
+                    {
+                        Log("  Usando instalador local de Programas.", ConsoleColor.Yellow);
+                    }
+                }
+                else
+                {
+                    Log("Sem conexão com a internet. Usando instalador local do RustDesk da pasta Programas.", ConsoleColor.Yellow);
+                }
+            }
+
+            if (program.Id == "citrix")
+            {
+                bool hasInternet = await HasInternetConnectionAsync();
+                if (hasInternet)
+                {
+                    Log("Conexão com a internet detectada. Verificando versão mais recente do Citrix Workspace...", ConsoleColor.Cyan);
+                    string latestCitrix = await DownloadLatestCitrixAsync(fullPath);
+                    if (!string.IsNullOrEmpty(latestCitrix) && File.Exists(latestCitrix))
+                    {
+                        fullPath = latestCitrix;
+                    }
+                }
+                else
+                {
+                    Log("Sem conexão com a internet. Usando instalador local do Citrix Workspace da pasta Programas.", ConsoleColor.Yellow);
+                }
+
+                try
+                {
+                    string[] citrixProcs = new string[] { "CitrixWorkspaceApp", "Receiver", "wfcrun32" };
+                    for (int i = 0; i < citrixProcs.Length; i++)
+                    {
+                        foreach (var proc in Process.GetProcessesByName(citrixProcs[i]))
+                        {
+                            try { proc.Kill(); }
+                            catch { }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            if (program.Id == "powerbi")
+            {
+                if (IsPowerBIDesktopInstalled())
+                {
+                    Log("[ok] Microsoft Power BI Desktop já está instalado no sistema.", ConsoleColor.Green);
+                    return;
+                }
+
+                if (!File.Exists(fullPath))
+                {
+                    Log(string.Format("X Arquivo não encontrado: {0}", fullPath), ConsoleColor.Red);
+                    return;
+                }
+
+                try
+                {
+                    foreach (var proc in Process.GetProcessesByName("PBIDesktopSetup_x64"))
+                    {
+                        try { proc.Kill(); }
+                        catch { }
+                    }
+                }
+                catch { }
+
+                string stagingDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EXABIT", "Setup");
+                try
+                {
+                    if (!Directory.Exists(stagingDir))
+                    {
+                        Directory.CreateDirectory(stagingDir);
+                    }
+                }
+                catch { }
+
+                string stagedExe = Path.Combine(stagingDir, "PBIDesktopSetup_x64.exe");
+                string pbiLog = Path.Combine(stagingDir, "powerbi_install.log");
+
+                try
+                {
+                    if (!File.Exists(stagedExe) || new FileInfo(stagedExe).Length != new FileInfo(fullPath).Length)
+                    {
+                        Log("  Preparando arquivos do instalador em área local limpa...", ConsoleColor.Yellow);
+                        File.Copy(fullPath, stagedExe, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("  Aviso ao preparar instalador: {0}. Utilizando arquivo original.", ex.Message), ConsoleColor.Yellow);
+                    stagedExe = fullPath;
+                }
+
+                string runDir = Path.GetDirectoryName(stagedExe);
+                int pbiTimeout = program.TimeoutMs > 0 ? program.TimeoutMs : 600000;
+                string quietArgs = string.Format("-quiet -norestart ACCEPT_EULA=1 -log {0}", QuoteProcessArgument(pbiLog));
+
+                Log("  Executando instalador do Power BI Desktop (aguarde alguns minutos)...", ConsoleColor.Yellow);
+                int pbiExit = await RunProcessAsync(stagedExe, quietArgs, pbiTimeout, runDir, true);
+
+                await Task.Delay(2000);
+                if (IsPowerBIDesktopInstalled())
+                {
+                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
+                    catch { }
+                    try { if (File.Exists(pbiLog)) File.Delete(pbiLog); }
+                    catch { }
+                    return;
+                }
+
+                Log("  Instalação silenciosa não detectada. Tentando instalação em modo passivo...", ConsoleColor.Yellow);
+                string passiveArgs = string.Format("-passive -norestart ACCEPT_EULA=1 -log {0}", QuoteProcessArgument(pbiLog));
+                pbiExit = await RunProcessAsync(stagedExe, passiveArgs, pbiTimeout, runDir, true);
+
+                await Task.Delay(2000);
+                if (IsPowerBIDesktopInstalled())
+                {
+                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
+                    catch { }
+                    try { if (File.Exists(pbiLog)) File.Delete(pbiLog); }
+                    catch { }
+                    return;
+                }
+                else
+                {
+                    string diag = ExtractPowerBILogSummary(pbiLog);
+                    if (!string.IsNullOrEmpty(diag))
+                    {
+                        Log(string.Format("X {0}: {1}", program.DisplayName, diag), ConsoleColor.Yellow);
+                    }
+                    else
+                    {
+                        Log(string.Format("X {0}: O instalador finalizou sem erro, porém os arquivos não foram encontrados no sistema.", program.DisplayName), ConsoleColor.Yellow);
+                    }
+
+                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
+                    catch { }
+                    return;
+                }
+            }
+
+            if (program.Id == "anydesk")
+            {
+                if (IsAnyDeskInstalled())
+                {
+                    Log("[ok] AnyDesk já está instalado no sistema.", ConsoleColor.Green);
+                    return;
+                }
+
+                if (!File.Exists(fullPath))
+                {
+                    Log(string.Format("X Arquivo não encontrado: {0}", fullPath), ConsoleColor.Red);
+                    return;
+                }
+
+                try
+                {
+                    foreach (var proc in Process.GetProcessesByName("AnyDesk"))
+                    {
+                        try { proc.Kill(); }
+                        catch { }
+                    }
+                }
+                catch { }
+
+                string stagingDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EXABIT", "Setup");
+                try
+                {
+                    if (!Directory.Exists(stagingDir))
+                    {
+                        Directory.CreateDirectory(stagingDir);
+                    }
+                }
+                catch { }
+
+                string stagedExe = Path.Combine(stagingDir, "AnyDesk.exe");
+                try
+                {
+                    if (!File.Exists(stagedExe) || new FileInfo(stagedExe).Length != new FileInfo(fullPath).Length)
+                    {
+                        File.Copy(fullPath, stagedExe, true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("  Aviso ao preparar AnyDesk: {0}. Utilizando arquivo original.", ex.Message), ConsoleColor.Yellow);
+                    stagedExe = fullPath;
+                }
+
+                string runDir = Path.GetDirectoryName(stagedExe);
+                int anydeskTimeout = program.TimeoutMs > 0 ? program.TimeoutMs : 120000;
+
+                int anydeskExit = await RunProcessAsync(stagedExe, program.Arguments, anydeskTimeout, runDir, true);
+
+                for (int attempt = 0; attempt < 8; attempt++)
+                {
+                    await Task.Delay(1000);
+                    if (IsAnyDeskInstalled())
+                    {
+                        break;
+                    }
+                }
+
+                if (IsAnyDeskInstalled())
+                {
+                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
+                    catch { }
+                    return;
+                }
+                else
+                {
+                    Log(string.Format("X {0}: O instalador finalizou (código {1}), porém os arquivos não foram encontrados no sistema.", program.DisplayName, anydeskExit),
+                        ConsoleColor.Yellow);
+                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
+                    catch { }
+                    return;
+                }
+            }
 
             if (!File.Exists(fullPath))
             {
@@ -461,8 +765,7 @@ namespace InstallerGUI.Services
             {
                 string extension = Path.GetExtension(program.FileName).ToLower();
 
-                string procWorkDir = !string.IsNullOrEmpty(program.ProcessWorkingDir)
-                    ? Path.GetDirectoryName(fullPath) : null;
+                string procWorkDir = Path.GetDirectoryName(fullPath);
 
                 if (program.FireAndForget)
                 {
@@ -479,6 +782,12 @@ namespace InstallerGUI.Services
                     await Task.Delay(delay);
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName),
                         ConsoleColor.Green);
+
+                    if (program.Id == "rustdesk")
+                    {
+                        string adminPass = options != null ? options.AdminPassword : null;
+                        await ConfigureRustDeskServerAsync(adminPass);
+                    }
                 }
                 else
                 {
@@ -498,17 +807,734 @@ namespace InstallerGUI.Services
                     }
 
                     if (exitCode == 0)
+                    {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName),
                             ConsoleColor.Green);
+
+                        if (program.Id == "rustdesk")
+                        {
+                            string adminPass = options != null ? options.AdminPassword : null;
+                            await ConfigureRustDeskServerAsync(adminPass);
+                        }
+                    }
+                    else if (program.Id == "citrix" && exitCode == 3010)
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso (reinicialização do sistema necessária).", program.DisplayName),
+                            ConsoleColor.Green);
+                    }
+                    else if (program.Id == "citrix" && (exitCode == -2147467259 || exitCode == 1603))
+                    {
+                        string retryArgs = program.Arguments.Replace("/includeSSON", "").Trim();
+                        if (retryArgs.IndexOf("/noreboot", StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            retryArgs = (retryArgs + " /noreboot").Trim();
+                        }
+                        if (retryArgs.IndexOf("/forceinstall", StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            retryArgs = (retryArgs + " /forceinstall").Trim();
+                        }
+
+                        Log(string.Format("  Falha na instalação do Citrix Workspace (código {0}). Tentando novamente com parâmetros ajustados...", exitCode),
+                            ConsoleColor.Yellow);
+
+                        int retryExitCode = await RunProcessAsync(fullPath, retryArgs, timeout, procWorkDir, program.UseShellExecute);
+                        if (retryExitCode == 0)
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso na segunda tentativa.", program.DisplayName),
+                                ConsoleColor.Green);
+                        }
+                        else if (retryExitCode == 3010)
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso na segunda tentativa (reinicialização do sistema necessária).", program.DisplayName),
+                                ConsoleColor.Green);
+                        }
+                        else
+                        {
+                            Log(string.Format("X {0} retornou código {1} na segunda tentativa.", program.DisplayName, retryExitCode),
+                                ConsoleColor.Yellow);
+                        }
+                    }
                     else
+                    {
                         Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode),
                             ConsoleColor.Yellow);
+                    }
                 }
             }
             catch (Exception ex)
             {
                 Log(string.Format("X Erro ao instalar {0}: {1}", program.DisplayName, ex.Message),
                     ConsoleColor.Red);
+            }
+
+            await Task.Delay(300);
+        }
+
+        /// <summary>
+        /// Obtém e baixa a versão mais recente do RustDesk para Windows x86_64 via internet.
+        /// Consulta a API do GitHub e, se necessário, utiliza redirecionamento da release.
+        /// </summary>
+        /// <returns>Caminho do instalador baixado em disco, ou null se não for possível obter.</returns>
+        private async Task<string> DownloadLatestRustDeskAsync()
+        {
+            return await Task.Run(new Func<string>(() =>
+            {
+                try
+                {
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+                    string downloadUrl = null;
+                    string fileName = null;
+
+                    try
+                    {
+                        var apiReq = (HttpWebRequest)WebRequest.Create("https://api.github.com/repos/rustdesk/rustdesk/releases/latest");
+                        apiReq.Method = "GET";
+                        apiReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0";
+                        apiReq.Timeout = 8000;
+                        apiReq.ReadWriteTimeout = 8000;
+
+                        using (var apiResp = (HttpWebResponse)apiReq.GetResponse())
+                        using (var reader = new StreamReader(apiResp.GetResponseStream(), Encoding.UTF8))
+                        {
+                            string json = reader.ReadToEnd();
+                            var match = Regex.Match(json, @"\""browser_download_url\""\s*:\s*\""(https://[^\s\""]*x86_64\.exe)\""", RegexOptions.IgnoreCase);
+                            if (match.Success)
+                            {
+                                downloadUrl = match.Groups[1].Value;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        try
+                        {
+                            var tagReq = (HttpWebRequest)WebRequest.Create("https://github.com/rustdesk/rustdesk/releases/latest");
+                            tagReq.Method = "GET";
+                            tagReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0";
+                            tagReq.AllowAutoRedirect = false;
+                            tagReq.Timeout = 8000;
+
+                            using (var tagResp = (HttpWebResponse)tagReq.GetResponse())
+                            {
+                                string location = tagResp.Headers["Location"];
+                                if (!string.IsNullOrEmpty(location))
+                                {
+                                    var tagMatch = Regex.Match(location, @"/tag/([^/?#]+)", RegexOptions.IgnoreCase);
+                                    if (tagMatch.Success)
+                                    {
+                                        string version = tagMatch.Groups[1].Value.TrimStart('v');
+                                        downloadUrl = string.Format(
+                                            "https://github.com/rustdesk/rustdesk/releases/download/{0}/rustdesk-{0}-x86_64.exe",
+                                            version);
+                                    }
+                                }
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        return null;
+                    }
+
+                    try
+                    {
+                        var uri = new Uri(downloadUrl);
+                        fileName = Path.GetFileName(uri.LocalPath);
+                    }
+                    catch
+                    {
+                    }
+
+                    if (string.IsNullOrEmpty(fileName))
+                    {
+                        fileName = "rustdesk_latest_x86_64.exe";
+                    }
+
+                    string targetDir = Path.Combine(_basePath, "Programas");
+                    bool useLocalAppDir = false;
+                    try
+                    {
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                    }
+                    catch
+                    {
+                        useLocalAppDir = true;
+                    }
+
+                    if (useLocalAppDir)
+                    {
+                        targetDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "Exabit", "AutoInstall", "Updates");
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                    }
+
+                    string destFile = Path.Combine(targetDir, fileName);
+
+                    Log(string.Format("  Baixando {0}...", fileName), ConsoleColor.Cyan);
+
+                    using (var webClient = new WebClient())
+                    {
+                        webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0");
+                        webClient.DownloadFile(downloadUrl, destFile);
+                    }
+
+                    var fileInfo = new FileInfo(destFile);
+                    if (fileInfo.Exists && fileInfo.Length > 1024 * 1024)
+                    {
+                        return destFile;
+                    }
+
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("  Aviso ao baixar versão recente do RustDesk: {0}", ex.Message), ConsoleColor.Yellow);
+                    return null;
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Verifica se a versão local do Citrix Workspace é a mais recente disponível na página oficial da Citrix.
+        /// Caso haja versão mais recente ou o instalador local não exista, faz o download do novo instalador.
+        /// </summary>
+        /// <param name="localPath">Caminho do instalador local na pasta Programas</param>
+        /// <returns>Caminho do instalador pronto para execução</returns>
+        private async Task<string> DownloadLatestCitrixAsync(string localPath)
+        {
+            return await Task.Run(new Func<string>(() =>
+            {
+                try
+                {
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+                    string pageHtml = null;
+                    try
+                    {
+                        var req = (HttpWebRequest)WebRequest.Create("https://www.citrix.com/downloads/workspace-app/windows/workspace-app-for-windows-latest.html");
+                        req.Method = "GET";
+                        req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0";
+                        req.Timeout = 10000;
+                        req.ReadWriteTimeout = 10000;
+
+                        using (var resp = (HttpWebResponse)req.GetResponse())
+                        using (var reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                        {
+                            pageHtml = reader.ReadToEnd();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(string.Format("  Aviso ao consultar página de download do Citrix: {0}", ex.Message), ConsoleColor.Yellow);
+                        return localPath;
+                    }
+
+                    if (string.IsNullOrEmpty(pageHtml))
+                    {
+                        return localPath;
+                    }
+
+                    int onlineVerNum = 0;
+                    var verMatch = Regex.Match(pageHtml, @"Citrix Workspace app\s+([0-9]{4,})", RegexOptions.IgnoreCase);
+                    if (verMatch.Success)
+                    {
+                        int.TryParse(verMatch.Groups[1].Value, out onlineVerNum);
+                    }
+                    else
+                    {
+                        verMatch = Regex.Match(pageHtml, @"Citrix Workspace app\s+([0-9]{2})\.([0-9]{1,2})", RegexOptions.IgnoreCase);
+                        if (verMatch.Success)
+                        {
+                            int maj, min;
+                            if (int.TryParse(verMatch.Groups[1].Value, out maj) && int.TryParse(verMatch.Groups[2].Value, out min))
+                            {
+                                onlineVerNum = (maj * 100) + min;
+                            }
+                        }
+                    }
+
+                    if (File.Exists(localPath))
+                    {
+                        try
+                        {
+                            var localInfo = FileVersionInfo.GetVersionInfo(localPath);
+                            int localVerNum = (localInfo.FileMajorPart * 100) + localInfo.FileMinorPart;
+
+                            if (onlineVerNum > 0 && localVerNum >= onlineVerNum)
+                            {
+                                Log(string.Format("  Citrix Workspace local já está na versão mais recente ({0}).", localInfo.FileVersion), ConsoleColor.Green);
+                                return localPath;
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    string downloadUrl = null;
+                    var urlMatch = Regex.Match(pageHtml, @"(?i)(?:href|rel)=[""']([^""']*CitrixWorkspaceFullInstaller_x64\.exe[^""']*)[""']");
+                    if (!urlMatch.Success)
+                    {
+                        urlMatch = Regex.Match(pageHtml, @"(?i)(?:href|rel)=[""']([^""']*CitrixWorkspace(?:App|FullInstaller)_x64\.exe[^""']*)[""']");
+                    }
+
+                    if (urlMatch.Success)
+                    {
+                        downloadUrl = urlMatch.Groups[1].Value;
+                        if (downloadUrl.StartsWith("//"))
+                        {
+                            downloadUrl = "https:" + downloadUrl;
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        Log("  Não foi possível identificar o link de download direto do Citrix. Usando arquivo local.", ConsoleColor.Yellow);
+                        return localPath;
+                    }
+
+                    string targetDir = Path.Combine(_basePath, "Programas");
+                    bool useLocalAppDir = false;
+                    try
+                    {
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                    }
+                    catch
+                    {
+                        useLocalAppDir = true;
+                    }
+
+                    if (useLocalAppDir)
+                    {
+                        targetDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "Exabit", "AutoInstall", "Updates");
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                    }
+
+                    string destFile = Path.Combine(targetDir, "CitrixWorkspaceFullInstaller_x64.exe");
+                    string tempFile = destFile + ".download";
+
+                    Log(string.Format("  Baixando versão mais recente do Citrix Workspace ({0})...", onlineVerNum > 0 ? onlineVerNum.ToString() : "atualizada"), ConsoleColor.Cyan);
+
+                    try
+                    {
+                        if (File.Exists(tempFile))
+                        {
+                            File.Delete(tempFile);
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    using (var webClient = new WebClient())
+                    {
+                        webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0");
+                        webClient.DownloadFile(downloadUrl, tempFile);
+                    }
+
+                    var fi = new FileInfo(tempFile);
+                    if (fi.Exists && fi.Length > 10 * 1024 * 1024)
+                    {
+                        try
+                        {
+                            if (File.Exists(destFile))
+                            {
+                                File.Delete(destFile);
+                            }
+                            File.Move(tempFile, destFile);
+                            Log("[ok] Instalador da versão mais recente do Citrix Workspace baixado com sucesso.", ConsoleColor.Green);
+                            return destFile;
+                        }
+                        catch
+                        {
+                            return tempFile;
+                        }
+                    }
+
+                    try
+                    {
+                        if (File.Exists(tempFile))
+                        {
+                            File.Delete(tempFile);
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    Log("  Falha no download da versão mais recente do Citrix. Usando arquivo local.", ConsoleColor.Yellow);
+                    return localPath;
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("  Aviso ao verificar/baixar Citrix Workspace: {0}", ex.Message), ConsoleColor.Yellow);
+                    return localPath;
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Verifica se o Microsoft Power BI Desktop já está instalado na máquina,
+        /// consultando o sistema de arquivos e o registro do Windows (64-bit e 32-bit).
+        /// </summary>
+        /// <returns>true se o Power BI Desktop estiver instalado; caso contrário, false.</returns>
+        private static bool IsPowerBIDesktopInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string exePath = Path.Combine(progFiles, "Microsoft Power BI Desktop", "bin", "PBIDesktop.exe");
+                if (File.Exists(exePath))
+                {
+                    return true;
+                }
+
+                string exePathDirect = Path.Combine(progFiles, "Microsoft Power BI Desktop", "PBIDesktop.exe");
+                if (File.Exists(exePathDirect))
+                {
+                    return true;
+                }
+
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                string exePathX86 = Path.Combine(progFilesX86, "Microsoft Power BI Desktop", "bin", "PBIDesktop.exe");
+                if (File.Exists(exePathX86))
+                {
+                    return true;
+                }
+
+                string exePathX86Direct = Path.Combine(progFilesX86, "Microsoft Power BI Desktop", "PBIDesktop.exe");
+                if (File.Exists(exePathX86Direct))
+                {
+                    return true;
+                }
+
+                var views = new Microsoft.Win32.RegistryView[] {
+                    Microsoft.Win32.RegistryView.Registry64,
+                    Microsoft.Win32.RegistryView.Registry32
+                };
+
+                for (int v = 0; v < views.Length; v++)
+                {
+                    using (var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, views[v]))
+                    using (var uninstallKey = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
+                    {
+                        if (uninstallKey != null)
+                        {
+                            foreach (string subKeyName in uninstallKey.GetSubKeyNames())
+                            {
+                                using (var subKey = uninstallKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("Power BI Desktop", StringComparison.OrdinalIgnoreCase) >= 0)
+                                        {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private static string ExtractPowerBILogSummary(string logPath)
+        {
+            try
+            {
+                if (!File.Exists(logPath))
+                    return null;
+
+                string[] lines = File.ReadAllLines(logPath);
+                for (int i = lines.Length - 1; i >= 0 && i >= lines.Length - 60; i--)
+                {
+                    string line = lines[i];
+                    if (line.IndexOf("Error 0x", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        int idx = line.IndexOf("Error 0x", StringComparison.OrdinalIgnoreCase);
+                        return line.Substring(idx).Trim();
+                    }
+                    if (line.IndexOf("Apply complete, result: 0x", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        int idx = line.IndexOf("Apply complete", StringComparison.OrdinalIgnoreCase);
+                        return line.Substring(idx).Trim();
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Verifica se o AnyDesk já está instalado na máquina,
+        /// consultando o sistema de arquivos e o registro do Windows (64-bit e 32-bit).
+        /// </summary>
+        /// <returns>true se o AnyDesk estiver instalado; caso contrário, false.</returns>
+        private static bool IsAnyDeskInstalled()
+        {
+            try
+            {
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                string exePathX86 = Path.Combine(progFilesX86, "AnyDesk", "AnyDesk.exe");
+                if (File.Exists(exePathX86))
+                {
+                    return true;
+                }
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string exePath = Path.Combine(progFiles, "AnyDesk", "AnyDesk.exe");
+                if (File.Exists(exePath))
+                {
+                    return true;
+                }
+
+                var views = new Microsoft.Win32.RegistryView[] {
+                    Microsoft.Win32.RegistryView.Registry64,
+                    Microsoft.Win32.RegistryView.Registry32
+                };
+
+                for (int v = 0; v < views.Length; v++)
+                {
+                    using (var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, views[v]))
+                    using (var uninstallKey = hklm.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
+                    {
+                        if (uninstallKey != null)
+                        {
+                            using (var subKey = uninstallKey.OpenSubKey("AnyDesk"))
+                            {
+                                if (subKey != null)
+                                    return true;
+                            }
+
+                            foreach (string subKeyName in uninstallKey.GetSubKeyNames())
+                            {
+                                using (var subKey = uninstallKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("AnyDesk", StringComparison.OrdinalIgnoreCase) >= 0)
+                                        {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Configura o RustDesk com o servidor próprio da EXABIT (rustdesk.exabit.com.br),
+        /// chave pública, modos de permissão (senha temporária, aprovação do usuário e senha definitiva)
+        /// e define a senha definitiva igual à senha informada para o usuário Admin.
+        /// </summary>
+        /// <param name="adminPassword">Senha do usuário Admin para definir como senha definitiva</param>
+        public async Task ConfigureRustDeskServerAsync(string adminPassword = null)
+        {
+            Log("Configurando servidor EXABIT e acessos no RustDesk...", ConsoleColor.Yellow);
+
+            try
+            {
+                // 1. Para o serviço e processos do RustDesk
+                await RunProcessAsync("net", "stop RustDesk", 15000, null, false, true);
+
+                try
+                {
+                    foreach (var proc in Process.GetProcessesByName("rustdesk"))
+                    {
+                        try { proc.Kill(); }
+                        catch { }
+                    }
+                }
+                catch { }
+
+                await Task.Delay(2000);
+
+                // 2. Monta a lista de diretórios de configuração do RustDesk
+                var targetDirs = new List<string>();
+
+                // Perfil do serviço Windows (LocalService)
+                string localServiceDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                    "ServiceProfiles", "LocalService", "AppData", "Roaming", "RustDesk", "config");
+                targetDirs.Add(localServiceDir);
+
+                string usersFolder = Environment.GetEnvironmentVariable("SystemDrive") + "\\Users";
+
+                // Perfil Default (template para novos usuários)
+                targetDirs.Add(Path.Combine(usersFolder, "Default", "AppData", "Roaming", "RustDesk", "config"));
+
+                // Perfis existentes em C:\Users
+                if (Directory.Exists(usersFolder))
+                {
+                    foreach (string userDir in Directory.GetDirectories(usersFolder))
+                    {
+                        string dirName = Path.GetFileName(userDir);
+                        if (string.Equals(dirName, "Public", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(dirName, "Default User", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(dirName, "All Users", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        string configDir = Path.Combine(userDir, "AppData", "Roaming", "RustDesk", "config");
+                        if (!targetDirs.Contains(configDir))
+                        {
+                            targetDirs.Add(configDir);
+                        }
+                    }
+                }
+
+                // Conteúdo do RustDesk2.toml para o servidor EXABIT com permissões
+                const string serverHost = "rustdesk.exabit.com.br";
+                const string publicKey = "vh1s9x96k3ReaRVL2z+KtgPAAhePvFhiluSZpqipmQ8=";
+
+                string tomlContent = string.Format(
+                    "rendezvous_server = '{0}:21116'\r\n" +
+                    "nat_type = 1\r\n" +
+                    "serial = 0\r\n" +
+                    "unlock_pin = ''\r\n\r\n" +
+                    "[options]\r\n" +
+                    "custom-rendezvous-server = '{0}'\r\n" +
+                    "relay-server = '{0}'\r\n" +
+                    "key = '{1}'\r\n" +
+                    "api-server = ''\r\n" +
+                    "access_token = ''\r\n" +
+                    "user_info = ''\r\n" +
+                    "approve-mode = 'password-click'\r\n" +
+                    "verification-method = 'use-both-passwords'\r\n",
+                    serverHost, publicKey);
+
+                var utf8NoBom = new UTF8Encoding(false);
+                var authRegex = new Regex(
+                    @"^\s*(access_token|user_info|api-server|login_device_token|oauth_.*|oidc_.*|account_.*|token)\s*=\s*('[^']*'|""[^""]*""|[^\r\n]*)\r?\n?",
+                    RegexOptions.Multiline);
+
+                string[] tomlFilesToClean = new string[] { "RustDesk.toml", "RustDesk_default.toml", "RustDesk_local.toml" };
+
+                // 3. Aplica em cada diretório alvo
+                foreach (string dir in targetDirs)
+                {
+                    try
+                    {
+                        if (!Directory.Exists(dir))
+                        {
+                            Directory.CreateDirectory(dir);
+                        }
+
+                        // Limpa chaves de autenticação/conta nos arquivos existentes e atualiza approve-mode / verification-method
+                        foreach (string tomlFile in tomlFilesToClean)
+                        {
+                            string fullPath = Path.Combine(dir, tomlFile);
+                            if (File.Exists(fullPath))
+                            {
+                                try
+                                {
+                                    string raw = File.ReadAllText(fullPath);
+                                    if (!string.IsNullOrEmpty(raw))
+                                    {
+                                        string clean = authRegex.Replace(raw, string.Empty);
+                                        clean = Regex.Replace(clean, @"approve-mode\s*=\s*('[^']*'|""[^""]*""|[^\r\n]*)", "approve-mode = 'password-click'");
+                                        clean = Regex.Replace(clean, @"verification-method\s*=\s*('[^']*'|""[^""]*""|[^\r\n]*)", "verification-method = 'use-both-passwords'");
+                                        File.WriteAllText(fullPath, clean, utf8NoBom);
+                                    }
+                                }
+                                catch { }
+                            }
+                        }
+
+                        // Grava RustDesk2.toml com os dados do servidor EXABIT
+                        string toml2Path = Path.Combine(dir, "RustDesk2.toml");
+                        File.WriteAllText(toml2Path, tomlContent, utf8NoBom);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(string.Format("  X Aviso ao configurar RustDesk em {0}: {1}", dir, ex.Message), ConsoleColor.Yellow);
+                    }
+                }
+
+                // 4. Inicia o serviço RustDesk
+                await RunProcessAsync("net", "start RustDesk", 15000, null, false, true);
+                await Task.Delay(3000);
+
+                // 5. Configura permissões e senha via CLI do executável
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string exePath = Path.Combine(progFiles, "RustDesk", "rustdesk.exe");
+                if (File.Exists(exePath))
+                {
+                    try
+                    {
+                        await RunProcessAsync(exePath, "--option approve-mode password-click", 10000, null, false, true);
+                        await RunProcessAsync(exePath, "--option verification-method use-both-passwords", 10000, null, false, true);
+
+                        if (!string.IsNullOrWhiteSpace(adminPassword))
+                        {
+                            string safePass = QuoteProcessArgument(adminPassword);
+                            await RunProcessAsync(exePath, string.Format("--password {0}", safePass), 10000, null, false, true);
+                            Log("[ok] Senha definitiva configurada no RustDesk (mesma senha do Admin).", ConsoleColor.Green);
+                        }
+                        else
+                        {
+                            Log("  Aviso: Senha do Admin não informada. Senha definitiva do RustDesk não configurada.", ConsoleColor.Yellow);
+                        }
+
+                        Process.Start(new ProcessStartInfo
+                        {
+                            FileName = exePath,
+                            UseShellExecute = true,
+                        });
+                    }
+                    catch { }
+                }
+
+                Log("[ok] RustDesk configurado para o servidor EXABIT (rustdesk.exabit.com.br).", ConsoleColor.Green);
+                Log("     Acesso permitido com senha temporária, aprovação do usuário ou senha definitiva.", ConsoleColor.Green);
+            }
+            catch (Exception ex)
+            {
+                Log(string.Format("X Erro ao configurar servidor do RustDesk: {0}", ex.Message), ConsoleColor.Red);
             }
 
             await Task.Delay(300);
@@ -538,6 +1564,8 @@ namespace InstallerGUI.Services
 
             try
             {
+                await EnsureGlobalPasswordNeverExpiresPolicyAsync();
+
                 // 1. Renomear computador
                 if (!cancelled && options.RenameComputer && !string.IsNullOrWhiteSpace(options.ComputerName))
                 {
@@ -615,7 +1643,7 @@ namespace InstallerGUI.Services
 
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
-                        await InstallProgramAsync(program);
+                        await InstallProgramAsync(program, options);
                     }
                 }
 
@@ -847,6 +1875,11 @@ namespace InstallerGUI.Services
                 RedirectStandardError = !useShell,
                 WorkingDirectory = workingDirectory ?? string.Empty,
             };
+
+            if (useShell)
+            {
+                psi.Verb = "runas";
+            }
 
             var tcs = new TaskCompletionSource<int>();
 
