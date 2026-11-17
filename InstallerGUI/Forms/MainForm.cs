@@ -417,48 +417,62 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 Margin = new Padding(0, 0, 0, 0),
                 BackColor = CorPainel,
+                Padding = new Padding(6, 24, 6, 4),
             };
 
-            // ─── Linha de botões Marcar/Desmarcar ───
-            var btnPanel = new FlowLayoutPanel
+            // ─── Linha de botões Marcar/Desmarcar (centralizados na parte inferior) ───
+            var btnPanel = new TableLayoutPanel
             {
-                Dock = DockStyle.Top,
-                Height = 32,
+                Dock = DockStyle.Bottom,
+                Height = 36,
                 BackColor = CorPainel,
-                Padding = new Padding(8, 2, 8, 2),
+                ColumnCount = 2,
+                RowCount = 1,
+                Margin = new Padding(0),
+                Padding = new Padding(0, 2, 0, 4),
             };
+            btnPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            btnPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            btnPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             var btnSelectAll = new Button
             {
-                Text = "Marcar Todos",
+                Text = "Marcar",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = CorTexto,
                 BackColor = Color.FromArgb(60, 60, 60),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Cursor = Cursors.Hand,
-                Size = new Size(105, 26),
-                Margin = new Padding(2),
+                Size = new Size(100, 26),
+                Anchor = AnchorStyles.Right,
+                Margin = new Padding(0, 0, 4, 0),
             };
             btnSelectAll.FlatAppearance.MouseOverBackColor = Color.FromArgb(80, 80, 80);
             btnSelectAll.Click += (s, e) => SetAllCheckBoxes(true);
 
             var btnClearAll = new Button
             {
-                Text = "Desmarcar Todos",
+                Text = "Desmarcar",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = CorTexto,
                 BackColor = Color.FromArgb(60, 60, 60),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Cursor = Cursors.Hand,
-                Size = new Size(115, 26),
-                Margin = new Padding(2),
+                Size = new Size(100, 26),
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(4, 0, 0, 0),
             };
             btnClearAll.FlatAppearance.MouseOverBackColor = Color.FromArgb(80, 80, 80);
             btnClearAll.Click += (s, e) => SetAllCheckBoxes(false);
 
-            btnPanel.Controls.Add(btnSelectAll);
-            btnPanel.Controls.Add(btnClearAll);
-            group.Controls.Add(btnPanel);
+            var toolTip = new ToolTip();
+            toolTip.SetToolTip(btnSelectAll, "Marcar todos os programas");
+            toolTip.SetToolTip(btnClearAll, "Desmarcar todos os programas");
+
+            btnPanel.Controls.Add(btnSelectAll, 0, 0);
+            btnPanel.Controls.Add(btnClearAll, 1, 0);
 
             // ─── Lista de checkboxes com scroll vertical (um por linha) ───
             _pnlPrograms = new Panel
@@ -467,10 +481,10 @@ namespace InstallerGUI.Forms
                 AutoScroll = true,
                 BackColor = CorPainel,
                 BorderStyle = BorderStyle.None,
-                Padding = new Padding(0, 6, 0, 0),
+                Padding = new Padding(0, 4, 0, 4),
             };
 
-            int top = 40;
+            int top = 6;
             foreach (ProgramInfo prog in GetDefaultProgramList())
             {
                 var chk = new CheckBox
@@ -489,6 +503,10 @@ namespace InstallerGUI.Forms
             }
 
             group.Controls.Add(_pnlPrograms);
+            group.Controls.Add(btnPanel);
+            btnPanel.BringToFront();
+            _pnlPrograms.SendToBack();
+
             return group;
         }
 
@@ -619,15 +637,11 @@ namespace InstallerGUI.Forms
             {
                 Text = "PARAR",
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
-                ForeColor = CorTexto,
-                BackColor = Color.FromArgb(180, 50, 0),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
-                Cursor = Cursors.Hand,
                 Dock = DockStyle.Fill,
-                Enabled = false,
             };
-            _btnStop.FlatAppearance.MouseOverBackColor = Color.FromArgb(200, 70, 0);
+            SetStopButtonState(false);
             _btnStop.Click += BtnStop_Click;
             btnStopPanel.Controls.Add(_btnStop);
 
@@ -699,7 +713,7 @@ namespace InstallerGUI.Forms
                 }
 
                 _btnInstall.Text = "INSTALANDO...";
-                _btnStop.Enabled = true;
+                SetStopButtonState(true);
 
                 // Inicia a instalação no serviço
                 _service.StartInstallation();
@@ -748,7 +762,7 @@ namespace InstallerGUI.Forms
                 _btnInstall.Enabled = true;
                 _btnInstall.BackColor = Color.FromArgb(0, 150, 50);
                 _btnInstall.Text = "INICIAR INSTALAÇÃO";
-                _btnStop.Enabled = false;
+                SetStopButtonState(false);
             }
         }
 
@@ -769,8 +783,39 @@ namespace InstallerGUI.Forms
             if (result == DialogResult.Yes)
             {
                 _service.CancelInstallation();
-                _btnStop.Enabled = false;
+                SetStopButtonState(false);
                 AppendLog("Solicitação de parada enviada...", ConsoleColor.Yellow);
+            }
+        }
+
+        /// <summary>
+        /// Atualiza o estado visual e funcional do botão PARAR.
+        /// Quando ativo (durante as instalações): habilitado, com fundo vermelho vivo e texto destacado.
+        /// Quando inativo (antes de iniciar ou após finalizar): desabilitado, com fundo escuro/neutro e texto apagado.
+        /// </summary>
+        private void SetStopButtonState(bool active)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action<bool>(SetStopButtonState), active);
+                return;
+            }
+
+            if (active)
+            {
+                _btnStop.Enabled = true;
+                _btnStop.BackColor = Color.FromArgb(190, 40, 40);
+                _btnStop.ForeColor = Color.White;
+                _btnStop.Cursor = Cursors.Hand;
+                _btnStop.FlatAppearance.MouseOverBackColor = Color.FromArgb(220, 50, 50);
+            }
+            else
+            {
+                _btnStop.Enabled = false;
+                _btnStop.BackColor = Color.FromArgb(50, 50, 50);
+                _btnStop.ForeColor = Color.FromArgb(110, 110, 110);
+                _btnStop.Cursor = Cursors.Default;
+                _btnStop.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
             }
         }
 
@@ -1058,26 +1103,29 @@ namespace InstallerGUI.Forms
         /// </summary>
         private static List<ProgramInfo> GetDefaultProgramList()
         {
-            return new List<ProgramInfo>
+            var list = new List<ProgramInfo>
             {
-                new ProgramInfo("7zip",        "7-Zip",                           "7z.msi",                               "/qn /norestart"),
-                new ProgramInfo("adobereader", "Adobe Acrobat Reader",            "AcroRdrDC.exe",                        "/sAll /msi EULA_ACCEPT=YES /qn /norestart"),
-                new ProgramInfo("anydesk",     "AnyDesk",                         "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --silent --start-with-win --create-shortcuts --create-desktop-icon") { ProcessWorkingDir = "Programas", UseShellExecute = true, DefaultChecked = false },
-                new ProgramInfo("brave",       "Brave Browser",                   "BraveBrowserSetup.exe",                "/silent /install"),
-                new ProgramInfo("chrome",      "Google Chrome",                   "ChromeStandaloneSetup64.exe",           "/silent /install"),
-                new ProgramInfo("firefox",     "Mozilla Firefox",                 "Firefox_Setup.msi",                    "/qn /norestart"),
-                new ProgramInfo("googleearth", "Google Earth Pro",                "googleearthprowin.exe",                "OMAHA=1"),
-                new ProgramInfo("java",        "Java JRE 8",                      "jre-windows-x64.exe",                  "/s"),
-                new ProgramInfo("radmin",      "Radmin VPN",                      "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART") { DefaultChecked = false },
-                new ProgramInfo("citrix",      "Citrix Workspace",                "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot"),
-                new ProgramInfo("rustdesk",    "RustDesk",                        "rustdesk_x86_64.exe",                  "--silent-install") { FireAndForget = true },
-                new ProgramInfo("winrar",      "WinRAR",                          "winrar.exe",                           "/S"),
-                new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",           "DWGTrueView\\Setup.exe",               "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
-                new ProgramInfo("office",      "Microsoft Office",                "Office\\setup.exe",                    "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000, DefaultChecked = false },
-                new ProgramInfo("office365",   "Microsoft Office 365 (Online)",   "OfficeSetup.exe",                      "") { UseShellExecute = true, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",      "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1") { ProcessWorkingDir = "Programas", UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = false },
-                new ProgramInfo("artcraft",    "ArtCraft",                        "ArtCraft_setup.exe",                   "/S") { DefaultChecked = false },
+                new ProgramInfo("7zip",        "7-Zip",                          "7z.msi",                               "/qn /norestart"),
+                new ProgramInfo("adobereader", "Adobe Acrobat Reader",           "AcroRdrDC.exe",                        "/sAll /msi EULA_ACCEPT=YES /qn /norestart"),
+                new ProgramInfo("anydesk",     "AnyDesk",                        "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --silent --start-with-win --create-shortcuts --create-desktop-icon") { ProcessWorkingDir = "Programas", UseShellExecute = true, DefaultChecked = false },
+                new ProgramInfo("artcraft",    "ArtCraft",                       "ArtCraft_setup.exe",                   "/S") { DefaultChecked = false },
+                new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",          "DWGTrueView\\Setup.exe",               "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
+                new ProgramInfo("brave",       "Brave Browser",                  "BraveBrowserSetup.exe",                "/silent /install"),
+                new ProgramInfo("citrix",      "Citrix Workspace",               "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot"),
+                new ProgramInfo("chrome",      "Google Chrome",                  "ChromeStandaloneSetup64.exe",          "/silent /install"),
+                new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1"),
+                new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s"),
+                new ProgramInfo("office",      "Microsoft Office",               "Office\\setup.exe",                    "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000, DefaultChecked = false },
+                new ProgramInfo("office365",   "Microsoft Office 365 (Online)",  "OfficeSetup.exe",                      "") { UseShellExecute = true, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",     "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1") { ProcessWorkingDir = "Programas", UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = true },
+                new ProgramInfo("firefox",     "Mozilla Firefox",                "Firefox_Setup.msi",                    "/qn /norestart"),
+                new ProgramInfo("radmin",      "Radmin VPN",                     "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART") { DefaultChecked = false },
+                new ProgramInfo("rustdesk",    "RustDesk",                       "rustdesk_x86_64.exe",                  "--silent-install") { FireAndForget = true },
+                new ProgramInfo("winrar",      "WinRAR",                         "winrar.exe",                           "/S"),
             };
+
+            list.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
+            return list;
         }
     }
 }

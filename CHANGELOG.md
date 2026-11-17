@@ -7,6 +7,30 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.37] - 2026-11-17
+
+### Alterado
+- **Centralização dos Botões Marcar e Desmarcar**: Substituído o alinhamento à esquerda por um `TableLayoutPanel` com duas colunas proporcionais (50%/50%), garantindo que os botões "Marcar" e "Desmarcar" fiquem perfeitamente centralizados horizontalmente no rodapé do painel "Programas para Instalar", com textos limpos, dimensões padronizadas (100x26px) e dicas de contexto (tooltips).
+- **Atualização dos Papéis de Parede Corporativos**: Atualizado o conjunto de papéis de parede em `dist/Wallpapers/` com os novos temas fotográficos corporativos (`01-nortel.jpg`, `02-ssa.jpg`, `03-barra.jpg`, `04-humaita.jpg`) e materiais de arte.
+
+---
+
+## [2.0.0.36] - 2026-11-17
+
+### Alterado
+- **Botão Parar com Estado e Cor Dinâmicos**: O botão "PARAR" agora inicia desativado com cor neutra/apagada (`#323232` com texto `#6E6E6E`) antes da instalação; torna-se ativo e com fundo vermelho vivo (`#BE2828`) exclusivamente durante o processo de instalação; ao finalizar, cancelar ou ocorrer erro nas instalações, retorna imediatamente ao estado desativado e neutro.
+- **Botões Marcar e Desmarcar no Rodapé da Lista**: Os botões "Marcar Todos" e "Desmarcar Todos" foram movidos para a parte inferior do painel "Programas para Instalar" (`Dock = DockStyle.Bottom`), fixos na base do grupo, com a lista de programas preenchendo o espaço superior e com rolagem independente sem sobrepor o cabeçalho.
+
+---
+
+## [2.0.0.35] - 2026-11-17
+
+### Alterado
+- **Lista de Programas em Ordem Alfabética**: A lista de programas para instalação foi reorganizada em ordem alfabética (pelo nome de exibição `DisplayName`), tanto na declaração quanto na listagem interna, garantindo que os checkboxes sejam dispostos em ordem A-Z na interface.
+- **Microsoft Power BI Desktop Marcado por Padrão**: A definição do Microsoft Power BI Desktop (`PBIDesktopSetup_x64.exe`) agora possui `DefaultChecked = true`, vindo previamente marcado para instalação ao iniciar o aplicativo.
+
+---
+
 ## [2.0.0.34] - 2026-11-16
 
 ### Corrigido
