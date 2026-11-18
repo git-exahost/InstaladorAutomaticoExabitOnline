@@ -49,6 +49,7 @@ namespace InstallerGUI.Forms
         private TextBox _txtStandardUserPass;
         private CheckBox _chkEnableLocation;
         private CheckBox _chkStandardUserNoPwdChange;
+        private CheckBox _chkCleanDesktop;
         private CheckBox _chkWallpaper;
         private CheckBox _chkShortcutSuporteNorte;
         private CheckBox _chkShortcutWebmailNortel;
@@ -78,13 +79,13 @@ namespace InstallerGUI.Forms
             // Calcula dimensões adaptáveis ao tamanho do monitor e escala
             var workingArea = Screen.PrimaryScreen.WorkingArea;
             int desiredWidth = (int)(1220 * scale);
-            int desiredHeight = (int)(760 * scale);
+            int desiredHeight = (int)(780 * scale);
 
             int formWidth = Math.Min(workingArea.Width - 20, Math.Max(1100, desiredWidth));
-            int formHeight = Math.Min(workingArea.Height - 20, Math.Max(680, desiredHeight));
+            int formHeight = Math.Min(workingArea.Height - 20, Math.Max(700, desiredHeight));
 
             Size = new Size(formWidth, formHeight);
-            MinimumSize = new Size(Math.Min(1050, formWidth), Math.Min(650, formHeight));
+            MinimumSize = new Size(Math.Min(1050, formWidth), Math.Min(680, formHeight));
             MinimizeBox = true;
             MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
@@ -233,7 +234,7 @@ namespace InstallerGUI.Forms
                 RowCount = 2,
                 BackColor = CorFundo,
             };
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(260 * scale)));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(290 * scale)));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             leftSide.Controls.Add(BuildConfigPanel(scale), 0, 0);
@@ -409,14 +410,14 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 7,
                 BackColor = CorPainel,
                 Margin = new Padding((int)(10 * scale), 0, 0, 0),
             };
             tblChecks.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-            for (int i = 0; i < 6; i++)
-                tblChecks.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 6f));
+            for (int i = 0; i < 7; i++)
+                tblChecks.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 7f));
 
             // Linha 0: Ativar serviços de localização do Windows (ativo por padrão)
             _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", true);
@@ -426,21 +427,25 @@ namespace InstallerGUI.Forms
             _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
             tblChecks.Controls.Add(_chkStandardUserNoPwdChange, 0, 1);
 
-            // Linha 2: Wallpaper
+            // Linha 2: Limpar atalhos da Área de Trabalho (ativo por padrão)
+            _chkCleanDesktop = CreateCheckBox("Limpar atalhos da Área de Trabalho", true);
+            tblChecks.Controls.Add(_chkCleanDesktop, 0, 2);
+
+            // Linha 3: Wallpaper
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
-            tblChecks.Controls.Add(_chkWallpaper, 0, 2);
+            tblChecks.Controls.Add(_chkWallpaper, 0, 3);
 
-            // Linha 3: Atalho Suporte Norte
+            // Linha 4: Atalho Suporte Norte
             _chkShortcutSuporteNorte = CreateCheckBox("Suporte Norte (suporte.exabit.com.br)", false);
-            tblChecks.Controls.Add(_chkShortcutSuporteNorte, 0, 3);
+            tblChecks.Controls.Add(_chkShortcutSuporteNorte, 0, 4);
 
-            // Linha 4: Atalho Webmail Nortel
+            // Linha 5: Atalho Webmail Nortel
             _chkShortcutWebmailNortel = CreateCheckBox("Webmail Nortel (webmail.nortel.srv.br)", false);
-            tblChecks.Controls.Add(_chkShortcutWebmailNortel, 0, 4);
+            tblChecks.Controls.Add(_chkShortcutWebmailNortel, 0, 5);
 
-            // Linha 5: Atalho Webmail Nortel Terceirização
+            // Linha 6: Atalho Webmail Nortel Terceirização
             _chkShortcutWebmailTerceirizacao = CreateCheckBox("Webmail Nortel Terceirização (webmail.nortelterceirizacao.com.br)", false);
-            tblChecks.Controls.Add(_chkShortcutWebmailTerceirizacao, 0, 5);
+            tblChecks.Controls.Add(_chkShortcutWebmailTerceirizacao, 0, 6);
 
             mainTbl.Controls.Add(tblChecks, 1, 0);
 
@@ -821,6 +826,7 @@ namespace InstallerGUI.Forms
                 options.StandardUserCannotChangePassword = criarUsuarioPadrao && _chkStandardUserNoPwdChange.Checked;
 
                 options.EnableLocationServices = _chkEnableLocation.Checked;
+                options.CleanDesktopShortcuts = _chkCleanDesktop.Checked;
                 options.SetWallpaper = _chkWallpaper.Checked;
 
                 // ─── Atalhos de suporte ───

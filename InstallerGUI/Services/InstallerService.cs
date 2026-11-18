@@ -2495,9 +2495,12 @@ namespace InstallerGUI.Services
 
                 if (!cancelled)
                 {
-                    // Limpa atalhos de todas as áreas de trabalho no final de todas as instalações
-                    string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
-                    CleanAllDesktops(stdUserName);
+                    // Limpa atalhos de todas as áreas de trabalho no final de todas as instalações (se selecionado)
+                    if (options.CleanDesktopShortcuts)
+                    {
+                        string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
+                        CleanAllDesktops(stdUserName);
+                    }
 
                     // Recria apenas os atalhos personalizados (conforme opções do usuário)
                     await CreateDesktopShortcutsAsync(options);
@@ -2893,6 +2896,11 @@ namespace InstallerGUI.Services
         public bool SetWallpaper { get; set; }
         public bool EnableLocationServices { get; set; }
 
+        /// <summary>
+        /// Se true, limpa todos os atalhos das áreas de trabalho no final de todas as instalações.
+        /// </summary>
+        public bool CleanDesktopShortcuts { get; set; }
+
         // ─── Opções de atalhos de suporte ───
 
         /// <summary>
@@ -2918,6 +2926,7 @@ namespace InstallerGUI.Services
         public InstallationOptions()
         {
             EnableLocationServices = true;
+            CleanDesktopShortcuts = true;
             SelectedPrograms = new List<ProgramInfo>();
         }
     }

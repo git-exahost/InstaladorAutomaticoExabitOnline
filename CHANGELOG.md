@@ -7,6 +7,17 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.54] - 2026-11-17
+
+### Adicionado & Modificado
+- **Opção Selecionável para Limpeza de Atalhos da Área de Trabalho**:
+  - Adicionada a opção `"Limpar atalhos da Área de Trabalho"` no painel de **Configurações do Sistema**, marcada como ativa por padrão (`true`).
+  - Permite desmarcar a opção caso o cliente deseje preservar os atalhos já existentes na área de trabalho.
+  - Conectada a opção `InstallationOptions.CleanDesktopShortcuts` ao fluxo de execução em `InstallerService.RunFullInstallationAsync`.
+  - Altura do painel de configurações ajustada para `290 * scale` e janela principal para `780 * scale` de altura desejada, garantindo proporção e acomodação de todas as 7 opções com zero cortes de texto.
+
+---
+
 ## [2.0.0.53] - 2026-11-17
 
 ### Corrigido
