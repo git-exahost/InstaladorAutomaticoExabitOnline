@@ -661,8 +661,18 @@ namespace InstallerGUI.Services
 
             if (File.Exists(psScript))
             {
+                string safeBasePath = _basePath ?? string.Empty;
+                string cleanBasePath = safeBasePath.TrimEnd('\\', '/');
+                if (cleanBasePath.Length == 2 && cleanBasePath.EndsWith(":"))
+                {
+                    cleanBasePath += "\\";
+                }
+
+                string quotedPsScript = QuoteProcessArgument(psScript);
+                string quotedBasePath = QuoteProcessArgument(cleanBasePath);
+
                 int exitCode = await RunProcessAsync("powershell",
-                    string.Format("-NoProfile -ExecutionPolicy Bypass -File \"{0}\" -BasePath \"{1}\"", psScript, _basePath),
+                    string.Format("-NoProfile -ExecutionPolicy Bypass -File {0} -BasePath {1}", quotedPsScript, quotedBasePath),
                     120000, null, false);
 
                 if (exitCode == 0)

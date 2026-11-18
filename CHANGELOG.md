@@ -7,6 +7,17 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.56] - 2026-11-18
+
+### Corrigido
+- **Tratamento de Caminho Raiz com Barra Invertida no Script de Wallpaper**:
+  - Corrigido erro `Test-Path : Caracteres inválidos no caminho` (`InvalidArgument: D:\" \dist\Wallpapers`) que ocorria ao executar o instalador a partir da raiz de uma unidade de disco ou pendrive (ex: `D:\`).
+  - No Windows, quando um caminho termina em barra invertida e é passado entre aspas (`"D:\"`), o parser de linha de comando trata a barra como escape da aspa (`\"`), fazendo com que o PowerShell receba uma aspa literal dentro do parâmetro `-BasePath`.
+  - Em `InstallerService.cs` (`SetWallpaperAsync`), a passagem do parâmetro agora utiliza `QuoteProcessArgument` com sanitização prévia de barras invertidas finais.
+  - Em `apply_wallpapers.ps1`, adicionada sanitização de aspas/apóstrofos/espaços em `$BasePath`, validação de caminho com `-LiteralPath` e tratamento com `-ErrorAction SilentlyContinue`.
+
+---
+
 ## [2.0.0.55] - 2026-11-17
 
 ### Corrigido

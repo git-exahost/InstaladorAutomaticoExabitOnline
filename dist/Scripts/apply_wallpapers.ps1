@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Script: apply_wallpapers.ps1
 # Empresa: EXABIT Solucoes em TI
 # Finalidade: Configura todos os arquivos da pasta Wallpapers como papel de parede
@@ -18,10 +18,18 @@ Write-Host "  Configuracao de Papeis de Parede Personalizados (EXABIT) " -Foregr
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Determina o diretorio base da aplicacao
-if ([string]::IsNullOrWhiteSpace($BasePath)) {
+# 1. Determina o diretorio base da aplicacao e sanitiza caracteres invalidos de escape de linha de comando
+if (-not [string]::IsNullOrWhiteSpace($BasePath)) {
+    # Remove aspas literais, apóstrofos e espaços que possam ter sido passados no escape de linha de comando
+    $BasePath = $BasePath.Replace('"', '').Replace("'", "").Trim()
+    if ($BasePath -match '^[a-zA-Z]:$') {
+        $BasePath = $BasePath + "\"
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($BasePath) -or -not (Test-Path -LiteralPath $BasePath -ErrorAction SilentlyContinue)) {
     $BasePath = Split-Path -Parent $PSScriptRoot
-    if (-not (Test-Path (Join-Path $BasePath "Scripts"))) {
+    if (-not (Test-Path -LiteralPath (Join-Path $BasePath "Scripts") -ErrorAction SilentlyContinue)) {
         $BasePath = $PSScriptRoot
     }
 }
@@ -40,8 +48,9 @@ $imageExtensions = @(".jpg", ".jpeg", ".png", ".bmp")
 $imageFiles = @()
 
 foreach ($dir in $candidateDirs) {
-    if (Test-Path $dir) {
-        $found = @(Get-ChildItem -Path $dir -File | Where-Object {
+    if ([string]::IsNullOrWhiteSpace($dir)) { continue }
+    if (Test-Path -LiteralPath $dir -ErrorAction SilentlyContinue) {
+        $found = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Where-Object {
             $ext = $_.Extension.ToLower()
             $imageExtensions -contains $ext -and -not $_.Name.Contains("-Navi")
         })
@@ -333,8 +342,8 @@ exit
 # SIG # Begin signature block
 # MIIcjwYJKoZIhvcNAQcCoIIcgDCCHHwCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCm/MhM6GcKjxU0
-# 4pkxR7ikFROSaa3mOH0PjkduN6ioV6CCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD0Sa8nxr7P4DGF
+# Yy94Am0d55bQy6dRObJyxe+y5GJ/6KCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
 # t0A2pZ7si0QoMA0GCSqGSIb3DQEBCwUAME0xCzAJBgNVBAYTAkJSMR4wHAYDVQQK
 # DBVFWEFCSVQgU29sdWNvZXMgZW0gVEkxHjAcBgNVBAMMFUVYQUJJVCBTb2x1Y29l
 # cyBlbSBUSTAeFw0yNjExMTYyMjMyMDVaFw0zMTExMTYyMjQyMDVaME0xCzAJBgNV
@@ -460,28 +469,28 @@ exit
 # U29sdWNvZXMgZW0gVEkCEBrdWS49sfW3QDalnuyLRCgwDQYJYIZIAWUDBAIBBQCg
 # gYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYB
 # BAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0B
-# CQQxIgQgQzMcAVJzOkjWnoo+mB2hfwo3e8gQKqUNXT5LYf8nSlAwDQYJKoZIhvcN
-# AQEBBQAEggEAEOswci3JBp5OqVz+ZnYyy7a3YxE3w4+8+3Hu1J56d84hRTg3KE+P
-# otwIMeMVd1B0e0EYujm+JQ8ifn5el4S2twkGjaCqH2d9fR49hS4MhmkmKZw+GRp/
-# E+1cJy280CL4Wq1otTDg4ES0W2x2YlkUxT35j/FygqKr9k5SFmn9pXR+NRFeBvk2
-# Mx0u3h/h4f/BPByYEvxCGi3SF3tpmRi20SWZeMS8AXzGuHGei+apyDd789lLotNU
-# aD+DAinR8xWYrrpp+fc/GtUnVy+intLyFCKe5JTaPFbmhTdaAcGU5DTrpxdQ2DrE
-# NxbgpaElJ9Pad1DOzbqQ7KxWmhsSD4w1EKGCAyYwggMiBgkqhkiG9w0BCQYxggMT
+# CQQxIgQgGcHvLiAzKn1cGRnXaOTpeWhCnpeh/gOaWdvRExNndJUwDQYJKoZIhvcN
+# AQEBBQAEggEALvtFQBSpHWDpL/3SopNj2/8jTcK1jz/29alLvKupZRDXoGqYeMVH
+# mdaPKGBSPMAuA93xhIfgALg60hLsgnF7rTBW7ZKzK/YYVtUjVfT+3TX4ZNbkrO/+
+# TaZQmr7/IA5O/SFy2uVs15a3+7/jwp00LCLCkTT+eMNgevn//JZ957yngLuaFZ51
+# OsA/+8PPYe4/gLGZr9KZktTOIwVfBIsoY+K7YbjLvQFxuJYpor2eqVu6/H985pJQ
+# sxTf+5Tb/5KEoy+ttlQlDZC2/deCiCRgFpftwSez8cdhCW9xnGRxXvvOvdejeOMX
+# ans+WscuR/bSbtUb1v82ChxKe+lt8xcpyqGCAyYwggMiBgkqhkiG9w0BCQYxggMT
 # MIIDDwIBATB9MGkxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjFBMD8GA1UEAxM4RGlnaUNlcnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNB
 # NDA5NiBTSEEyNTYgMjAyNSBDQTECEAhP3DNPfkVO28MPj/mSGDUwDQYJYIZIAWUD
 # BAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEP
-# Fw0yNjExMTgwMTAxMzVaMC8GCSqGSIb3DQEJBDEiBCBj9ZPSDrbkAXDGUrgQoM9y
-# 2GXV8gRO967Jhpj5kRNg1zANBgkqhkiG9w0BAQEFAASCAgBFv9B9Cem3MG4DltNB
-# QlPn7bmIQRv5zuHOKurSMtyQabSXo2FBXeIdGKtbE2Q34zHEMp9K+FxUGNxxCe7x
-# Qgr8H4UmcFLegYmD2IL1FmrA4W1/bZE4KwEXy+RGOuLElq5LpcRv5tyH9IbkgnW6
-# 1Bk6comRbfQsEL9iI0L5lg4sJX0hlTwJHlkxW52sjOHEq+d4Vkv7CMMyF2ZXb3Rg
-# OUP8dgtxoj/nfT/tW5zSrMpSVCx9uNMKZdOXf6vyTieHiWTjtKU9/GdVRrKqkkag
-# h2knb/Dlgy7rRX9s8zhoHdjNy+5dngcH1O+1pAafZbEKYCPAyL358BM2M9DSiwgk
-# 3jLgXQBcrCDENkvqqo1Qks2agQgIDVZ1ul/GwkNViuTvb2EA34scIuGTCOhygu7e
-# Pt1pgQ7ELueeN4VrnPztsrNvOt5iy9iMiVUbZ9YQ4ljzCeY+AIilgC2heScvCY0l
-# Dx2IlZQH7BxoitW1hsgMrKINKLOLi7NnvZKjzw7zttBedCvy2PpimBdzgq4gwTYz
-# 1Eqf/9vZhSCxe+FCUcHirUeSQhxlEj4WV/YRM9PPoibJi//u4PgP8U3F6gzgEF6k
-# kOb7togWM/5Vi5mVnze4awf0EvNqj4FYANRPnSJE5hqdEXO4cPeUc3RQc+KeG0oR
-# Kq9gDKj/lhoHn6UQ1ntVbwaR7g==
+# Fw0yNjExMTgyMDEzMDFaMC8GCSqGSIb3DQEJBDEiBCAkHkBuaXc+pOy7BBW6fOgV
+# 5ir8OauyKTWOXyC5dEi4lzANBgkqhkiG9w0BAQEFAASCAgCjRRq5XTCzITKzbHbH
+# WvQjNpDfLwX2k/zKFheY8gWgKrAfoSMU7cGSQNO2PCXSRiKU4ipO/iBHkyG4n6e6
+# R3Jyo/idim+9Wp4u0usK70XK4wY1Bc51PkHAWF5QyYQdLvZRIz6ITYSuSC85JPdL
+# dcB+y9PoB09zKhfI6YZwolfeRf9b+HXbVCA6WWn7rYF2cI8VJUFtTsMQij1yg29q
+# Pq10S014iKMRYhyl3pr3l2F3VXc9GaXlWx48fSwgCVValOHTScBEX0yf17w8spuY
+# W5WJKe1PRoqauOgiyVjgyoxtl3hSPLsRQQ+KoC9limcW3BSf1j9FChtmcROchGN1
+# nfR4RN74m01cFdnyxiz+dpF0kim/YCwSXqlkk7W9nWEOJ2MdZd8JOE8AGm+Dy1G2
+# A2Ac+8cqENo3gK1fuWX5XpcnjenO+v9eApbidHf0R8uGGhvoFkcR077jj7GkbrUQ
+# sDhH78WN08S37nR7RHv0EhWuYcSU9P6yee5RqNEEkYYaqv7TWO/YUrUyhurSSsFJ
+# IuuL53kp03WRC9Vq/K8wRmirZcZt5hg1upx3cHG309+w4DxITplj8pYL3JPbjXfx
+# XWa7USU3gsh34cktQcBMZluNaTPy0QpqgnY5KXZAAMzEOeOjvNQfRlWr56z6FFUr
+# 9jfdxYjfzRUXW1TzkNR7y+PjBQ==
 # SIG # End signature block
