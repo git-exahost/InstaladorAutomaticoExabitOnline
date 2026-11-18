@@ -7,6 +7,17 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.55] - 2026-11-17
+
+### Corrigido
+- **Eliminação de Ícones Duplicados na Área de Trabalho**:
+  - Corrigido problema onde atalhos de suporte ("Suporte Norte", "Webmail Nortel", "Webmail Nortel Terceirização") eram exibidos duas vezes na área de trabalho.
+  - O Windows mescla visualmente a Área de Trabalho Pública (`C:\Users\Public\Desktop`) com a Área de Trabalho do Usuário Logado (`C:\Users\<user>\Desktop`). Ao gravar nos dois locais, o Windows exibia dois ícones idênticos na tela.
+  - Os atalhos agora são criados exclusivamente em `CommonDesktopDirectory` (`C:\Users\Public\Desktop`), garantindo que todos os usuários (Admin, padrão e novos) os vejam exatamente **uma vez**.
+  - Adicionada rotina de desduplicação que remove automaticamente quaisquer cópias privadas remanescentes dos perfis individuais (`admin\Desktop`, usuário padrão e template `Default\Desktop`).
+
+---
+
 ## [2.0.0.54] - 2026-11-17
 
 ### Adicionado & Modificado

@@ -2672,8 +2672,9 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Cria atalhos de suporte na área de trabalho dos usuários criados
-        /// e no desktop público, conforme as opções selecionadas pelo usuário.
+        /// Cria atalhos de suporte exclusivamente na área de trabalho pública (CommonDesktopDirectory)
+        /// para que todos os perfis (admin, usuário padrão e novos usuários) os vejam exatamente uma vez,
+        /// removendo eventuais cópias privadas dos perfis individuais para evitar ícones duplicados.
         /// </summary>
         private async Task CreateDesktopShortcutsAsync(InstallationOptions options)
         {
@@ -2692,53 +2693,87 @@ namespace InstallerGUI.Services
                 return;
             }
 
-            // Coleta os caminhos dos desktops onde criar os atalhos
-            var desktopPaths = new List<string>();
+            Log("Criando atalhos na área de trabalho...", ConsoleColor.Yellow);
 
-            // Desktop público
+            // 1. Remove cópias privadas nos perfis individuais para evitar que o Windows exiba o atalho em duplicidade
             try
             {
-                desktopPaths.Add(Environment.GetFolderPath(
-                    Environment.SpecialFolder.CommonDesktopDirectory));
+                var privateDesktops = new List<string>();
+
+                string currentDesktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                if (!string.IsNullOrEmpty(currentDesktop) && !privateDesktops.Contains(currentDesktop))
+                {
+                    privateDesktops.Add(currentDesktop);
+                }
+
+                string usersFolder = Environment.GetEnvironmentVariable("SystemDrive") + "\\Users";
+                string adminDesktop = Path.Combine(usersFolder, "admin", "Desktop");
+                if (!privateDesktops.Contains(adminDesktop))
+                {
+                    privateDesktops.Add(adminDesktop);
+                }
+
+                string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
+                if (!string.IsNullOrWhiteSpace(stdUserName))
+                {
+                    string stdDesktop = Path.Combine(usersFolder, stdUserName, "Desktop");
+                    if (!privateDesktops.Contains(stdDesktop))
+                    {
+                        privateDesktops.Add(stdDesktop);
+                    }
+                }
+
+                string defaultDesktop = Path.Combine(usersFolder, "Default", "Desktop");
+                if (!privateDesktops.Contains(defaultDesktop))
+                {
+                    privateDesktops.Add(defaultDesktop);
+                }
+
+                foreach (string privDesk in privateDesktops)
+                {
+                    if (Directory.Exists(privDesk))
+                    {
+                        foreach (string key in shortcuts.Keys)
+                        {
+                            string oldUrl = Path.Combine(privDesk, key + ".url");
+                            if (File.Exists(oldUrl))
+                            {
+                                try { File.Delete(oldUrl); }
+                                catch { }
+                            }
+                        }
+                    }
+                }
             }
             catch { }
 
-            string usersFolder = Environment.GetEnvironmentVariable("SystemDrive") + "\\Users";
-
-            // Desktop do admin
-            desktopPaths.Add(Path.Combine(usersFolder, "admin", "Desktop"));
-
-            // Desktop do usuário padrão
-            string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
-            if (!string.IsNullOrWhiteSpace(stdUserName))
+            // 2. Cria exclusivamente no Desktop Público para que todos os usuários vejam exatamente UMA vez
+            string publicDesktop = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
+            if (string.IsNullOrEmpty(publicDesktop) || !Directory.Exists(publicDesktop))
             {
-                desktopPaths.Add(Path.Combine(usersFolder, stdUserName, "Desktop"));
+                publicDesktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             }
 
-            Log("Criando atalhos na área de trabalho...", ConsoleColor.Yellow);
-
-            foreach (string desktop in desktopPaths)
+            try
             {
-                try
+                if (!Directory.Exists(publicDesktop))
                 {
-                    if (!Directory.Exists(desktop))
-                        Directory.CreateDirectory(desktop);
+                    Directory.CreateDirectory(publicDesktop);
+                }
 
-                    foreach (var kvp in shortcuts)
-                    {
-                        string urlPath = Path.Combine(desktop, kvp.Key + ".url");
-                        File.WriteAllText(urlPath,
-                            "[InternetShortcut]\r\nURL=" + kvp.Value);
-                    }
-                }
-                catch (Exception ex)
+                foreach (var kvp in shortcuts)
                 {
-                    Log(string.Format("X Aviso ao criar atalhos em {0}: {1}",
-                        desktop, ex.Message), ConsoleColor.Yellow);
+                    string urlPath = Path.Combine(publicDesktop, kvp.Key + ".url");
+                    File.WriteAllText(urlPath, "[InternetShortcut]\r\nURL=" + kvp.Value);
                 }
+
+                Log("[ok] Atalhos criados na área de trabalho (visíveis para todos os usuários).", ConsoleColor.Green);
+            }
+            catch (Exception ex)
+            {
+                Log(string.Format("X Aviso ao criar atalhos: {0}", ex.Message), ConsoleColor.Yellow);
             }
 
-            Log("[ok] Atalhos criados na área de trabalho.", ConsoleColor.Green);
             await Task.Delay(200);
         }
 
