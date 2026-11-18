@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # Script: apply_wallpapers.ps1
 # Empresa: EXABIT Solucoes em TI
 # Finalidade: Configura todos os arquivos da pasta Wallpapers como papel de parede
@@ -338,12 +338,12 @@ Write-Host ""
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "  Papeis de parede aplicados com sucesso em todos os temas! " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
-exit 
+exit
 # SIG # Begin signature block
 # MIIcjwYJKoZIhvcNAQcCoIIcgDCCHHwCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD0Sa8nxr7P4DGF
-# Yy94Am0d55bQy6dRObJyxe+y5GJ/6KCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCASV8/jyIYaCBzh
+# 89Bn8WfB4AbAvuSc66r+UC1GUfEZ8aCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
 # t0A2pZ7si0QoMA0GCSqGSIb3DQEBCwUAME0xCzAJBgNVBAYTAkJSMR4wHAYDVQQK
 # DBVFWEFCSVQgU29sdWNvZXMgZW0gVEkxHjAcBgNVBAMMFUVYQUJJVCBTb2x1Y29l
 # cyBlbSBUSTAeFw0yNjExMTYyMjMyMDVaFw0zMTExMTYyMjQyMDVaME0xCzAJBgNV
@@ -469,28 +469,28 @@ exit
 # U29sdWNvZXMgZW0gVEkCEBrdWS49sfW3QDalnuyLRCgwDQYJYIZIAWUDBAIBBQCg
 # gYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYB
 # BAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0B
-# CQQxIgQgGcHvLiAzKn1cGRnXaOTpeWhCnpeh/gOaWdvRExNndJUwDQYJKoZIhvcN
-# AQEBBQAEggEALvtFQBSpHWDpL/3SopNj2/8jTcK1jz/29alLvKupZRDXoGqYeMVH
-# mdaPKGBSPMAuA93xhIfgALg60hLsgnF7rTBW7ZKzK/YYVtUjVfT+3TX4ZNbkrO/+
-# TaZQmr7/IA5O/SFy2uVs15a3+7/jwp00LCLCkTT+eMNgevn//JZ957yngLuaFZ51
-# OsA/+8PPYe4/gLGZr9KZktTOIwVfBIsoY+K7YbjLvQFxuJYpor2eqVu6/H985pJQ
-# sxTf+5Tb/5KEoy+ttlQlDZC2/deCiCRgFpftwSez8cdhCW9xnGRxXvvOvdejeOMX
-# ans+WscuR/bSbtUb1v82ChxKe+lt8xcpyqGCAyYwggMiBgkqhkiG9w0BCQYxggMT
+# CQQxIgQgV0WBdevR8r1UxD+g5JNpFCHI52L4cFj7h5EsNwySAxkwDQYJKoZIhvcN
+# AQEBBQAEggEAvfoGY5n6I69L1Wu2rcmMqB+Sdosq7ulvI15Y4cvuyAvLh0Jm3dFY
+# ZBDeWZq4EwX/+6xwJhYUY9alUNBi0hG5lYLBbuVQ6CYv7Pwb1RFJ6UTefYUT3TJe
+# 47lnn3v/S2lroaTzaz7FXj/ekOVKvNJ52LZanE0RwUq4wmPy/5bZdLrzCVTyZex5
+# D/7g4SoNiic3vax5k19SezQhj3PGaWjPNCbzg+spv0J8qRFJqwSImvUU8srb47yA
+# N7z7qcZfxBbKMuHmc9F+SyLGWILd2/pTrqSw3d+QEp70ubK63UC8Y1iiOSiRZvV3
+# UAjPggJFgCwem0b0RWCua358sjpfRInGLKGCAyYwggMiBgkqhkiG9w0BCQYxggMT
 # MIIDDwIBATB9MGkxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjFBMD8GA1UEAxM4RGlnaUNlcnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNB
 # NDA5NiBTSEEyNTYgMjAyNSBDQTECEAhP3DNPfkVO28MPj/mSGDUwDQYJYIZIAWUD
 # BAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEP
-# Fw0yNjExMTgyMDEzMDFaMC8GCSqGSIb3DQEJBDEiBCAkHkBuaXc+pOy7BBW6fOgV
-# 5ir8OauyKTWOXyC5dEi4lzANBgkqhkiG9w0BAQEFAASCAgCjRRq5XTCzITKzbHbH
-# WvQjNpDfLwX2k/zKFheY8gWgKrAfoSMU7cGSQNO2PCXSRiKU4ipO/iBHkyG4n6e6
-# R3Jyo/idim+9Wp4u0usK70XK4wY1Bc51PkHAWF5QyYQdLvZRIz6ITYSuSC85JPdL
-# dcB+y9PoB09zKhfI6YZwolfeRf9b+HXbVCA6WWn7rYF2cI8VJUFtTsMQij1yg29q
-# Pq10S014iKMRYhyl3pr3l2F3VXc9GaXlWx48fSwgCVValOHTScBEX0yf17w8spuY
-# W5WJKe1PRoqauOgiyVjgyoxtl3hSPLsRQQ+KoC9limcW3BSf1j9FChtmcROchGN1
-# nfR4RN74m01cFdnyxiz+dpF0kim/YCwSXqlkk7W9nWEOJ2MdZd8JOE8AGm+Dy1G2
-# A2Ac+8cqENo3gK1fuWX5XpcnjenO+v9eApbidHf0R8uGGhvoFkcR077jj7GkbrUQ
-# sDhH78WN08S37nR7RHv0EhWuYcSU9P6yee5RqNEEkYYaqv7TWO/YUrUyhurSSsFJ
-# IuuL53kp03WRC9Vq/K8wRmirZcZt5hg1upx3cHG309+w4DxITplj8pYL3JPbjXfx
-# XWa7USU3gsh34cktQcBMZluNaTPy0QpqgnY5KXZAAMzEOeOjvNQfRlWr56z6FFUr
-# 9jfdxYjfzRUXW1TzkNR7y+PjBQ==
+# Fw0yNjExMTgyMDQ1MjdaMC8GCSqGSIb3DQEJBDEiBCDUM9ZP130dRm4UuafI6lik
+# jDm4bCwdBRqEN1T0ngNcyTANBgkqhkiG9w0BAQEFAASCAgBCi10p7GsHalVy3EFA
+# Ydj2FB0wQE2ZjQiCVJQ4UDWmevb/HMIoInpqsesBjxWoiIQlmlz1jxJcX2G5Elo3
+# PymP9WOWPBlmVTUv+Xbcse3XChLuuqa1JlH2d3k7l9EDATYxyb3tjnLQm0y7nZXZ
+# KmcM72vqtCOCEVpDpOQsXehACd/YsuZDYjGT75/5IDFlvRs1bkOaq7zO64Ge0xLM
+# xTkY5sHSBghNnDNEnyT3Wkj2GRdPWfseysiSv5sk1FnHYvLnk4i9qFsDl/k12W8H
+# ntwcZnyazJ+1JNCRhntHgiAp2tP28I3pWQlJLcs431Cw+iCKj8Y6HCoTy6xwKw55
+# DHRf5lomEVh4biJlpbipZRau+Ssgef2vsILrKGJBov9ym/kLfI3WlS9RPVNq2Akv
+# +orIJAsp6wG/8B6FBMHTPhjL3Qje7U/IkPP/4HVhCXYAGLIkFNwmL9pPWDxz58py
+# 7+sAZOa9eg+aRWfCNao3jwF08Uctpo66mVaxE5OxU4iz3mkKEzHpn8BQQ4+RFlrs
+# R6v9wfjF5fXOM3S3fFEjGc5Cbidba/5A3XvrN1jvW5xg+H5qjXK4l58I+FHfdNxI
+# 6JbNf0310N7CtFabUvt0yLH0nPlmbpthm6/+K0VGJl+6XQdVyE1P1YygoLG7kDOb
+# cg9BHGz4s9CrU7Z+Lr4HfTPWQQ==
 # SIG # End signature block
