@@ -7,6 +7,18 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.53] - 2026-11-17
+
+### Corrigido
+- **Tratamento de Junções de Sistema e Permissões na Limpeza de Atalhos**:
+  - Corrigido aviso de acesso negado em `C:\Users\All Users\Desktop` e `C:\Users\Todos os Usuários\Desktop`.
+  - No Windows, pastas legadas como `All Users`, `Todos os Usuários`, `Default User` e `Usuário Padrão` são pontos de junção (*Reparse Points*) protegidos pelo sistema operacional.
+  - A rotina de varredura agora ignora automaticamente diretórios com atributo `FileAttributes.ReparsePoint` e diretórios públicos já mapeados.
+  - O método não tenta mais criar pastas Desktop para diretórios inexistentes durante a varredura, exceto pelo template oficial `Default\Desktop`.
+  - Adicionado tratamento silencioso de `UnauthorizedAccessException` para evitar falsos alarmes no log.
+
+---
+
 ## [2.0.0.52] - 2026-11-17
 
 ### Modificado

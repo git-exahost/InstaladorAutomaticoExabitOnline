@@ -2583,18 +2583,33 @@ namespace InstallerGUI.Services
                 desktopPaths.Add(defaultDesktop);
             }
 
-            // Varre quaisquer outros diretórios de usuários existentes em C:\Users
+            // Varre diretórios de usuários reais existentes em C:\Users (ignora junções do Windows)
             try
             {
                 if (Directory.Exists(usersFolder))
                 {
                     foreach (string userDir in Directory.GetDirectories(usersFolder))
                     {
-                        string userDesktop = Path.Combine(userDir, "Desktop");
-                        if (!desktopPaths.Contains(userDesktop))
+                        try
                         {
-                            desktopPaths.Add(userDesktop);
+                            var dirInfo = new DirectoryInfo(userDir);
+
+                            // Ignora pontos de junção/links simbólicos (ex: "All Users", "Todos os Usuários", "Default User", "Usuário Padrão")
+                            if ((dirInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+                                continue;
+
+                            string dirName = dirInfo.Name;
+                            if (string.Equals(dirName, "Public", StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(dirName, "Público", StringComparison.OrdinalIgnoreCase))
+                                continue;
+
+                            string userDesktop = Path.Combine(userDir, "Desktop");
+                            if (!desktopPaths.Contains(userDesktop))
+                            {
+                                desktopPaths.Add(userDesktop);
+                            }
                         }
+                        catch { }
                     }
                 }
             }
@@ -2604,11 +2619,26 @@ namespace InstallerGUI.Services
             {
                 try
                 {
-                    if (!Directory.Exists(desktop))
+                    if (string.IsNullOrEmpty(desktop))
+                        continue;
+
+                    // Cria o diretório apenas se for o Default\Desktop para que novos usuários recebam o template limpo
+                    if (string.Equals(desktop, defaultDesktop, StringComparison.OrdinalIgnoreCase))
                     {
-                        // Cria o diretório se não existir (ex: Default\Desktop ou usuário que nunca logou)
-                        Directory.CreateDirectory(desktop);
+                        if (!Directory.Exists(desktop))
+                        {
+                            Directory.CreateDirectory(desktop);
+                        }
                     }
+                    else if (!Directory.Exists(desktop))
+                    {
+                        continue;
+                    }
+
+                    // Ignora se o próprio caminho Desktop for um ponto de junção
+                    var di = new DirectoryInfo(desktop);
+                    if ((di.Attributes & FileAttributes.ReparsePoint) != 0)
+                        continue;
 
                     // Remove atalhos .lnk (programas)
                     foreach (string file in Directory.GetFiles(desktop, "*.lnk"))
@@ -2623,6 +2653,10 @@ namespace InstallerGUI.Services
                         try { File.Delete(file); }
                         catch { }
                     }
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Ignora silenciosamente pastas com proteção especial ou restrição do sistema
                 }
                 catch (Exception ex)
                 {
