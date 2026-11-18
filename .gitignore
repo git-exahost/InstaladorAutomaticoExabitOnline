@@ -5,6 +5,8 @@ InstallerGUI/obj/
 # Generated files
 dist/build_info.txt
 dist/install.exe
+dist/install.exe.config
+*.old
 
 # Binary installers (distributed via release, not git)
 dist/Programas/*.exe

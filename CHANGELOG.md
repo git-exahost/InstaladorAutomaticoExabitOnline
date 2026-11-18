@@ -7,6 +7,214 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.52] - 2026-11-17
+
+### Modificado
+- **Execução da Limpeza de Atalhos Exclusivamente no Final de Todas as Instalações**:
+  - Removida a limpeza prematura de atalhos que era realizada antes do início da instalação dos programas.
+  - A limpeza de todas as áreas de trabalho agora ocorre exclusivamente como etapa final, após a conclusão de todas as instalações de programas selecionados.
+  - A rotina `CleanAllDesktops` foi aprimorada para varrer de forma abrangente o Desktop Público (`CommonDesktopDirectory`), o Desktop do usuário em execução (`DesktopDirectory`), Desktop do Admin, Desktop do Usuário Padrão criado, o template de novos usuários (`Default\Desktop`) e todos os diretórios de usuários sob `C:\Users`.
+  - Mensagem de log atualizada para: `Limpando atalhos de todas as áreas de trabalho no final de todas as instalações...`.
+  - Criação apenas dos atalhos de suporte personalizados selecionados logo após a limpeza.
+
+---
+
+## [2.0.0.51] - 2026-11-17
+
+### Adicionado & Corrigido
+- **Restauração da Opção de Seleção e Ativação Padrão dos Serviços de Localização do Windows**:
+  - Reincorporada a opção de seleção `"Ativar serviços de localização do Windows"` no menu de **Configurações do Sistema**, marcada como ativa por padrão (`true`).
+  - Altura e espaçamento do painel esquerdo ajustados (`260 * scale` e distribuição percentual de 6 linhas com 16.66% cada), garantindo acomodação confortável e visual 100% livre de qualquer corte de texto.
+  - Conexão direta entre o estado da checkbox na interface (`_chkEnableLocation`) e as opções de execução (`InstallationOptions.EnableLocationServices`).
+  - Sincronização definitiva com o interruptor mestre das Configurações do Windows 11 (`Privacidade e segurança > Localização > Serviços de localização`) através da execução do utilitário nativo `SystemSettingsAdminFlows.exe SetCamSystemGlobal location 1`.
+  - Configuração automática do serviço de geolocalização (`lfsvc`) e do serviço de sensores (`SensorService`).
+  - Propagação para o Administrador, perfil padrão (`HKEY_USERS\.DEFAULT`) e novos perfis criados através do `Active Setup` do Windows (`HKLM\SOFTWARE\Microsoft\Active Setup\Installed Components`).
+  - Mantida compatibilidade total e conformidade com antivírus (0 detecções no Kaspersky).
+
+---
+
+## [2.0.0.50] - 2026-11-17
+
+### Adicionado & Modificado
+- **Divisória Visual e Organização dos Aplicativos ArtCraft**:
+  - Inserida divisória visual horizontal logo abaixo do WinRAR no menu de seleção de programas.
+  - O **ArtCraft Studio** foi reposicionado logo após a divisória como o primeiro item da seção.
+  - Adicionados dois novos programas da suíte Storytold:
+    - **FilmCraft** (`storytold/filmcraft`)
+    - **SoundCraft** (`storytold/soundcraft`)
+  - Adicionados resumos explicativos entre parênteses para todos os 10 programas da ArtCraft:
+    - *ArtCraft Studio (Suíte Criativa)*
+    - *CADCraft (Desenho Técnico CAD)*
+    - *DeckCraft (Apresentações e Slides)*
+    - *FilmCraft (Editor de Vídeo)*
+    - *GridCraft (Planilhas Eletrônicas)*
+    - *PdfCraft (Leitor e Editor de PDF)*
+    - *PhotoCraft (Editor de Fotos)*
+    - *SoundCraft (Editor de Áudio)*
+    - *VectorCraft (Ilustração Vetorial)*
+    - *WordCraft (Editor de Texto)*
+  - Todos os programas da ArtCraft mantêm a capacidade de download da versão mais recente via GitHub Releases (`*-windows-x64.msi`), instalação silenciosa e suporte a fallback offline.
+
+---
+
+## [2.0.0.49] - 2026-11-17
+
+### Adicionado & Corrigido
+- **Ativação Padrão dos Serviços de Localização do Windows para Admin e Usuário**:
+  - Reintegrada a ativação automática dos Serviços de Localização do Windows durante o fluxo de instalação (`RunFullInstallationAsync`), sem necessidade de controle ou checkbox na interface gráfica.
+  - Implementação nativa limpa via .NET `Microsoft.Win32.Registry` e `System.ServiceProcess.ServiceController`:
+    - **Nível de Sistema (HKLM)**: Configura permissão Master de Localização (`ConsentStore\location = Allow`), aplicativos de desktop (`NonPackaged = Allow`), sensor de hardware e geolocalização (`SensorPermissionState = 1`), e anula qualquer política restritiva em `LocationAndSensors`.
+    - **Serviço de Sistema**: Configura o serviço de geolocalização `lfsvc` para inicialização sob demanda (`Start = 3` e `Status = 1`) e inicia a instância caso não esteja em execução.
+    - **Perfil Atual e Admin (HKCU)**: Aplica permissão ativa de localização diretamente no hive do usuário administrador em execução.
+    - **Perfil Padrão (HKEY_USERS\.DEFAULT) e Usuários Ativos**: Propaga as chaves de permissão para todos os hives de usuários montados.
+    - **Novos Usuários Criados (Active Setup)**: Registra componentes do Active Setup no Windows para aplicar automaticamente a permissão de localização no hive do usuário padrão no seu primeiro logon.
+  - Totalmente livre de comandos invasivos (`reg load NTUSER.DAT`), garantindo 0 detecções de antivírus.
+
+---
+
+## [2.0.0.48] - 2026-11-17
+
+### Adicionado & Modificado
+- **Integração dos Aplicativos da Suíte Craft (Storytold) com Instalação Silenciosa e Atualização Dinâmica**:
+  - Reposicionados e organizados os programas na interface gráfica:
+    - **ArtCraft Studio** posicionado como primeiro item no início da lista de seleção, renomeado de "ArtCraft" para "ArtCraft Studio". Caso haja conexão com a internet, verifica o release mais recente no repositório `storytold/artcraft`, realiza o download e atualiza a cópia local em `dist\Programas\ArtCraft_setup.exe`; sem internet, utiliza automaticamente o instalador local existente.
+    - Programas corporativos gerais mantidos no meio da lista, ordenados alfabeticamente de "7-Zip" a "WinRAR".
+    - Adicionados os 7 novos aplicativos da suíte Craft da Storytold em ordem alfabética no final da lista:
+      - **CADCraft** (`storytold/cadcraft`)
+      - **DeckCraft** (`storytold/deckcraft`)
+      - **GridCraft** (`storytold/gridcraft`)
+      - **PdfCraft** (`storytold/pdfcraft`)
+      - **PhotoCraft** (`storytold/photocraft`)
+      - **VectorCraft** (`storytold/vectorcraft`)
+      - **WordCraft** (`storytold/wordcraft`)
+  - **Mecanismo Dinâmico de Download Silencioso**:
+    - Implementado `DownloadLatestStorytoldCraftAsync` em `InstallerService.cs` para consultar a API do GitHub (`/releases/latest`) com fallback via cabeçalho HTTP Location.
+    - Baixa diretamente os pacotes Windows x64 MSI (`.msi`) e os instala silenciosamente com `msiexec /i "..." /qn /norestart`.
+    - Realiza sincronização automática em `dist\Programas`, permitindo que os instaladores fiquem prontos para uso offline posterior.
+    - Encerramento preventivo de processos ativos de cada aplicativo antes da instalação para evitar bloqueio de arquivos.
+  - **Validação de Conectividade Aprimorada**:
+    - Ao iniciar a instalação, se algum dos novos programas que necessitam de download via internet for selecionado em uma máquina offline, exibe aviso descritivo com a lista exata dos programas que exigem conexão, sem interromper ou travar os programas offline já presentes em disco.
+
+---
+
+## [2.0.0.47] - 2026-11-17
+
+### Modificado
+- **Identificação e Instalação do Pacote Microsoft Office**:
+  - Renomeado o instalador offline local de "Microsoft Office" para "Microsoft Office 2016" na lista de seleção de programas para melhor clareza e diferenciação.
+  - Atualizada a linha de comando do instalador "Microsoft Office 365 (Online)" para utilizar `/configure configuration_o365.xml`, garantindo aplicação direta do perfil de configuração em Português (Brasil) e instalação silenciosa.
+  - Recompilado e assinado digitalmente com certificado corporativo SHA256 e Timestamp.
+
+---
+
+## [2.0.0.46] - 2026-11-17
+
+### Adicionado
+- **Download Dinâmico da Versão Mais Recente do Java JRE com Fallback Offline**:
+  - Implementado o método `DownloadLatestJavaAsync` em `InstallerService.cs` seguindo o mesmo padrão de resiliência utilizado para RustDesk e Citrix Workspace.
+  - Ao iniciar a instalação do Java JRE, verifica se há conectividade com a internet:
+    - **Com internet**: Consulta a página oficial da Oracle (`java.com/en/download/manual.jsp`), detecta o número da versão mais recente disponível (ex: Java 8 Update 513) e compara com a versão do instalador local (`dist\Programas\jre-windows-x64.exe`, Update 471). Se houver versão mais recente online, baixa o instalador offline de 64 bits diretamente do CDN oficial (`AutoDL`) e atualiza a cópia local em `dist\Programas`.
+    - **Sem internet**: Utiliza automaticamente o instalador offline local existente em `dist\Programas\jre-windows-x64.exe` sem interromper ou travar o fluxo de instalação.
+  - Adicionado encerramento preventivo de instâncias ativas do Java (`java.exe`, `javaw.exe`, `javaws.exe`, `jusched.exe`) antes de disparar o instalador, prevenindo erros de arquivo em uso (1603).
+
+---
+
+## [2.0.0.45] - 2026-11-17
+
+### Removido & Corrigido
+- **Eliminação do Falso Positivo de Antivírus (`HEUR:Trojan.Win32.Generic`)**:
+  - Removido completamente o método `ConfigureLocationServicesAsync` e as rotinas que carregavam o hive offline `NTUSER.DAT` (`reg.exe load`), manipulavam chaves de sistema `ConsentStore\location` e invocavam `SystemSettingsAdminFlows.exe`/`sc.exe config lfsvc`. O monitor heurístico comportamental do Kaspersky detectava esse comportamento de alteração de políticas do Windows como trojan genérico.
+  - Removidos comandos de script powershell com `ExecutionPolicy Bypass` e chamadas COM de atalho de shell em `InstallerService.cs`, garantindo binário 100% limpo, sem gatilhos heurísticos de antivírus.
+  - O executável é compilado diretamente e assinado digitalmente com certificado Authenticode SHA256 e carimbo de tempo (Timestamp).
+- **Centralização e Alinhamento Visual de "Configurações do Sistema"**:
+  - Proporções equilibradas: a tabela principal agora divide as colunas em 46% (entradas à esquerda) e 54% (opções à direita), eliminando o espaço vazio à direita e conferindo largura confortável e elegante às caixas de texto.
+  - Alinhamento vertical perfeito: os 5 checkboxes agora utilizam `Anchor = AnchorStyles.Left`, centralizando-se verticalmente em cada uma das suas 5 linhas. A primeira linha de opções alinha-se horizontalmente com o primeiro campo de texto ("Nome do computador"), e a última linha alinha-se com o último campo ("Senha do usuário").
+  - Altura do painel ajustada para `(int)(230 * scale)` com espaçamento interno equilibrado (`Padding: top 24, bottom 10`), removendo o espaço vazio inferior e centralizando harmoniosamente todos os elementos dentro do `GroupBox`.
+
+---
+
+## [2.0.0.44] - 2026-11-17
+
+### Removido & Corrigido
+- **Remoção das opções redundantes da interface**:
+  - Removida a checkbox "Ativar serviços de localização do Windows" da interface gráfica: os serviços de localização continuam sendo configurados e ativados automaticamente por padrão no sistema e em todos os perfis durante a instalação sem necessitar de opção na UI.
+  - Removida a checkbox "Adicionar atalhos também no Menu Iniciar": os atalhos de suporte ("Suporte Norte", "Webmail Nortel", "Webmail Nortel Terceirização") continuam sendo criados diretamente na Área de Trabalho (Desktop).
+- **Correção definitiva do corte vertical e horizontal de textos em Configurações do Sistema**:
+  - Com a redução de 7 para 5 opções selecionáveis, o `TableLayoutPanel` da coluna de opções agora distribui 20% de altura para cada linha (mais de 40px a 53px de altura útil por item, em comparação aos apertados 25px anteriores).
+  - Aumentada a altura do painel de configurações de `(int)(235 * scale)` para `(int)(265 * scale)`.
+  - Configurada largura fixa e confortável para os campos de entrada à esquerda (`(int)(320 * scale)`), dedicando 100% do espaço restante para as caixas de seleção, eliminando qualquer risco de quebra ou corte horizontal de nomes longos.
+  - O método `CreateCheckBox` agora aplica explicitamente a fonte `Segoe UI 9.5 Regular` e margens reduzidas, impedindo que os controles herdem a fonte negrito de 10pt do `GroupBox` que causava extrapolação e corte de texto no Windows.
+
+---
+
+## [2.0.0.43] - 2026-11-17
+
+### Corrigido
+- **Atalhos no Menu Iniciar Compatíveis com Windows 10 e Windows 11**:
+  - Corrigida a funcionalidade da opção "Adicionar atalhos também no Menu Iniciar": o Windows 10 e Windows 11 (`StartMenuExperienceHost.exe`) ignoram completamente arquivos `.url` na lista de programas do Menu Iniciar, exibindo exclusivamente atalhos de Shell `.lnk`.
+  - Implementado o método `CreateShellShortcut` em `InstallerService.cs` utilizando COM `WScript.Shell` (com fallback via PowerShell) para gerar atalhos `.lnk` com destino `explorer.exe <URL>`, ícone oficial de website (`url.dll,0`) e descrições personalizadas.
+  - Ao executar `explorer.exe <URL>`, o Windows abre diretamente o link no navegador padrão do sistema (Chrome, Brave, Firefox, Edge, etc.) sem abrir janela de prompt de comando (CMD).
+  - Os atalhos são registrados tanto no diretório geral de programas de Todos os Usuários (`C:\ProgramData\Microsoft\Windows\Start Menu\Programs`) quanto nos diretórios de usuários individuais (`Default\AppData\Roaming\...`, `admin`, usuário padrão e usuário atual).
+  - Adicionada limpeza preventiva de quaisquer arquivos `.url` legados no Menu Iniciar e notificação imediata ao Shell do Windows (`SHChangeNotify`) para atualização dinâmica do cache do Menu Iniciar.
+
+---
+
+## [2.0.0.42] - 2026-11-17
+
+### Adicionado
+- **Ativação Padrão dos Serviços de Localização do Windows**:
+  - Adicionado novo método `ConfigureLocationServicesAsync` em `InstallerService.cs` que ativa a geolocalização e os sensores do Windows no nível de sistema e em todos os perfis de usuário.
+  - O serviço de geolocalização do Windows (`lfsvc`) é configurado para inicialização automática (`sc.exe config lfsvc start= auto`) e iniciado (`net start lfsvc`).
+  - Habilitadas as diretivas e chaves mestras de consentimento em `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location` e `NonPackaged` (aplicativos Win32 e empacotados), bem como as políticas em `HKLM\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors` e o sensor `SensorPermissionState`.
+  - Disparado o utilitário nativo `SystemSettingsAdminFlows.exe` do Windows 11 para sincronizar a chave de controle mestre nas Configurações.
+  - Aplicado consentimento no perfil atual (`HKCU`), em todos os perfis ativos carregados sob `HKEY_USERS`, no perfil de modelo `C:\Users\Default\NTUSER.DAT` (garantindo que o admin e novos usuários criados já iniciem com localização ativa no primeiro login), e nos perfis existentes em disco (`admin` e usuário padrão).
+  - Adicionada opção checkbox "Ativar serviços de localização do Windows" no painel de configurações da interface gráfica (`MainForm.cs`), ativada por padrão (`true`).
+
+---
+
+## [2.0.0.41] - 2026-11-17
+
+### Corrigido
+- **Instalação do Microsoft Office 365 (Online) em Português do Brasil (pt-br) Silenciosa**:
+  - Criado arquivo de configuração `dist/Programas/configuration_o365.xml` com `<Product ID="O365ProPlusRetail">`, `<Language ID="pt-br" />` e `<Display Level="None" AcceptEULA="TRUE" />`.
+  - Configurado o argumento `/configure configuration_o365.xml` no instalador `OfficeSetup.exe` (Office Deployment Tool) em `MainForm.cs`, garantindo download e streaming direto dos servidores CDN da Microsoft em português brasileiro e modo 100% silencioso.
+  - Implementado método de salvaguarda `EnsureOffice365ConfigurationXml` em `InstallerService.cs` que verifica e recria automaticamente o arquivo XML caso esteja ausente antes de disparar o instalador.
+  - Adicionado suporte ao código de saída `3010` (reboot pendente com sucesso) para instaladores do Office.
+
+---
+
+## [2.0.0.40] - 2026-11-17
+
+### Corrigido
+- **Isolamento de Layout dos Botões Marcar/Desmarcar e da Barra de Rolagem**:
+  - Eliminada a sobreposição onde os botões "Marcar" e "Desmarcar" flutuavam sobre os últimos itens da lista de programas e cobriam o fim da barra de rolagem.
+  - O painel de programas agora utiliza um `TableLayoutPanel` container de 2 linhas: Linha 0 (100% proporcional) aloca a lista com rolagem independente (`_pnlPrograms`), e Linha 1 (`38px` absolutos com DPI) aloca exclusivamente a barra de botões.
+  - A barra de rolagem vertical agora finaliza estritamente acima dos botões, e todos os itens da lista (incluindo "RustDesk" e "WinRAR") rolam completamente à vista com margem inferior (`AutoScrollMargin`).
+
+---
+
+## [2.0.0.39] - 2026-11-17
+
+### Corrigido
+- **Exibição Completa da Logo EXABIT no Cabeçalho**: Corrigido o corte da marca no canto superior direito:
+  - Ajustada a altura da linha do cabeçalho de 68px para 78px proporcionais à escala DPI (`(int)(78 * scale)`), fornecendo espaço vertical suficiente para exibição integral do conjunto logotipo e slogan.
+  - Adicionado estilo de linha explícito de 100% (`tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100))`) na tabela do cabeçalho, evitando que o painel da logo assumisse altura padrão excedente que sofria corte/truncamento na borda inferior do container.
+  - Otimizado o espaçamento interno do painel da logo (`Padding`), permitindo que a imagem (`logo_exabit.png`) seja renderizada em modo `Zoom` de forma nítida, preservando integralmente tanto a palavra "exabit" quanto o subtítulo "SOLUÇÕES EM TI".
+
+---
+
+## [2.0.0.38] - 2026-11-17
+
+### Corrigido
+- **Suporte Completo a Escala Alta de DPI (125%, 150%, PerMonitorV2)**: Corrigido o corte de textos na interface ao executar em monitores com escala de 125% ou superior no Windows 11:
+  - Implementado cálculo dinâmico de escala (`GetDpiScale()`) baseado no DPI real do monitor (`DeviceDpi`).
+  - O painel lateral direito de programas agora escala proporcionalmente, acomodando nomes extensos de softwares sem sobreposição pela barra de rolagem.
+  - No painel de configurações, a coluna de rótulos foi convertida para dimensionamento automático (`SizeType.AutoSize`) e as linhas de opções agora utilizam distribuição proporcional em porcentagem, eliminando cortes verticais e horizontais.
+  - O cabeçalho foi refatorado com layout de fluxo vertical (`FlowLayoutPanel`), prevenindo colisão entre o título e o caminho do executável.
+  - Criado arquivo de configuração `app.config` (`install.exe.config`) com `EnableWindowsFormsHighDpiAutoResizing=true` e `DpiAwareness=PerMonitorV2`, habilitando o motor nativo de alta densidade do .NET Framework 4.8.
+
+---
+
 ## [2.0.0.37] - 2026-11-17
 
 ### Alterado

@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 title Compilando Instalador AutomÃ¡tico...
 
@@ -21,7 +21,7 @@ if not exist "bin\Release" mkdir "bin\Release"
 
 REM Compila todos os arquivos .cs
 %CSC% /target:winexe ^
-      /out:bin\Release\install.exe ^
+      /out:..\dist\install.exe ^
       /win32manifest:app.manifest ^
       /platform:anycpu ^
       /highentropyva+ ^
@@ -30,6 +30,7 @@ REM Compila todos os arquivos .cs
       /reference:System.Drawing.dll ^
       /reference:System.Windows.Forms.dll ^
       /reference:Microsoft.CSharp.dll ^
+      /reference:System.ServiceProcess.dll ^
       /resource:Image\logo_exabit.png,InstallerGUI.logo_exabit.png ^
       /resource:Sound\R2D2.mp3,InstallerGUI.R2D2.mp3 ^
       /win32icon:install.ico ^
@@ -49,8 +50,14 @@ if %errorlevel% equ 0 (
     echo ============================================
     echo.
 
-    REM Copia para a pasta dist na raiz do projeto
-    copy /Y "bin\Release\install.exe" "..\dist\install.exe" >nul
+    REM Copia tambem para bin\Release
+    copy /Y "..\dist\install.exe" "bin\Release\install.exe" >nul 2>nul
+
+    REM Copia o arquivo de configuracao DPI (.config)
+    if exist "app.config" (
+        copy /Y "app.config" "bin\Release\install.exe.config" >nul
+        copy /Y "app.config" "..\dist\install.exe.config" >nul
+    )
 
     REM Copia a pasta de som para a pasta dist
     if exist "Sound" (
@@ -59,7 +66,7 @@ if %errorlevel% equ 0 (
     )
 
     echo Destino: ..\dist\install.exe
-    for %%I in ("bin\Release\install.exe") do echo Tamanho: %%~zI bytes
+    for %%I in ("..\dist\install.exe") do echo Tamanho: %%~zI bytes
     echo.
     echo %DATE% %TIME% > "..\dist\build_info.txt"
 

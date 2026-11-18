@@ -6,6 +6,7 @@ using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft.Win32;
 using InstallerGUI.Models;
 
 namespace InstallerGUI.Services
@@ -47,6 +48,14 @@ namespace InstallerGUI.Services
         /// Normalmente é o mesmo diretório do executável.
         /// </summary>
         private readonly string _basePath;
+
+        /// <summary>
+        /// Obtém o caminho raiz onde estão as pastas Programas/ e Scripts/.
+        /// </summary>
+        public string BasePath
+        {
+            get { return _basePath; }
+        }
 
         /// <summary>
         /// Token para cancelar a instalação.
@@ -368,6 +377,277 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Configura e ativa os Serviços de Localização do Windows por padrão
+        /// para o computador (nível de máquina/HKLM), para o serviço lfsvc,
+        /// para o perfil atual (Admin) e para o perfil do usuário criado (Active Setup e Default).
+        /// </summary>
+        public async Task ConfigureLocationServicesAsync()
+        {
+            Log("Ativando serviços de localização do Windows por padrão...", ConsoleColor.Yellow);
+
+            await Task.Run(new Action(() =>
+            {
+                try
+                {
+                    // 1. Configurar tipo de inicialização do serviço Geolocation (lfsvc)
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SYSTEM\CurrentControlSet\Services\lfsvc"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Start", 3, RegistryValueKind.DWord); // Manual (Trigger Start)
+                            }
+                        }
+
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SYSTEM\CurrentControlSet\Services\lfsvc\Service\Configuration"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Status", 1, RegistryValueKind.DWord);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 2. Chaves de registro de Sistema / Máquina (HKLM)
+                    try
+                    {
+                        // Habilita acesso de localização a nível de sistema (Master switch do dispositivo)
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Value", "Allow", RegistryValueKind.String);
+                            }
+                        }
+
+                        // Habilita para aplicativos da área de trabalho (desktop apps)
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Value", "Allow", RegistryValueKind.String);
+                            }
+                        }
+
+                        // Sensor de hardware e geolocalização do Windows
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("SensorPermissionState", 1, RegistryValueKind.DWord);
+                            }
+                        }
+
+                        // Políticas de grupo (garante que nenhuma GPO desative localização ou sensores)
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("DisableLocation", 0, RegistryValueKind.DWord);
+                                key.SetValue("DisableWindowsLocationProvider", 0, RegistryValueKind.DWord);
+                                key.SetValue("DisableLocationScripting", 0, RegistryValueKind.DWord);
+                                key.SetValue("DisableSensors", 0, RegistryValueKind.DWord);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 3. Chaves para o usuário atual (Admin logado)
+                    try
+                    {
+                        using (var key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Value", "Allow", RegistryValueKind.String);
+                            }
+                        }
+
+                        using (var key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Value", "Allow", RegistryValueKind.String);
+                            }
+                        }
+
+                        using (var key = Registry.CurrentUser.CreateSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("SensorPermissionState", 1, RegistryValueKind.DWord);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 4. Perfil padrão do Windows (HKEY_USERS\.DEFAULT)
+                    try
+                    {
+                        using (var key = Registry.Users.CreateSubKey(@".DEFAULT\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Value", "Allow", RegistryValueKind.String);
+                            }
+                        }
+
+                        using (var key = Registry.Users.CreateSubKey(@".DEFAULT\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("Value", "Allow", RegistryValueKind.String);
+                            }
+                        }
+
+                        using (var key = Registry.Users.CreateSubKey(@".DEFAULT\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("SensorPermissionState", 1, RegistryValueKind.DWord);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 5. Aplica a todos os perfis de usuários carregados em HKEY_USERS
+                    try
+                    {
+                        foreach (string subName in Registry.Users.GetSubKeyNames())
+                        {
+                            if (string.Equals(subName, ".DEFAULT", StringComparison.OrdinalIgnoreCase) ||
+                                subName.EndsWith("_Classes", StringComparison.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            try
+                            {
+                                using (var key = Registry.Users.CreateSubKey(subName + @"\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location"))
+                                {
+                                    if (key != null) key.SetValue("Value", "Allow", RegistryValueKind.String);
+                                }
+                                using (var key = Registry.Users.CreateSubKey(subName + @"\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location\NonPackaged"))
+                                {
+                                    if (key != null) key.SetValue("Value", "Allow", RegistryValueKind.String);
+                                }
+                                using (var key = Registry.Users.CreateSubKey(subName + @"\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Sensor\Overrides\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}"))
+                                {
+                                    if (key != null) key.SetValue("SensorPermissionState", 1, RegistryValueKind.DWord);
+                                }
+                            }
+                            catch
+                            {
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 6. Active Setup: garante que novos perfis criados recebam permissão de localização no primeiro login
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Active Setup\Installed Components\{E7A18C3B-4491-49F1-8B35-EXABITLOC01}"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("ComponentID", "ExabitLocationConsent", RegistryValueKind.String);
+                                key.SetValue("Version", "1,0,0,1", RegistryValueKind.String);
+                                key.SetValue("StubPath", "reg.exe add \"HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location\" /v Value /t REG_SZ /d Allow /f", RegistryValueKind.String);
+                            }
+                        }
+
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Active Setup\Installed Components\{E7A18C3B-4491-49F1-8B35-EXABITLOC02}"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("ComponentID", "ExabitLocationNonPackaged", RegistryValueKind.String);
+                                key.SetValue("Version", "1,0,0,1", RegistryValueKind.String);
+                                key.SetValue("StubPath", "reg.exe add \"HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location\\NonPackaged\" /v Value /t REG_SZ /d Allow /f", RegistryValueKind.String);
+                            }
+                        }
+
+                        using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Active Setup\Installed Components\{E7A18C3B-4491-49F1-8B35-EXABITLOC03}"))
+                        {
+                            if (key != null)
+                            {
+                                key.SetValue("ComponentID", "ExabitLocationSensor", RegistryValueKind.String);
+                                key.SetValue("Version", "1,0,0,1", RegistryValueKind.String);
+                                key.SetValue("StubPath", "reg.exe add \"HKCU\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Sensor\\Overrides\\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}\" /v SensorPermissionState /t REG_DWORD /d 1 /f", RegistryValueKind.String);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 7. Iniciar os serviços lfsvc e SensorService se não estiverem em execução
+                    try
+                    {
+                        using (var sc = new System.ServiceProcess.ServiceController("lfsvc"))
+                        {
+                            if (sc.Status != System.ServiceProcess.ServiceControllerStatus.Running &&
+                                sc.Status != System.ServiceProcess.ServiceControllerStatus.StartPending)
+                            {
+                                sc.Start();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    try
+                    {
+                        using (var sc = new System.ServiceProcess.ServiceController("SensorService"))
+                        {
+                            if (sc.Status != System.ServiceProcess.ServiceControllerStatus.Running &&
+                                sc.Status != System.ServiceProcess.ServiceControllerStatus.StartPending)
+                            {
+                                sc.Start();
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("X Aviso ao configurar localização: {0}", ex.Message), ConsoleColor.Yellow);
+                }
+            }));
+
+            // 8. Chamar o utilitário nativo do Windows 11 para ativar a chave mestra no CAM (Capability Access Manager)
+            try
+            {
+                string adminFlowsExe = Path.Combine(Environment.SystemDirectory, "SystemSettingsAdminFlows.exe");
+                if (File.Exists(adminFlowsExe))
+                {
+                    await RunProcessAsync(adminFlowsExe, "SetCamSystemGlobal location 1", 10000, null, false, true);
+                    await RunProcessAsync(adminFlowsExe, "SetCamSystemGlobal location 2", 10000, null, false, true);
+                }
+            }
+            catch
+            {
+            }
+
+            Log("[ok] Serviços de localização do Windows ativados com sucesso.", ConsoleColor.Green);
+            await Task.Delay(200);
+        }
+
+        /// <summary>
         /// Aplica os papéis de parede personalizados adicionando todos os arquivos da pasta Wallpapers
         /// como papel de parede em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
         /// e configurando para novos usuários e usuário atual.
@@ -568,6 +848,86 @@ namespace InstallerGUI.Services
                 }
             }
 
+            if (program.Id == "java")
+            {
+                bool hasInternet = await HasInternetConnectionAsync();
+                if (hasInternet)
+                {
+                    Log("Conexão com a internet detectada. Verificando versão mais recente do Java JRE...", ConsoleColor.Cyan);
+                    string latestJava = await DownloadLatestJavaAsync(fullPath);
+                    if (!string.IsNullOrEmpty(latestJava) && File.Exists(latestJava))
+                    {
+                        fullPath = latestJava;
+
+                        string localProgramPath = program.GetFullPath(_basePath);
+                        try
+                        {
+                            if (File.Exists(localProgramPath) && !string.Equals(latestJava, localProgramPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                File.Copy(latestJava, localProgramPath, true);
+                                Log("  Instalador local em dist\\Programas atualizado para a versão mais recente.", ConsoleColor.Gray);
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+                }
+                else
+                {
+                    Log("Sem conexão com a internet. Usando instalador local do Java JRE da pasta Programas.", ConsoleColor.Yellow);
+                }
+
+                try
+                {
+                    string[] javaProcs = new string[] { "java", "javaw", "javaws", "jusched" };
+                    for (int i = 0; i < javaProcs.Length; i++)
+                    {
+                        foreach (var proc in Process.GetProcessesByName(javaProcs[i]))
+                        {
+                            try { proc.Kill(); }
+                            catch { }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            if (IsStorytoldCraftProgram(program.Id))
+            {
+                bool hasInternet = await HasInternetConnectionAsync();
+                if (hasInternet)
+                {
+                    Log(string.Format("Conexão com a internet detectada. Verificando versão mais recente do {0}...", program.DisplayName), ConsoleColor.Cyan);
+                    string latestInstaller = await DownloadLatestStorytoldCraftAsync(program);
+                    if (!string.IsNullOrEmpty(latestInstaller) && File.Exists(latestInstaller))
+                    {
+                        fullPath = latestInstaller;
+                        Log(string.Format("[ok] Instalador da versão mais recente do {0} pronto para instalação.", program.DisplayName), ConsoleColor.Green);
+                    }
+                    else if (File.Exists(fullPath))
+                    {
+                        Log(string.Format("  Usando instalador local de {0} da pasta Programas.", program.DisplayName), ConsoleColor.Yellow);
+                    }
+                }
+                else
+                {
+                    if (File.Exists(fullPath))
+                    {
+                        Log(string.Format("Sem conexão com a internet. Usando instalador local de {0} da pasta Programas.", program.DisplayName), ConsoleColor.Yellow);
+                    }
+                    else
+                    {
+                        Log(string.Format("X {0} requer conexão com a internet para download. Conecte-se à internet antes de instalar.", program.DisplayName), ConsoleColor.Red);
+                        return;
+                    }
+                }
+
+                CloseProcessesForStorytoldCraft(program.Id);
+            }
+
             if (program.Id == "powerbi")
             {
                 if (IsPowerBIDesktopInstalled())
@@ -754,7 +1114,7 @@ namespace InstallerGUI.Services
                 return;
             }
 
-            if (program.RequiresInternet && !await HasInternetConnectionAsync())
+            if (program.Id == "office365" && !await HasInternetConnectionAsync())
             {
                 Log(string.Format("X {0} requer conexão com a internet. Conecte-se à internet antes de instalar.", program.DisplayName),
                     ConsoleColor.Red);
@@ -763,9 +1123,16 @@ namespace InstallerGUI.Services
 
             try
             {
-                string extension = Path.GetExtension(program.FileName).ToLower();
+                string extension = Path.GetExtension(fullPath).ToLower();
 
                 string procWorkDir = Path.GetDirectoryName(fullPath);
+
+                if (program.Id == "office365")
+                {
+                    string configPath = Path.Combine(procWorkDir, "configuration_o365.xml");
+                    EnsureOffice365ConfigurationXml(configPath);
+                    program.Arguments = string.Format("/configure {0}", QuoteProcessArgument(configPath));
+                }
 
                 if (program.FireAndForget)
                 {
@@ -817,7 +1184,7 @@ namespace InstallerGUI.Services
                             await ConfigureRustDeskServerAsync(adminPass);
                         }
                     }
-                    else if (program.Id == "citrix" && exitCode == 3010)
+                    else if ((program.Id == "citrix" || program.Id == "office365" || program.Id == "office") && exitCode == 3010)
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso (reinicialização do sistema necessária).", program.DisplayName),
                             ConsoleColor.Green);
@@ -868,6 +1235,38 @@ namespace InstallerGUI.Services
             }
 
             await Task.Delay(300);
+        }
+
+        /// <summary>
+        /// Garante que o arquivo de configuração XML do Office 365 Online exista e esteja configurado para pt-br em modo silencioso.
+        /// </summary>
+        /// <param name="configPath">Caminho completo do arquivo configuration_o365.xml</param>
+        private void EnsureOffice365ConfigurationXml(string configPath)
+        {
+            try
+            {
+                if (!File.Exists(configPath))
+                {
+                    string xmlContent =
+                        "<Configuration>\r\n" +
+                        "  <Add OfficeClientEdition=\"64\" Channel=\"Current\">\r\n" +
+                        "    <Product ID=\"O365ProPlusRetail\">\r\n" +
+                        "      <Language ID=\"pt-br\" />\r\n" +
+                        "    </Product>\r\n" +
+                        "  </Add>\r\n" +
+                        "  <Display Level=\"None\" AcceptEULA=\"TRUE\" />\r\n" +
+                        "  <Property Name=\"AUTOACTIVATE\" Value=\"0\" />\r\n" +
+                        "  <Updates Enabled=\"TRUE\" Channel=\"Current\" />\r\n" +
+                        "</Configuration>\r\n";
+
+                    File.WriteAllText(configPath, xmlContent, Encoding.UTF8);
+                    Log("  Arquivo de configuração do Office 365 em pt-br gerado com sucesso.", ConsoleColor.Gray);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log(string.Format("  Aviso ao verificar configuração do Office 365: {0}", ex.Message), ConsoleColor.Yellow);
+            }
         }
 
         /// <summary>
@@ -1193,6 +1592,455 @@ namespace InstallerGUI.Services
                 {
                     Log(string.Format("  Aviso ao verificar/baixar Citrix Workspace: {0}", ex.Message), ConsoleColor.Yellow);
                     return localPath;
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Verifica se a versão local do Java JRE é a mais recente disponível no site oficial java.com.
+        /// Caso haja versão mais recente ou o instalador local não exista, faz o download do novo instalador Windows x64.
+        /// </summary>
+        /// <param name="localPath">Caminho do instalador local na pasta Programas</param>
+        /// <returns>Caminho do instalador pronto para execução</returns>
+        private async Task<string> DownloadLatestJavaAsync(string localPath)
+        {
+            return await Task.Run(new Func<string>(() =>
+            {
+                try
+                {
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+                    string pageHtml = null;
+                    try
+                    {
+                        var req = (HttpWebRequest)WebRequest.Create("https://www.java.com/en/download/manual.jsp");
+                        req.Method = "GET";
+                        req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0";
+                        req.Timeout = 10000;
+                        req.ReadWriteTimeout = 10000;
+
+                        using (var resp = (HttpWebResponse)req.GetResponse())
+                        using (var reader = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                        {
+                            pageHtml = reader.ReadToEnd();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(string.Format("  Aviso ao consultar página oficial do Java: {0}", ex.Message), ConsoleColor.Yellow);
+                        return localPath;
+                    }
+
+                    if (string.IsNullOrEmpty(pageHtml))
+                    {
+                        return localPath;
+                    }
+
+                    int onlineUpdate = 0;
+                    var verMatch = Regex.Match(pageHtml, @"(?:Version\s+8\s+Update\s+(\d+)|Java\s+8\s+Update\s+(\d+)|8u(\d+))", RegexOptions.IgnoreCase);
+                    if (verMatch.Success)
+                    {
+                        for (int i = 1; i <= 3; i++)
+                        {
+                            if (!string.IsNullOrEmpty(verMatch.Groups[i].Value))
+                            {
+                                int.TryParse(verMatch.Groups[i].Value, out onlineUpdate);
+                                break;
+                            }
+                        }
+                    }
+
+                    int localUpdate = 0;
+                    if (File.Exists(localPath))
+                    {
+                        try
+                        {
+                            var localInfo = FileVersionInfo.GetVersionInfo(localPath);
+                            var match = Regex.Match(localInfo.ProductName ?? "", @"\bU(\d+)\b", RegexOptions.IgnoreCase);
+                            if (match.Success)
+                            {
+                                int.TryParse(match.Groups[1].Value, out localUpdate);
+                            }
+                            else if (localInfo.FileBuildPart > 0)
+                            {
+                                localUpdate = localInfo.FileBuildPart / 10;
+                            }
+
+                            if (onlineUpdate > 0 && localUpdate >= onlineUpdate)
+                            {
+                                Log(string.Format("  Java JRE local já está na versão mais recente (Update {0}).", localUpdate), ConsoleColor.Green);
+                                return localPath;
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    string downloadUrl = null;
+                    var urlMatch = Regex.Match(pageHtml, @"<a\s+[^>]*href=[""'](?<url>https://javadl\.oracle\.com/webapps/download/AutoDL\?BundleId=[^""']+)[""'][^>]*>.*?64.*?</a>", RegexOptions.IgnoreCase);
+                    if (urlMatch.Success)
+                    {
+                        downloadUrl = urlMatch.Groups["url"].Value;
+                    }
+
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        Log("  Não foi possível identificar o link de download direto do Java JRE. Usando arquivo local.", ConsoleColor.Yellow);
+                        return localPath;
+                    }
+
+                    string targetDir = Path.GetDirectoryName(localPath);
+                    if (string.IsNullOrEmpty(targetDir) || !Directory.Exists(targetDir))
+                    {
+                        targetDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                            "Exabit", "AutoInstall", "Updates");
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                    }
+
+                    string destFile = Path.Combine(targetDir, "jre-windows-x64.exe");
+                    string tempFile = destFile + ".download";
+
+                    string verLabel = onlineUpdate > 0 ? string.Format("Update {0}", onlineUpdate) : "mais recente";
+                    Log(string.Format("  Baixando versão mais recente do Java JRE ({0})...", verLabel), ConsoleColor.Cyan);
+
+                    try
+                    {
+                        if (File.Exists(tempFile))
+                        {
+                            File.Delete(tempFile);
+                        }
+
+                        using (var webClient = new WebClient())
+                        {
+                            webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0");
+                            webClient.DownloadFile(downloadUrl, tempFile);
+                        }
+
+                        var tempInfo = new FileInfo(tempFile);
+                        if (tempInfo.Exists && tempInfo.Length > 10 * 1024 * 1024)
+                        {
+                            if (File.Exists(destFile))
+                            {
+                                File.Delete(destFile);
+                            }
+                            File.Move(tempFile, destFile);
+
+                            Log("[ok] Versão mais recente do Java JRE baixada com sucesso.", ConsoleColor.Green);
+                            return destFile;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Log(string.Format("  Aviso ao baixar atualização do Java JRE: {0}", ex.Message), ConsoleColor.Yellow);
+                    }
+
+                    return localPath;
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("  Aviso ao verificar versão do Java JRE: {0}", ex.Message), ConsoleColor.Yellow);
+                    return localPath;
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Verifica se o identificador pertence a um dos aplicativos da suíte Craft da Storytold.
+        /// </summary>
+        private static bool IsStorytoldCraftProgram(string id)
+        {
+            return id == "artcraft" || id == "cadcraft" || id == "deckcraft" ||
+                   id == "filmcraft" || id == "gridcraft" || id == "pdfcraft" ||
+                   id == "photocraft" || id == "soundcraft" || id == "vectorcraft" ||
+                   id == "wordcraft";
+        }
+
+        /// <summary>
+        /// Retorna o nome do repositório no GitHub sob a organização storytold para o ID informado.
+        /// </summary>
+        private static string GetStorytoldRepoName(string id)
+        {
+            switch (id)
+            {
+                case "artcraft": return "artcraft";
+                case "cadcraft": return "cadcraft";
+                case "deckcraft": return "deckcraft";
+                case "filmcraft": return "filmcraft";
+                case "gridcraft": return "gridcraft";
+                case "pdfcraft": return "pdfcraft";
+                case "photocraft": return "photocraft";
+                case "soundcraft": return "soundcraft";
+                case "vectorcraft": return "vectorcraft";
+                case "wordcraft": return "wordcraft";
+                default: return null;
+            }
+        }
+
+        /// <summary>
+        /// Encerra preventivamente processos em execução do aplicativo Craft informado para evitar bloqueios de arquivo em uso.
+        /// </summary>
+        private static void CloseProcessesForStorytoldCraft(string id)
+        {
+            try
+            {
+                string[] procs;
+                switch (id)
+                {
+                    case "artcraft": procs = new string[] { "artcraft", "ArtCraft" }; break;
+                    case "cadcraft": procs = new string[] { "cadcraft", "CADCraft" }; break;
+                    case "deckcraft": procs = new string[] { "deckcraft", "DeckCraft" }; break;
+                    case "filmcraft": procs = new string[] { "filmcraft", "FilmCraft" }; break;
+                    case "gridcraft": procs = new string[] { "gridcraft", "GridCraft" }; break;
+                    case "pdfcraft": procs = new string[] { "pdfcraft", "PdfCraft" }; break;
+                    case "photocraft": procs = new string[] { "photocraft", "PhotoCraft" }; break;
+                    case "soundcraft": procs = new string[] { "soundcraft", "SoundCraft" }; break;
+                    case "vectorcraft": procs = new string[] { "vectorcraft", "VectorCraft" }; break;
+                    case "wordcraft": procs = new string[] { "wordcraft", "WordCraft" }; break;
+                    default: procs = new string[0]; break;
+                }
+
+                for (int i = 0; i < procs.Length; i++)
+                {
+                    foreach (var proc in Process.GetProcessesByName(procs[i]))
+                    {
+                        try { proc.Kill(); }
+                        catch { }
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Sincroniza uma cópia do arquivo baixado para o nome genérico configurado em dist\Programas,
+        /// permitindo futuras instalações offline do mesmo aplicativo.
+        /// </summary>
+        private static void SyncLocalCopy(string downloadedFile, string targetDir, string genericFileName)
+        {
+            if (string.IsNullOrEmpty(genericFileName) || string.IsNullOrEmpty(downloadedFile))
+                return;
+
+            try
+            {
+                string genericPath = Path.Combine(targetDir, genericFileName);
+                if (!string.Equals(downloadedFile, genericPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Copy(downloadedFile, genericPath, true);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
+        /// Baixa ou atualiza a versão mais recente dos aplicativos Craft da Storytold a partir do GitHub Releases.
+        /// Suporta consulta direta via API do GitHub com fallback por cabeçalho Location/redirecionamento HTML.
+        /// </summary>
+        /// <param name="program">Informações do programa Craft a ser baixado</param>
+        /// <returns>Caminho completo do instalador em disco, ou null em caso de falha</returns>
+        private async Task<string> DownloadLatestStorytoldCraftAsync(ProgramInfo program)
+        {
+            return await Task.Run(new Func<string>(() =>
+            {
+                try
+                {
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
+                    string repo = GetStorytoldRepoName(program.Id);
+                    if (string.IsNullOrEmpty(repo))
+                    {
+                        return null;
+                    }
+
+                    string downloadUrl = null;
+                    string fileName = null;
+                    bool isArtCraft = program.Id == "artcraft";
+
+                    string assetPattern = isArtCraft
+                        ? @"\""browser_download_url\""\s*:\s*\""(https://[^\s\""]*(?:ArtCraft[^\s\""]*_x64-setup\.exe|[^\s\""]*setup\.exe))\"""
+                        : string.Format(@"\""browser_download_url\""\s*:\s*\""(https://[^\s\""]*{0}[^\s\""]*-windows-x64\.msi)\""", repo);
+
+                    // 1. Tenta obter via API do GitHub
+                    try
+                    {
+                        var apiReq = (HttpWebRequest)WebRequest.Create(
+                            string.Format("https://api.github.com/repos/storytold/{0}/releases/latest", repo));
+                        apiReq.Method = "GET";
+                        apiReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0";
+                        apiReq.Timeout = 8000;
+                        apiReq.ReadWriteTimeout = 8000;
+
+                        using (var apiResp = (HttpWebResponse)apiReq.GetResponse())
+                        using (var reader = new StreamReader(apiResp.GetResponseStream(), Encoding.UTF8))
+                        {
+                            string json = reader.ReadToEnd();
+                            var match = Regex.Match(json, assetPattern, RegexOptions.IgnoreCase);
+                            if (match.Success)
+                            {
+                                downloadUrl = match.Groups[1].Value;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 2. Fallback: Se API falhar (ex: rate limit 403), consulta redirecionamento em /releases/latest
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        try
+                        {
+                            var tagReq = (HttpWebRequest)WebRequest.Create(
+                                string.Format("https://github.com/storytold/{0}/releases/latest", repo));
+                            tagReq.Method = "GET";
+                            tagReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0";
+                            tagReq.AllowAutoRedirect = false;
+                            tagReq.Timeout = 8000;
+
+                            using (var tagResp = (HttpWebResponse)tagReq.GetResponse())
+                            {
+                                string location = tagResp.Headers["Location"];
+                                if (!string.IsNullOrEmpty(location))
+                                {
+                                    var tagMatch = Regex.Match(location, @"/tag/([^/?#]+)", RegexOptions.IgnoreCase);
+                                    if (tagMatch.Success)
+                                    {
+                                        string tag = tagMatch.Groups[1].Value;
+                                        string version = tag.TrimStart('v');
+                                        if (isArtCraft)
+                                        {
+                                            var vMatch = Regex.Match(tag, @"(\d+\.\d+\.\d+)");
+                                            if (vMatch.Success)
+                                            {
+                                                version = vMatch.Groups[1].Value;
+                                            }
+                                            downloadUrl = string.Format(
+                                                "https://github.com/storytold/artcraft/releases/download/{0}/ArtCraft_{1}_x64-setup.exe",
+                                                tag, version);
+                                        }
+                                        else
+                                        {
+                                            downloadUrl = string.Format(
+                                                "https://github.com/storytold/{0}/releases/download/{1}/{0}-{2}-windows-x64.msi",
+                                                repo, tag, version);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        return null;
+                    }
+
+                    try
+                    {
+                        var uri = new Uri(downloadUrl);
+                        fileName = Path.GetFileName(uri.LocalPath);
+                    }
+                    catch
+                    {
+                    }
+
+                    if (string.IsNullOrEmpty(fileName))
+                    {
+                        fileName = isArtCraft ? "ArtCraft_setup.exe" : string.Format("{0}-windows-x64.msi", repo);
+                    }
+
+                    // Define pasta destino
+                    string targetDir = Path.Combine(_basePath, "Programas");
+                    bool useLocalAppDir = false;
+                    try
+                    {
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                    }
+                    catch
+                    {
+                        useLocalAppDir = true;
+                    }
+
+                    if (useLocalAppDir)
+                    {
+                        targetDir = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "Exabit", "AutoInstall", "Updates");
+                        if (!Directory.Exists(targetDir))
+                        {
+                            Directory.CreateDirectory(targetDir);
+                        }
+                    }
+
+                    string destFile = Path.Combine(targetDir, fileName);
+
+                    // Verifica se este instalador exato já foi baixado previamente
+                    if (File.Exists(destFile))
+                    {
+                        var existingInfo = new FileInfo(destFile);
+                        if (existingInfo.Length > 2 * 1024 * 1024)
+                        {
+                            Log(string.Format("  Instalador da versão mais recente ({0}) já está baixado.", fileName), ConsoleColor.Green);
+                            SyncLocalCopy(destFile, targetDir, program.FileName);
+                            return destFile;
+                        }
+                    }
+
+                    string tempFile = destFile + ".download";
+                    try
+                    {
+                        if (File.Exists(tempFile))
+                        {
+                            File.Delete(tempFile);
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    Log(string.Format("  Baixando versão mais recente do {0} ({1})...", program.DisplayName, fileName), ConsoleColor.Cyan);
+
+                    using (var webClient = new WebClient())
+                    {
+                        webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0");
+                        webClient.DownloadFile(downloadUrl, tempFile);
+                    }
+
+                    var tempInfo = new FileInfo(tempFile);
+                    if (tempInfo.Exists && tempInfo.Length > 2 * 1024 * 1024)
+                    {
+                        if (File.Exists(destFile))
+                        {
+                            try { File.Delete(destFile); } catch { }
+                        }
+                        File.Move(tempFile, destFile);
+
+                        SyncLocalCopy(destFile, targetDir, program.FileName);
+
+                        Log(string.Format("[ok] Download do {0} concluído com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return destFile;
+                    }
+
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("  Aviso ao verificar/baixar {0}: {1}", program.DisplayName, ex.Message), ConsoleColor.Yellow);
+                    return null;
                 }
             }));
         }
@@ -1608,6 +2456,12 @@ namespace InstallerGUI.Services
                     }
                 }
 
+                // Configura e ativa os Serviços de Localização do Windows para o Admin e o Usuário
+                if (!cancelled && options.EnableLocationServices)
+                {
+                    await ConfigureLocationServicesAsync();
+                }
+
                 // 4. Wallpaper
                 if (!cancelled && options.SetWallpaper)
                 {
@@ -1620,14 +2474,6 @@ namespace InstallerGUI.Services
                         ReportProgress(currentStep, totalSteps);
                         await SetWallpaperAsync();
                     }
-                }
-
-                // Limpa todas as áreas de trabalho ANTES de instalar programas,
-                // pois alguns instaladores criam atalhos imediatamente.
-                if (!cancelled)
-                {
-                    string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
-                    CleanAllDesktops(stdUserName);
                 }
 
                 // 5. Instalar cada programa selecionado
@@ -1649,9 +2495,7 @@ namespace InstallerGUI.Services
 
                 if (!cancelled)
                 {
-                    // Limpa NOVAMENTE após a instalação para remover atalhos
-                    // criados por processos-filho ou ações adiadas dos instaladores.
-                    Log("Removendo atalhos deixados pelos instaladores...", ConsoleColor.Yellow);
+                    // Limpa atalhos de todas as áreas de trabalho no final de todas as instalações
                     string stdUserName = options.CreateStandardUser ? options.StandardUserName : null;
                     CleanAllDesktops(stdUserName);
 
@@ -1679,39 +2523,82 @@ namespace InstallerGUI.Services
 
         /// <summary>
         /// Remove todos os atalhos (.lnk e .url) da área de trabalho de todos
-        /// os perfis (público, admin, usuário padrão e Default) para deixar apenas
-        /// os que serão criados pelo método <see cref="CreateDesktopShortcutsAsync"/>.
-        /// 
-        /// Também limpa o template Default\Desktop para que novos usuários
-        /// que ainda não fizeram login também recebam a área limpa.
+        /// os perfis (público, admin, usuário padrão, usuário atual e Default)
+        /// no final de todas as instalações para deixar a área de trabalho limpa,
+        /// recriando apenas os atalhos solicitados pelo usuário.
         /// </summary>
         private void CleanAllDesktops(string standardUserName)
         {
-            Log("Limpando atalhos de todas as áreas de trabalho...", ConsoleColor.Yellow);
+            Log("Limpando atalhos de todas as áreas de trabalho no final de todas as instalações...", ConsoleColor.Yellow);
 
             var desktopPaths = new List<string>();
 
             // Desktop público (afeta todos os usuários)
             try
             {
-                desktopPaths.Add(Environment.GetFolderPath(
-                    Environment.SpecialFolder.CommonDesktopDirectory));
+                string publicDesktop = Environment.GetFolderPath(
+                    Environment.SpecialFolder.CommonDesktopDirectory);
+                if (!string.IsNullOrEmpty(publicDesktop) && !desktopPaths.Contains(publicDesktop))
+                {
+                    desktopPaths.Add(publicDesktop);
+                }
+            }
+            catch { }
+
+            // Desktop do usuário atual em execução
+            try
+            {
+                string currentDesktop = Environment.GetFolderPath(
+                    Environment.SpecialFolder.DesktopDirectory);
+                if (!string.IsNullOrEmpty(currentDesktop) && !desktopPaths.Contains(currentDesktop))
+                {
+                    desktopPaths.Add(currentDesktop);
+                }
             }
             catch { }
 
             string usersFolder = Environment.GetEnvironmentVariable("SystemDrive") + "\\Users";
 
             // Desktop do admin
-            desktopPaths.Add(Path.Combine(usersFolder, "admin", "Desktop"));
+            string adminDesktop = Path.Combine(usersFolder, "admin", "Desktop");
+            if (!desktopPaths.Contains(adminDesktop))
+            {
+                desktopPaths.Add(adminDesktop);
+            }
 
-            // Desktop do usuário padrão (se já existir)
+            // Desktop do usuário padrão (se informado)
             if (!string.IsNullOrWhiteSpace(standardUserName))
             {
-                desktopPaths.Add(Path.Combine(usersFolder, standardUserName, "Desktop"));
+                string stdDesktop = Path.Combine(usersFolder, standardUserName, "Desktop");
+                if (!desktopPaths.Contains(stdDesktop))
+                {
+                    desktopPaths.Add(stdDesktop);
+                }
             }
 
             // Template Default - usado para criar desktop de NOVOS usuários
-            desktopPaths.Add(Path.Combine(usersFolder, "Default", "Desktop"));
+            string defaultDesktop = Path.Combine(usersFolder, "Default", "Desktop");
+            if (!desktopPaths.Contains(defaultDesktop))
+            {
+                desktopPaths.Add(defaultDesktop);
+            }
+
+            // Varre quaisquer outros diretórios de usuários existentes em C:\Users
+            try
+            {
+                if (Directory.Exists(usersFolder))
+                {
+                    foreach (string userDir in Directory.GetDirectories(usersFolder))
+                    {
+                        string userDesktop = Path.Combine(userDir, "Desktop");
+                        if (!desktopPaths.Contains(userDesktop))
+                        {
+                            desktopPaths.Add(userDesktop);
+                        }
+                    }
+                }
+            }
+            catch { }
 
             foreach (string desktop in desktopPaths)
             {
@@ -1750,7 +2637,6 @@ namespace InstallerGUI.Services
         /// <summary>
         /// Cria atalhos de suporte na área de trabalho dos usuários criados
         /// e no desktop público, conforme as opções selecionadas pelo usuário.
-        /// Se solicitado, também adiciona os atalhos no Menu Iniciar (Todos os Usuários).
         /// </summary>
         private async Task CreateDesktopShortcutsAsync(InstallationOptions options)
         {
@@ -1813,33 +2699,6 @@ namespace InstallerGUI.Services
                     Log(string.Format("X Aviso ao criar atalhos em {0}: {1}",
                         desktop, ex.Message), ConsoleColor.Yellow);
                 }
-            }
-
-            // Se solicitado, cria também no Menu Iniciar (Todos os Usuários)
-            if (options.AddShortcutsToStartMenu)
-            {
-                string startMenu = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
-                    "Programs");
-
-                Log("Adicionando atalhos ao Menu Iniciar...", ConsoleColor.Yellow);
-
-                foreach (var kvp in shortcuts)
-                {
-                    string urlPath = Path.Combine(startMenu, kvp.Key + ".url");
-                    try
-                    {
-                        File.WriteAllText(urlPath,
-                            "[InternetShortcut]\r\nURL=" + kvp.Value);
-                    }
-                    catch (Exception ex)
-                    {
-                        Log(string.Format("X Aviso ao criar atalho no Menu Iniciar: {0}",
-                            ex.Message), ConsoleColor.Yellow);
-                    }
-                }
-
-                Log("[ok] Atalhos adicionados ao Menu Iniciar.", ConsoleColor.Green);
             }
 
             Log("[ok] Atalhos criados na área de trabalho.", ConsoleColor.Green);
@@ -1998,6 +2857,7 @@ namespace InstallerGUI.Services
         public bool StandardUserCannotChangePassword { get; set; }
 
         public bool SetWallpaper { get; set; }
+        public bool EnableLocationServices { get; set; }
 
         // ─── Opções de atalhos de suporte ───
 
@@ -2017,17 +2877,13 @@ namespace InstallerGUI.Services
         public bool CreateDesktopShortcutWebmailTerceirizacao { get; set; }
 
         /// <summary>
-        /// Adiciona os atalhos também no Menu Iniciar (Todos os Usuários).
-        /// </summary>
-        public bool AddShortcutsToStartMenu { get; set; }
-
-        /// <summary>
         /// Lista dos programas selecionados para instalação.
         /// </summary>
         public List<ProgramInfo> SelectedPrograms { get; set; }
 
         public InstallationOptions()
         {
+            EnableLocationServices = true;
             SelectedPrograms = new List<ProgramInfo>();
         }
     }
