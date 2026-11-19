@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Media;
 using System.Net;
@@ -67,6 +68,10 @@ namespace InstallerGUI.Forms
         private ThinProgressBar _downloadProgressBar;
         private Label _lblDownloadStatus;
         private RichTextBox _txtLog;
+        private DarkScrollBar _scrollBarPrograms;
+        private DarkScrollBar _scrollBarLog;
+        private Action _updateProgramListLayout;
+        private bool _isSyncingLogScroll;
 
         // ─── Controles das Abas (Estilo Bootstrap With Tabs) ───
         private Button _btnTabConfig;
@@ -169,6 +174,13 @@ namespace InstallerGUI.Forms
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+        private const int EM_GETLINECOUNT = 0x00BA;
+        private const int EM_LINESCROLL = 0x00B6;
+        private const int EM_GETFIRSTVISIBLELINE = 0x00CE;
+
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
         private const int DWMWA_CAPTION_COLOR = 35;
@@ -214,6 +226,11 @@ namespace InstallerGUI.Forms
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            if (_updateProgramListLayout != null)
+            {
+                _updateProgramListLayout();
+            }
+            SyncLogScrollBar();
             DisplayInitialSystemInfoAsync();
         }
 
@@ -267,7 +284,7 @@ namespace InstallerGUI.Forms
             leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(25 * scale)));
 
             leftSide.Controls.Add(BuildTabsPanel(scale), 0, 0);
-            leftSide.Controls.Add(BuildLogPanel(), 0, 1);
+            leftSide.Controls.Add(BuildLogPanel(scale), 0, 1);
             leftSide.Controls.Add(BuildDownloadProgressPanel(scale), 0, 2);
 
             content.Controls.Add(leftSide, 0, 0);
@@ -759,7 +776,7 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria o painel de seleção de programas com checkboxes e scroll.
+        /// Cria o painel de seleção de programas com checkboxes e barra de rolagem moderna personalizada.
         /// </summary>
         private GroupBox BuildProgramsPanel(float scale)
         {
@@ -841,18 +858,52 @@ namespace InstallerGUI.Forms
             btnPanel.Controls.Add(btnSelectAll, 0, 0);
             btnPanel.Controls.Add(btnClearAll, 1, 0);
 
-            // ─── Lista de checkboxes com scroll vertical (um por linha) ───
-            _pnlPrograms = new Panel
+            // ─── Container viewport para a lista de programas com barra de rolagem personalizada ───
+            var pnlViewport = new Panel
             {
                 Dock = DockStyle.Fill,
-                AutoScroll = true,
-                AutoScrollMargin = new Size(0, (int)(8 * scale)),
+                BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            EnableDoubleBuffering(pnlViewport);
+
+            _scrollBarPrograms = new DarkScrollBar
+            {
+                Dock = DockStyle.Right,
+                Width = (int)(10 * scale),
+                TrackColor = CorPainel,
+                ThumbColor = CorDestaque,
+                SmallChange = (int)(24 * scale),
+                Margin = Padding.Empty,
+            };
+
+            // ─── Lista interna de checkboxes (sem barra nativa do Win32) ───
+            _pnlPrograms = new Panel
+            {
+                Location = new Point(0, 0),
                 BackColor = CorPainel,
                 BorderStyle = BorderStyle.None,
+                AutoScroll = false,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
-                Margin = new Padding(0),
+                Margin = Padding.Empty,
                 Padding = new Padding(0, (int)(4 * scale), 0, (int)(4 * scale)),
             };
+            EnableDoubleBuffering(_pnlPrograms);
+
+            // Rolagem fluida com a roda do mouse em qualquer ponto do viewport ou dos controles
+            Action<MouseEventArgs> handleProgramMouseWheel = (e) =>
+            {
+                if (_scrollBarPrograms != null && _scrollBarPrograms.Maximum > 0)
+                {
+                    int step = (int)(24 * scale);
+                    int delta = -Math.Sign(e.Delta) * step;
+                    _scrollBarPrograms.ScrollBy(delta);
+                }
+            };
+
+            pnlViewport.MouseWheel += (s, e) => handleProgramMouseWheel(e);
+            _pnlPrograms.MouseWheel += (s, e) => handleProgramMouseWheel(e);
 
             int top = (int)(6 * scale);
             int leftMargin = (int)(10 * scale);
@@ -869,9 +920,11 @@ namespace InstallerGUI.Forms
                     var divider = new Panel
                     {
                         Location = new Point(leftMargin, top),
-                        Size = new Size((int)(275 * scale), 1),
+                        Size = new Size(Math.Max(100, (int)(320 * scale) - leftMargin - (int)(15 * scale)), 1),
                         BackColor = Color.FromArgb(70, 70, 70),
+                        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                     };
+                    divider.MouseWheel += (s, e) => handleProgramMouseWheel(e);
                     _pnlPrograms.Controls.Add(divider);
                     top += (int)(6 * scale);
 
@@ -884,6 +937,7 @@ namespace InstallerGUI.Forms
                         Location = new Point(leftMargin, top),
                         AutoSize = true,
                     };
+                    lblCategory.MouseWheel += (s, e) => handleProgramMouseWheel(e);
                     _pnlPrograms.Controls.Add(lblCategory);
                     top += lblCategory.Height + (int)(4 * scale);
                 }
@@ -902,11 +956,63 @@ namespace InstallerGUI.Forms
                     Location = new Point(leftMargin, top),
                 };
                 chk.Size = chk.GetPreferredSize(new Size(int.MaxValue, int.MaxValue));
+                chk.MouseWheel += (s, e) => handleProgramMouseWheel(e);
+
+                var capturedChk = chk;
+                capturedChk.GotFocus += (s, e) =>
+                {
+                    int chkTop = capturedChk.Top + _pnlPrograms.Top;
+                    int chkBottom = chkTop + capturedChk.Height;
+                    if (chkTop < 0)
+                    {
+                        _scrollBarPrograms.Value = Math.Max(0, capturedChk.Top - (int)(8 * scale));
+                    }
+                    else if (pnlViewport.ClientSize.Height > 0 && chkBottom > pnlViewport.ClientSize.Height)
+                    {
+                        int targetVal = capturedChk.Bottom - pnlViewport.ClientSize.Height + (int)(8 * scale);
+                        _scrollBarPrograms.Value = Math.Min(_scrollBarPrograms.Maximum, targetVal);
+                    }
+                };
+
                 _pnlPrograms.Controls.Add(chk);
                 top += chk.Height + (int)(3 * scale);
             }
 
-            tblContainer.Controls.Add(_pnlPrograms, 0, 0);
+            int totalContentHeight = top + (int)(12 * scale);
+            _pnlPrograms.Height = totalContentHeight;
+
+            _updateProgramListLayout = () =>
+            {
+                if (pnlViewport.ClientSize.Width <= 0 || pnlViewport.ClientSize.Height <= 0) return;
+
+                int scrollWidth = _scrollBarPrograms.Width;
+                int availW = Math.Max(100, pnlViewport.ClientSize.Width - scrollWidth);
+                _pnlPrograms.Width = availW;
+
+                int viewH = pnlViewport.ClientSize.Height;
+                int maxScroll = Math.Max(0, totalContentHeight - viewH);
+                _scrollBarPrograms.Maximum = maxScroll;
+                _scrollBarPrograms.LargeChange = Math.Max(1, viewH);
+
+                if (_scrollBarPrograms.Value > maxScroll)
+                {
+                    _scrollBarPrograms.Value = maxScroll;
+                }
+
+                _pnlPrograms.Top = -_scrollBarPrograms.Value;
+            };
+
+            pnlViewport.Resize += (s, e) => _updateProgramListLayout();
+            _scrollBarPrograms.ValueChanged += (s, e) =>
+            {
+                _pnlPrograms.Top = -_scrollBarPrograms.Value;
+            };
+
+            pnlViewport.Controls.Add(_pnlPrograms);
+            pnlViewport.Controls.Add(_scrollBarPrograms);
+            _scrollBarPrograms.BringToFront();
+
+            tblContainer.Controls.Add(pnlViewport, 0, 0);
             tblContainer.Controls.Add(btnPanel, 0, 1);
             group.Controls.Add(tblContainer);
 
@@ -967,15 +1073,27 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria o painel de log onde as mensagens da instalação aparecem.
+        /// Cria o painel de log onde as mensagens da instalação aparecem,
+        /// com barra de rolagem personalizada na mesma cor do fundo e thumb laranja.
         /// </summary>
-        private Panel BuildLogPanel()
+        private Panel BuildLogPanel(float scale)
         {
             var panel = new Panel
             {
                 Dock = DockStyle.Fill,
-                BackColor = CorPainel,
-                Margin = new Padding(0, 5, 0, 0),
+                BackColor = Color.FromArgb(20, 20, 20),
+                Margin = new Padding(0, (int)(5 * scale), 0, 0),
+            };
+
+            _scrollBarLog = new DarkScrollBar
+            {
+                Dock = DockStyle.Right,
+                Width = (int)(10 * scale),
+                TrackColor = Color.FromArgb(20, 20, 20),
+                ThumbColor = CorDestaque,
+                SmallChange = 1,
+                LargeChange = 5,
+                Margin = Padding.Empty,
             };
 
             _txtLog = new RichTextBox
@@ -987,9 +1105,51 @@ namespace InstallerGUI.Forms
                 ReadOnly = true,
                 BorderStyle = BorderStyle.None,
                 WordWrap = true,
+                ScrollBars = RichTextBoxScrollBars.None, // Oculta barra nativa branca do Win32
             };
 
+            _scrollBarLog.ValueChanged += (s, e) =>
+            {
+                if (_isSyncingLogScroll || !_txtLog.IsHandleCreated) return;
+                try
+                {
+                    _isSyncingLogScroll = true;
+                    int currentFirst = SendMessage(_txtLog.Handle, EM_GETFIRSTVISIBLELINE, IntPtr.Zero, IntPtr.Zero).ToInt32();
+                    int targetFirst = _scrollBarLog.Value;
+                    int delta = targetFirst - currentFirst;
+                    if (delta != 0)
+                    {
+                        SendMessage(_txtLog.Handle, EM_LINESCROLL, IntPtr.Zero, (IntPtr)delta);
+                    }
+                }
+                finally
+                {
+                    _isSyncingLogScroll = false;
+                }
+            };
+
+            _txtLog.MouseWheel += (s, e) =>
+            {
+                if (_scrollBarLog != null && _scrollBarLog.Maximum > 0)
+                {
+                    int step = 3;
+                    int delta = -Math.Sign(e.Delta) * step;
+                    _scrollBarLog.ScrollBy(delta);
+                }
+            };
+
+            _txtLog.KeyDown += (s, e) =>
+            {
+                BeginInvoke(new Action(SyncLogScrollBar));
+            };
+
+            _txtLog.Resize += (s, e) => SyncLogScrollBar();
+            _txtLog.TextChanged += (s, e) => SyncLogScrollBar();
+
             panel.Controls.Add(_txtLog);
+            panel.Controls.Add(_scrollBarLog);
+            _scrollBarLog.BringToFront();
+
             return panel;
         }
 
@@ -1317,6 +1477,7 @@ namespace InstallerGUI.Forms
         private async void DisplayInitialSystemInfoAsync()
         {
             _txtLog.Clear();
+            SyncLogScrollBar();
             AppendLog("======================================================================", ConsoleColor.Cyan);
             AppendLog(" INFORMAÇÕES DO SISTEMA", ConsoleColor.Cyan);
             AppendLog("======================================================================", ConsoleColor.Cyan);
@@ -1475,6 +1636,54 @@ namespace InstallerGUI.Forms
             _txtLog.SelectionColor = cor;
             _txtLog.AppendText(message + "\n");
             _txtLog.ScrollToCaret();
+            SyncLogScrollBar();
+        }
+
+        /// <summary>
+        /// Sincroniza o estado e a posição da barra de rolagem personalizada com as linhas do RichTextBox de log.
+        /// </summary>
+        private void SyncLogScrollBar()
+        {
+            if (_txtLog == null || _scrollBarLog == null || !_txtLog.IsHandleCreated) return;
+            if (_isSyncingLogScroll) return;
+
+            try
+            {
+                _isSyncingLogScroll = true;
+
+                int lineCount = SendMessage(_txtLog.Handle, EM_GETLINECOUNT, IntPtr.Zero, IntPtr.Zero).ToInt32();
+                int firstVisible = SendMessage(_txtLog.Handle, EM_GETFIRSTVISIBLELINE, IntPtr.Zero, IntPtr.Zero).ToInt32();
+
+                int fontHeight = _txtLog.Font.Height;
+                int visibleLines = fontHeight > 0 ? Math.Max(1, _txtLog.ClientSize.Height / fontHeight) : 10;
+
+                int maxScroll = Math.Max(0, lineCount - visibleLines);
+                _scrollBarLog.Maximum = maxScroll;
+                _scrollBarLog.LargeChange = visibleLines;
+                _scrollBarLog.SmallChange = 1;
+                _scrollBarLog.Value = Math.Min(maxScroll, Math.Max(0, firstVisible));
+            }
+            finally
+            {
+                _isSyncingLogScroll = false;
+            }
+        }
+
+        /// <summary>
+        /// Ativa DoubleBuffering em controles de container (Panel) para rolagem fluida e sem oscilações visuais.
+        /// </summary>
+        private static void EnableDoubleBuffering(Control control)
+        {
+            if (control == null) return;
+            try
+            {
+                typeof(Control).InvokeMember("DoubleBuffered",
+                    BindingFlags.SetProperty | BindingFlags.Instance | BindingFlags.NonPublic,
+                    null, control, new object[] { true });
+            }
+            catch
+            {
+            }
         }
 
         /// <summary>
@@ -1886,6 +2095,335 @@ namespace InstallerGUI.Forms
                         g.FillRectangle(fillBrush, 0, 0, fillWidth, Height);
                     }
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Barra de rolagem vertical personalizada com tema escuro elegante.
+    /// O trilho é renderizado na mesma cor de fundo do container hospedeiro
+    /// e a parte clicável (thumb) em formato de pílula arredondada na cor laranja de destaque.
+    /// </summary>
+    public class DarkScrollBar : Control
+    {
+        private int _minimum = 0;
+        private int _maximum = 100;
+        private int _value = 0;
+        private int _largeChange = 10;
+        private int _smallChange = 1;
+
+        private Color _trackColor = Color.FromArgb(40, 40, 40);
+        private Color _thumbColor = Color.FromArgb(243, 146, 0);
+        private Color _thumbHoverColor = Color.FromArgb(255, 170, 40);
+        private Color _thumbPressedColor = Color.FromArgb(220, 125, 0);
+
+        private bool _isHovered = false;
+        private bool _isDragging = false;
+        private int _dragStartY = 0;
+        private int _dragStartValue = 0;
+
+        /// <summary>
+        /// Evento disparado quando o valor de rolagem é alterado.
+        /// </summary>
+        public event EventHandler ValueChanged;
+
+        public DarkScrollBar()
+        {
+            SetStyle(ControlStyles.UserPaint |
+                     ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.ResizeRedraw |
+                     ControlStyles.SupportsTransparentBackColor, true);
+            SetStyle(ControlStyles.Selectable, false);
+            Width = 10;
+            Cursor = Cursors.Default;
+            BackColor = Color.FromArgb(40, 40, 40);
+        }
+
+        public int Minimum
+        {
+            get { return _minimum; }
+            set
+            {
+                if (_minimum != value)
+                {
+                    _minimum = value;
+                    if (_value < _minimum) _value = _minimum;
+                    Invalidate();
+                }
+            }
+        }
+
+        public int Maximum
+        {
+            get { return _maximum; }
+            set
+            {
+                if (_maximum != value)
+                {
+                    _maximum = value;
+                    if (_value > _maximum) _value = _maximum;
+                    Invalidate();
+                }
+            }
+        }
+
+        public int Value
+        {
+            get { return _value; }
+            set
+            {
+                int clamped = Math.Max(_minimum, Math.Min(_maximum, value));
+                if (_value != clamped)
+                {
+                    _value = clamped;
+                    Invalidate();
+                    if (ValueChanged != null)
+                    {
+                        ValueChanged(this, EventArgs.Empty);
+                    }
+                }
+            }
+        }
+
+        public int LargeChange
+        {
+            get { return _largeChange; }
+            set
+            {
+                if (_largeChange != value && value > 0)
+                {
+                    _largeChange = value;
+                    Invalidate();
+                }
+            }
+        }
+
+        public int SmallChange
+        {
+            get { return _smallChange; }
+            set
+            {
+                if (_smallChange != value && value > 0)
+                {
+                    _smallChange = value;
+                }
+            }
+        }
+
+        public Color TrackColor
+        {
+            get { return _trackColor; }
+            set
+            {
+                _trackColor = value;
+                BackColor = value;
+                Invalidate();
+            }
+        }
+
+        public Color ThumbColor
+        {
+            get { return _thumbColor; }
+            set
+            {
+                _thumbColor = value;
+                Invalidate();
+            }
+        }
+
+        public Color ThumbHoverColor
+        {
+            get { return _thumbHoverColor; }
+            set
+            {
+                _thumbHoverColor = value;
+                Invalidate();
+            }
+        }
+
+        public Color ThumbPressedColor
+        {
+            get { return _thumbPressedColor; }
+            set
+            {
+                _thumbPressedColor = value;
+                Invalidate();
+            }
+        }
+
+        public void ScrollBy(int delta)
+        {
+            Value = Math.Max(_minimum, Math.Min(_maximum, _value + delta));
+        }
+
+        private Rectangle GetThumbRectangle()
+        {
+            int range = _maximum - _minimum;
+            if (range <= 0 || Height <= 0)
+            {
+                return Rectangle.Empty;
+            }
+
+            int trackH = Height;
+            float visibleRatio = (float)_largeChange / (float)(range + _largeChange);
+            int thumbH = (int)(visibleRatio * trackH);
+            if (thumbH < 22) thumbH = 22;
+            if (thumbH > trackH) thumbH = trackH;
+
+            int travelH = trackH - thumbH;
+            float posRatio = travelH > 0 ? (float)(_value - _minimum) / (float)range : 0f;
+            int thumbY = (int)(posRatio * travelH);
+
+            int thumbMargin = 1;
+            int thumbW = Math.Max(4, Width - (thumbMargin * 2));
+            return new Rectangle(thumbMargin, thumbY, thumbW, thumbH);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            var g = e.Graphics;
+
+            // Fundo do trilho na mesma cor do fundo do painel
+            using (var trackBrush = new SolidBrush(_trackColor))
+            {
+                g.FillRectangle(trackBrush, ClientRectangle);
+            }
+
+            if (_maximum <= _minimum) return;
+
+            Rectangle thumbRect = GetThumbRectangle();
+            if (thumbRect.IsEmpty || thumbRect.Height <= 0) return;
+
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+
+            Color thumbColorToUse = _isDragging ? _thumbPressedColor : (_isHovered ? _thumbHoverColor : _thumbColor);
+
+            int radius = Math.Min(4, thumbRect.Width / 2);
+            using (var path = CreateRoundedRectanglePath(thumbRect, radius))
+            using (var thumbBrush = new SolidBrush(thumbColorToUse))
+            {
+                g.FillPath(thumbBrush, path);
+            }
+        }
+
+        private static GraphicsPath CreateRoundedRectanglePath(Rectangle bounds, int radius)
+        {
+            var path = new GraphicsPath();
+            if (radius <= 0)
+            {
+                path.AddRectangle(bounds);
+                return path;
+            }
+
+            int diameter = radius * 2;
+            if (diameter > bounds.Width) diameter = bounds.Width;
+            if (diameter > bounds.Height) diameter = bounds.Height;
+
+            var arc = new Rectangle(bounds.Location, new Size(diameter, diameter));
+
+            path.AddArc(arc, 180, 90);
+            arc.X = bounds.Right - diameter;
+            path.AddArc(arc, 270, 90);
+            arc.Y = bounds.Bottom - diameter;
+            path.AddArc(arc, 0, 90);
+            arc.X = bounds.Left;
+            path.AddArc(arc, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button != MouseButtons.Left || _maximum <= _minimum) return;
+
+            Rectangle thumbRect = GetThumbRectangle();
+            if (thumbRect.Contains(e.Location))
+            {
+                _isDragging = true;
+                _dragStartY = e.Y;
+                _dragStartValue = _value;
+                Capture = true;
+                Invalidate();
+            }
+            else
+            {
+                if (e.Y < thumbRect.Top)
+                {
+                    Value = Math.Max(_minimum, _value - _largeChange);
+                }
+                else if (e.Y > thumbRect.Bottom)
+                {
+                    Value = Math.Min(_maximum, _value + _largeChange);
+                }
+            }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (_isDragging)
+            {
+                int trackH = Height;
+                Rectangle thumbRect = GetThumbRectangle();
+                int travelH = trackH - thumbRect.Height;
+                if (travelH > 0)
+                {
+                    int deltaY = e.Y - _dragStartY;
+                    float deltaRatio = (float)deltaY / travelH;
+                    int deltaVal = (int)Math.Round(deltaRatio * (_maximum - _minimum));
+                    Value = Math.Max(_minimum, Math.Min(_maximum, _dragStartValue + deltaVal));
+                }
+            }
+            else
+            {
+                Rectangle thumbRect = GetThumbRectangle();
+                bool hover = thumbRect.Contains(e.Location);
+                if (_isHovered != hover)
+                {
+                    _isHovered = hover;
+                    Invalidate();
+                }
+            }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            if (_isDragging)
+            {
+                _isDragging = false;
+                Capture = false;
+                Invalidate();
+            }
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            base.OnMouseEnter(e);
+            Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            _isHovered = false;
+            Invalidate();
+        }
+
+        protected override void OnMouseWheel(MouseEventArgs e)
+        {
+            base.OnMouseWheel(e);
+            int step = _smallChange > 0 ? _smallChange * 3 : 3;
+            if (e.Delta > 0)
+            {
+                Value = Math.Max(_minimum, _value - step);
+            }
+            else if (e.Delta < 0)
+            {
+                Value = Math.Min(_maximum, _value + step);
             }
         }
     }

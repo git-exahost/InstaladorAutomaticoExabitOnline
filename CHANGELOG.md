@@ -7,6 +7,22 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.66] - 2026-11-19
+
+### Adicionado & Aprimorado
+- **Barras de Rolagem Personalizadas Modernas (Tema Escuro com Thumb Laranja)**:
+  - Desenvolvido o componente visual `DarkScrollBar` com renderização vetorial suave via GDI+:
+    - **Trilho (Fundo)**: Renderizado exatamente na mesma cor de fundo do container (`CorPainel = #282828` na lista de programas e `#141414` no log de instalação), eliminando 100% as barras brancas/cinzas nativas do Windows Forms (UxTheme).
+    - **Cursor Clicável (Thumb)**: Desenhado em formato de pílula arredondada com bordas suaves na cor laranja corporativa (`CorDestaque = #F39200`), com estados táteis de hover (`#FFAA28`) e clique/arrasto (`#DC7D00`).
+  - **Lista de Seleção de Programas**:
+    - Substituído o `AutoScroll` nativo por uma arquitetura viewport de alta performance com suporte a rolagem fluida por roda do mouse em qualquer ponto do painel ou sobre qualquer checkbox/categoria.
+    - Sincronização automática com foco por teclado (Tab) e redimensionamento responsivo.
+  - **Console de Mensagens e Log**:
+    - Ocultada a barra nativa branca do `RichTextBox` e integrada a `DarkScrollBar` sincronizada via mensagens de alta precisão do Win32 (`EM_GETLINECOUNT`, `EM_GETFIRSTVISIBLELINE`, `EM_LINESCROLL`).
+    - Rolagem fluida com mouse wheel e atualização automática ao receber novas mensagens de progresso.
+
+---
+
 ## [2.0.0.65] - 2026-11-19
 
 ### Adicionado & Aprimorado
