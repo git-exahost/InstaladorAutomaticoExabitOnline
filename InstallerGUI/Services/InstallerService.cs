@@ -1378,6 +1378,11 @@ namespace InstallerGUI.Services
                 {
                     File.Delete(oldGeneric);
                 }
+                string oldX86 = Path.Combine(cacheDir, "tracedraw-setup-x86.exe");
+                if (is64 && File.Exists(oldX86))
+                {
+                    File.Delete(oldX86);
+                }
             }
             catch { }
 
@@ -1417,8 +1422,9 @@ namespace InstallerGUI.Services
                         }
                         else
                         {
-                            if (candidate.IndexOf("windows-x86-setup.exe", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                candidate.IndexOf("x86-setup.exe", StringComparison.OrdinalIgnoreCase) >= 0)
+                            if ((candidate.IndexOf("windows-x86-setup.exe", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 candidate.IndexOf("x86-setup.exe", StringComparison.OrdinalIgnoreCase) >= 0) &&
+                                candidate.IndexOf("x86_64", StringComparison.OrdinalIgnoreCase) < 0)
                             {
                                 downloadUrl = candidate;
                                 break;
@@ -1431,7 +1437,16 @@ namespace InstallerGUI.Services
                         for (int i = 0; i < matches.Count; i++)
                         {
                             string candidate = matches[i].Groups[1].Value;
-                            if (candidate.IndexOf("setup.exe", StringComparison.OrdinalIgnoreCase) >= 0)
+                            if (is64)
+                            {
+                                if (candidate.IndexOf("x86_64", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    candidate.IndexOf("x64", StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    downloadUrl = candidate;
+                                    break;
+                                }
+                            }
+                            else if (candidate.IndexOf("setup.exe", StringComparison.OrdinalIgnoreCase) >= 0)
                             {
                                 downloadUrl = candidate;
                                 break;
@@ -1474,8 +1489,8 @@ namespace InstallerGUI.Services
             if (string.IsNullOrEmpty(downloadUrl))
             {
                 downloadUrl = is64
-                    ? "https://github.com/tracedraw/tracedraw/releases/download/v0.48.0/tracedraw-0.48.0-windows-x86_64-setup.exe"
-                    : "https://github.com/tracedraw/tracedraw/releases/download/v0.48.0/tracedraw-0.48.0-windows-x86-setup.exe";
+                    ? "https://github.com/tracedraw/tracedraw/releases/download/v0.49.0/tracedraw-0.49.0-windows-x86_64-setup.exe"
+                    : "https://github.com/tracedraw/tracedraw/releases/download/v0.49.0/tracedraw-0.49.0-windows-x86-setup.exe";
             }
 
             return await DownloadFileOnlineAsync(downloadUrl, cacheFileName, program.DisplayName, 5000000);
@@ -3755,8 +3770,14 @@ namespace InstallerGUI.Services
         {
             // Monta dicionário apenas com os atalhos selecionados
             var shortcuts = new Dictionary<string, string>();
-            if (options.CreateDesktopShortcutSuporteNorte)
-                shortcuts.Add("Suporte Norte", "https://suporte.exabit.com.br");
+            if (options.CreateDesktopShortcutSuporteExabit || options.CreateDesktopShortcutSuporteNorte)
+                shortcuts.Add("Suporte Exabit", "https://suporte.exabit.com.br");
+            if (options.CreateDesktopShortcutExabit)
+                shortcuts.Add("Exabit Soluções em TI", "https://www.exabit.com.br");
+            if (options.CreateDesktopShortcutExahost)
+                shortcuts.Add("Exahost Hospedagem de Domínios", "https://www.exahost.com.br");
+            if (options.CreateDesktopShortcutRemoteNeoenergia)
+                shortcuts.Add("Remote Neoenergia", "https://remote.neoenergia.com/");
             if (options.CreateDesktopShortcutWebmailNortel)
                 shortcuts.Add("Webmail Nortel", "http://webmail.nortel.srv.br");
             if (options.CreateDesktopShortcutWebmailTerceirizacao)
@@ -4011,12 +4032,36 @@ namespace InstallerGUI.Services
         /// </summary>
         public bool CleanDesktopShortcuts { get; set; }
 
-        // ─── Opções de atalhos de suporte ───
+        // ─── Opções de atalhos corporativos ───
 
         /// <summary>
-        /// Cria atalho "Suporte Norte" na área de trabalho.
+        /// Cria atalho "Suporte Exabit" na área de trabalho.
         /// </summary>
-        public bool CreateDesktopShortcutSuporteNorte { get; set; }
+        public bool CreateDesktopShortcutSuporteExabit { get; set; }
+
+        /// <summary>
+        /// Compatibilidade com o nome anterior Suporte Norte.
+        /// </summary>
+        public bool CreateDesktopShortcutSuporteNorte
+        {
+            get { return CreateDesktopShortcutSuporteExabit; }
+            set { CreateDesktopShortcutSuporteExabit = value; }
+        }
+
+        /// <summary>
+        /// Cria atalho "Exabit Soluções em TI" na área de trabalho.
+        /// </summary>
+        public bool CreateDesktopShortcutExabit { get; set; }
+
+        /// <summary>
+        /// Cria atalho "Exahost Hospedagem de Domínios" na área de trabalho.
+        /// </summary>
+        public bool CreateDesktopShortcutExahost { get; set; }
+
+        /// <summary>
+        /// Cria atalho "Remote Neoenergia" na área de trabalho.
+        /// </summary>
+        public bool CreateDesktopShortcutRemoteNeoenergia { get; set; }
 
         /// <summary>
         /// Cria atalho "Webmail Nortel" na área de trabalho.

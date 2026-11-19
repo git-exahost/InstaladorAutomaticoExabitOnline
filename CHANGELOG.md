@@ -7,6 +7,35 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.61] - 2026-11-19
+
+### Adicionado & Aprimorado
+- **Painel de Abas Estilo Bootstrap ("With Tabs")**:
+  - Reorganizado o painel de configurações do lado esquerdo em 3 abas temáticas com navegação moderna Bootstrap dark:
+    - **Aba 1 (Ativa por padrão): Configurações do Sistema**: Nome do computador, Senha do Admin, Usuário padrão e Senha.
+    - **Aba 2: Atalhos**: Atalhos corporativos para a Área de Trabalho e opção de limpeza.
+    - **Aba 3: Opções do Windows**: Ativar serviços de localização, impedir alteração de senha e papel de parede personalizado.
+  - Indicador visual ativo inferior na cor de destaque (`CorDestaque`) e transição instantânea de conteúdo.
+- **Diagnóstico Inicial do Sistema no Log ao Abrir**:
+  - Exibição automática no evento de inicialização dos dados da máquina:
+    - Nome do Computador
+    - Nome do Usuário (com indicação de privilégio de Administrador)
+    - Endereço(s) IP locais ativos da rede
+    - Status de Conexão à Internet em tempo real (Conectado / Desconectado)
+    - Versão detalhada do Windows (Edição comercial, arquitetura 64/32 bits, release e build).
+- **Barra de Progresso Dedicada para Downloads Online**:
+  - Instalada uma nova barra de progresso contínua e rótulo de status diretamente abaixo da caixa de log/informações.
+  - O progresso de download dos programas (percentual e MB transferidos) agora é exibido exclusivamente nesta barra, desacoplando completamente da barra do lado direito.
+  - A barra do lado direito agora é 100% dedicada ao progresso geral das etapas e programas instalados (`Etapa X / Y`).
+- **Novos Atalhos Corporativos de Suporte e Serviços**:
+  - Adicionado atalho **Exabit Soluções em TI** (`https://www.exabit.com.br`).
+  - Adicionado atalho **Exahost Hospedagem de Domínios** (`https://www.exahost.com.br`).
+  - Adicionado atalho **Remote Neoenergia** (`https://remote.neoenergia.com/`).
+  - Renomeado atalho **Suporte Nortel** para **Suporte Exabit** (`https://suporte.exabit.com.br`).
+  - Mantidos atalhos Webmail Nortel e Webmail Nortel Terceirização.
+
+---
+
 ## [2.0.0.60] - 2026-11-19
 
 ### Corrigido & Aprimorado

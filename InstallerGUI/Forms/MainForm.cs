@@ -4,10 +4,12 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Media;
+using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using InstallerGUI.Models;
 using InstallerGUI.Services;
 
@@ -51,7 +53,10 @@ namespace InstallerGUI.Forms
         private CheckBox _chkStandardUserNoPwdChange;
         private CheckBox _chkCleanDesktop;
         private CheckBox _chkWallpaper;
-        private CheckBox _chkShortcutSuporteNorte;
+        private CheckBox _chkShortcutSuporteExabit;
+        private CheckBox _chkShortcutExabit;
+        private CheckBox _chkShortcutExahost;
+        private CheckBox _chkShortcutRemoteNeoenergia;
         private CheckBox _chkShortcutWebmailNortel;
         private CheckBox _chkShortcutWebmailTerceirizacao;
         private Panel _pnlPrograms;
@@ -59,7 +64,22 @@ namespace InstallerGUI.Forms
         private Button _btnStop;
         private ProgressBar _progressBar;
         private Label _lblProgress;
+        private ProgressBar _downloadProgressBar;
+        private Label _lblDownloadStatus;
         private RichTextBox _txtLog;
+
+        // ─── Controles das Abas (Estilo Bootstrap With Tabs) ───
+        private Button _btnTabConfig;
+        private Button _btnTabShortcuts;
+        private Button _btnTabOptions;
+        private Panel _indicatorConfig;
+        private Panel _indicatorShortcuts;
+        private Panel _indicatorOptions;
+        private Panel _pnlTabContent;
+        private Panel _pnlTabConfig;
+        private Panel _pnlTabShortcuts;
+        private Panel _pnlTabOptions;
+        private int _currentTabIndex;
 
         // ──────────────────────────────────────────────
         // Construtor
@@ -190,6 +210,16 @@ namespace InstallerGUI.Forms
             }
         }
 
+        /// <summary>
+        /// Disparado quando a janela é exibida pela primeira vez na tela.
+        /// Executa o diagnóstico inicial do sistema e exibe as informações no painel de log.
+        /// </summary>
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            DisplayInitialSystemInfoAsync();
+        }
+
         // ══════════════════════════════════════════════
         // CONSTRUÇÃO DA INTERFACE
         // ══════════════════════════════════════════════
@@ -227,19 +257,21 @@ namespace InstallerGUI.Forms
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(340 * scale)));
 
-            // ─── Lado esquerdo: Config + Log ───
+            // ─── Lado esquerdo: Abas + Log + Barra de Download ───
             var leftSide = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 2,
+                RowCount = 3,
                 BackColor = CorFundo,
             };
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(290 * scale)));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(250 * scale)));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(44 * scale)));
 
-            leftSide.Controls.Add(BuildConfigPanel(scale), 0, 0);
+            leftSide.Controls.Add(BuildTabsPanel(scale), 0, 0);
             leftSide.Controls.Add(BuildLogPanel(), 0, 1);
+            leftSide.Controls.Add(BuildDownloadProgressPanel(scale), 0, 2);
 
             content.Controls.Add(leftSide, 0, 0);
 
@@ -337,121 +369,376 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria o painel de configurações do sistema dividido em duas colunas:
-        /// Lado esquerdo: campos de texto (nome do computador, senhas, usuário padrão)
-        /// Lado direito: opções selecionáveis (restrição de senha, papel de parede, atalhos)
+        /// Cria o container de abas com visual moderno estilo Bootstrap "With Tabs".
+        /// Permite alternar entre "Configurações do Sistema", "Atalhos" e "Opções do Windows".
         /// </summary>
-        private GroupBox BuildConfigPanel(float scale)
+        private Panel BuildTabsPanel(float scale)
         {
-            var group = new GroupBox
+            var container = new Panel
             {
-                Text = "Configurações do Sistema",
-                ForeColor = CorDestaque,
-                Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 Dock = DockStyle.Fill,
-                Margin = new Padding(0, (int)(3 * scale), 0, (int)(3 * scale)),
                 BackColor = CorPainel,
-                Padding = new Padding((int)(12 * scale), (int)(24 * scale), (int)(12 * scale), (int)(10 * scale)),
+                Margin = new Padding(0, (int)(3 * scale), 0, (int)(3 * scale)),
+                Padding = new Padding((int)(6 * scale), (int)(6 * scale), (int)(6 * scale), (int)(6 * scale)),
             };
 
-            var mainTbl = new TableLayoutPanel
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = CorPainel,
+            };
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(36 * scale))); // Barra de abas
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Conteúdo da aba ativa
+
+            // ─── Barra de Abas (Estilo Bootstrap With Tabs) ───
+            var tabHeader = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Margin = new Padding(0, 0, 0, (int)(4 * scale)),
+            };
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36f));
+            tabHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            // Aba 1: Configurações do Sistema
+            var tabItem1 = CreateTabHeaderButton("Configurações do Sistema", 0, scale, out _btnTabConfig, out _indicatorConfig);
+            tabHeader.Controls.Add(tabItem1, 0, 0);
+
+            // Aba 2: Atalhos
+            var tabItem2 = CreateTabHeaderButton("Atalhos", 1, scale, out _btnTabShortcuts, out _indicatorShortcuts);
+            tabHeader.Controls.Add(tabItem2, 1, 0);
+
+            // Aba 3: Opções do Windows
+            var tabItem3 = CreateTabHeaderButton("Opções do Windows", 2, scale, out _btnTabOptions, out _indicatorOptions);
+            tabHeader.Controls.Add(tabItem3, 2, 0);
+
+            mainLayout.Controls.Add(tabHeader, 0, 0);
+
+            // ─── Container de Conteúdo das Abas ───
+            _pnlTabContent = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+            };
+
+            _pnlTabConfig = BuildTabConfigContent(scale);
+            _pnlTabShortcuts = BuildTabShortcutsContent(scale);
+            _pnlTabOptions = BuildTabOptionsContent(scale);
+
+            _pnlTabContent.Controls.Add(_pnlTabConfig);
+            _pnlTabContent.Controls.Add(_pnlTabShortcuts);
+            _pnlTabContent.Controls.Add(_pnlTabOptions);
+
+            mainLayout.Controls.Add(_pnlTabContent, 0, 1);
+            container.Controls.Add(mainLayout);
+
+            // Abre a primeira aba ("Configurações do Sistema") por padrão
+            SwitchTab(0);
+
+            return container;
+        }
+
+        /// <summary>
+        /// Cria o botão de cabeçalho da aba com indicador inferior de seleção no estilo Bootstrap.
+        /// </summary>
+        private Panel CreateTabHeaderButton(string title, int tabIndex, float scale, out Button outButton, out Panel outIndicator)
+        {
+            var panel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = new Padding(0),
+            };
+            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(3 * scale)));
+
+            var btn = new Button
+            {
+                Text = title,
+                Dock = DockStyle.Fill,
+                FlatStyle = FlatStyle.Flat,
+                FlatAppearance = { BorderSize = 0 },
+                Cursor = Cursors.Hand,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(170, 170, 170),
+                BackColor = Color.FromArgb(32, 32, 32),
+                TextAlign = ContentAlignment.MiddleCenter,
+            };
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 45, 45);
+
+            int targetIndex = tabIndex;
+            btn.Click += (sender, args) => SwitchTab(targetIndex);
+
+            var indicator = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(50, 50, 50),
+            };
+
+            panel.Controls.Add(btn, 0, 0);
+            panel.Controls.Add(indicator, 0, 1);
+
+            outButton = btn;
+            outIndicator = indicator;
+            return panel;
+        }
+
+        /// <summary>
+        /// Alterna a exibição entre as abas do painel esquerdo.
+        /// </summary>
+        private void SwitchTab(int index)
+        {
+            _currentTabIndex = index;
+
+            if (_pnlTabConfig != null)
+            {
+                _pnlTabConfig.Visible = (index == 0);
+                if (index == 0) _pnlTabConfig.BringToFront();
+            }
+            if (_pnlTabShortcuts != null)
+            {
+                _pnlTabShortcuts.Visible = (index == 1);
+                if (index == 1) _pnlTabShortcuts.BringToFront();
+            }
+            if (_pnlTabOptions != null)
+            {
+                _pnlTabOptions.Visible = (index == 2);
+                if (index == 2) _pnlTabOptions.BringToFront();
+            }
+
+            UpdateTabButtonStyle(_btnTabConfig, _indicatorConfig, index == 0);
+            UpdateTabButtonStyle(_btnTabShortcuts, _indicatorShortcuts, index == 1);
+            UpdateTabButtonStyle(_btnTabOptions, _indicatorOptions, index == 2);
+        }
+
+        /// <summary>
+        /// Atualiza o estilo visual do botão da aba (destaque ativo vs inativo).
+        /// </summary>
+        private void UpdateTabButtonStyle(Button btn, Panel indicator, bool isActive)
+        {
+            if (btn == null || indicator == null) return;
+
+            if (isActive)
+            {
+                btn.ForeColor = CorDestaque;
+                btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+                btn.BackColor = CorPainel;
+                indicator.BackColor = CorDestaque;
+            }
+            else
+            {
+                btn.ForeColor = Color.FromArgb(170, 170, 170);
+                btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+                btn.BackColor = Color.FromArgb(32, 32, 32);
+                indicator.BackColor = Color.FromArgb(50, 50, 50);
+            }
+        }
+
+        /// <summary>
+        /// Conteúdo da Aba 1: Configurações do Sistema (Nome do computador, senhas e usuário).
+        /// </summary>
+        private Panel BuildTabConfigContent(float scale)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+                Padding = new Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(6 * scale)),
+            };
+
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 4,
+                BackColor = CorPainel,
+            };
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+            for (int i = 0; i < 4; i++)
+                tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
+
+            tbl.Controls.Add(CreateLabel("Nome do computador:"), 0, 0);
+            _txtComputerName = CreateTextBox("Em branco = não renomear");
+            _txtComputerName.Text = "";
+            tbl.Controls.Add(_txtComputerName, 1, 0);
+
+            tbl.Controls.Add(CreateLabel("Senha do Admin:"), 0, 1);
+            _txtAdminPass = CreateTextBox("Senha do admin");
+            _txtAdminPass.Text = "";
+            tbl.Controls.Add(_txtAdminPass, 1, 1);
+
+            tbl.Controls.Add(CreateLabel("Usuário padrão:"), 0, 2);
+            _txtStandardUserName = CreateTextBox("Nome do usuário");
+            _txtStandardUserName.Text = "";
+            tbl.Controls.Add(_txtStandardUserName, 1, 2);
+
+            tbl.Controls.Add(CreateLabel("Senha do usuário:"), 0, 3);
+            _txtStandardUserPass = CreateTextBox("Senha (opcional)");
+            _txtStandardUserPass.Text = "";
+            tbl.Controls.Add(_txtStandardUserPass, 1, 3);
+
+            pnl.Controls.Add(tbl);
+            return pnl;
+        }
+
+        /// <summary>
+        /// Conteúdo da Aba 2: Atalhos corporativos da Área de Trabalho.
+        /// </summary>
+        private Panel BuildTabShortcutsContent(float scale)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+                Padding = new Padding((int)(12 * scale), (int)(8 * scale), (int)(12 * scale), (int)(6 * scale)),
+            };
+
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 4,
+                BackColor = CorPainel,
+            };
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
+            for (int i = 0; i < 4; i++)
+                tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
+
+            // Coluna 0
+            _chkShortcutSuporteExabit = CreateCheckBox("Atalho Suporte Exabit", false);
+            tbl.Controls.Add(_chkShortcutSuporteExabit, 0, 0);
+
+            _chkShortcutExabit = CreateCheckBox("Atalho Exabit Soluções em TI", false);
+            tbl.Controls.Add(_chkShortcutExabit, 0, 1);
+
+            _chkShortcutExahost = CreateCheckBox("Atalho Exahost Hospedagem", false);
+            tbl.Controls.Add(_chkShortcutExahost, 0, 2);
+
+            _chkShortcutRemoteNeoenergia = CreateCheckBox("Atalho Remote Neoenergia", false);
+            tbl.Controls.Add(_chkShortcutRemoteNeoenergia, 0, 3);
+
+            // Coluna 1
+            _chkShortcutWebmailNortel = CreateCheckBox("Atalho Webmail Nortel", false);
+            tbl.Controls.Add(_chkShortcutWebmailNortel, 1, 0);
+
+            _chkShortcutWebmailTerceirizacao = CreateCheckBox("Atalho Webmail Nortel Terceirização", false);
+            tbl.Controls.Add(_chkShortcutWebmailTerceirizacao, 1, 1);
+
+            _chkCleanDesktop = CreateCheckBox("Limpar atalhos da Área de Trabalho", true);
+            tbl.Controls.Add(_chkCleanDesktop, 1, 2);
+
+            pnl.Controls.Add(tbl);
+            return pnl;
+        }
+
+        /// <summary>
+        /// Conteúdo da Aba 3: Opções do Windows (Localização, restrição de senha e papel de parede).
+        /// </summary>
+        private Panel BuildTabOptionsContent(float scale)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+                Padding = new Padding((int)(16 * scale), (int)(12 * scale), (int)(16 * scale), (int)(8 * scale)),
+            };
+
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = CorPainel,
+            };
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 16f));
+
+            _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", true);
+            tbl.Controls.Add(_chkEnableLocation, 0, 0);
+
+            _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
+            tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 1);
+
+            _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
+            tbl.Controls.Add(_chkWallpaper, 0, 2);
+
+            var lblHint = new Label
+            {
+                Text = "Configurações de segurança e personalização aplicadas durante o processo.",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                ForeColor = Color.FromArgb(160, 160, 160),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            tbl.Controls.Add(lblHint, 0, 3);
+
+            pnl.Controls.Add(tbl);
+            return pnl;
+        }
+
+        /// <summary>
+        /// Cria a barra de progresso dedicada para downloads online abaixo da janela de log.
+        /// </summary>
+        private Panel BuildDownloadProgressPanel(float scale)
+        {
+            var panel = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+                Margin = new Padding(0, (int)(3 * scale), 0, 0),
+                Padding = new Padding((int)(8 * scale), (int)(4 * scale), (int)(8 * scale), (int)(4 * scale)),
+            };
+
+            var tbl = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
                 RowCount = 1,
                 BackColor = CorPainel,
             };
-            mainTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 46f));
-            mainTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 54f));
-            mainTbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60f));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            // ─── Lado Esquerdo: Campos de Texto (Nome do PC e Usuários) ───
-            var tblInputs = new TableLayoutPanel
+            _downloadProgressBar = new ProgressBar
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 4,
-                BackColor = CorPainel,
-                Margin = new Padding(0, 0, (int)(15 * scale), 0),
+                Style = ProgressBarStyle.Continuous,
+                ForeColor = CorDestaque,
+                BackColor = Color.FromArgb(60, 60, 60),
+                Value = 0,
             };
-            tblInputs.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            tblInputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-            for (int i = 0; i < 4; i++)
-                tblInputs.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
-
-            // Linha 0: Nome do computador (vazio = não renomear)
-            tblInputs.Controls.Add(CreateLabel("Nome do computador:"), 0, 0);
-            _txtComputerName = CreateTextBox("Em branco = não renomear");
-            _txtComputerName.Text = "";
-            tblInputs.Controls.Add(_txtComputerName, 1, 0);
-
-            // Linha 1: Senha do usuário Admin
-            tblInputs.Controls.Add(CreateLabel("Senha do Admin:"), 0, 1);
-            _txtAdminPass = CreateTextBox("Senha do admin");
-            _txtAdminPass.Text = "";
-            tblInputs.Controls.Add(_txtAdminPass, 1, 1);
-
-            // Linha 2: Criar usuário padrão (Nome do usuário)
-            tblInputs.Controls.Add(CreateLabel("Usuário padrão:"), 0, 2);
-            _txtStandardUserName = CreateTextBox("Nome do usuário");
-            _txtStandardUserName.Text = "";
-            tblInputs.Controls.Add(_txtStandardUserName, 1, 2);
-
-            // Linha 3: Senha do usuário
-            tblInputs.Controls.Add(CreateLabel("Senha do usuário:"), 0, 3);
-            _txtStandardUserPass = CreateTextBox("Senha (opcional)");
-            _txtStandardUserPass.Text = "";
-            tblInputs.Controls.Add(_txtStandardUserPass, 1, 3);
-
-            mainTbl.Controls.Add(tblInputs, 0, 0);
-
-            // ─── Lado Direito: Opções Selecionáveis (Checkboxes) ───
-            var tblChecks = new TableLayoutPanel
+            _lblDownloadStatus = new Label
             {
+                Text = "Downloads: Aguardando...",
+                ForeColor = Color.FromArgb(180, 180, 180),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
+                TextAlign = ContentAlignment.MiddleRight,
                 Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 7,
-                BackColor = CorPainel,
-                Margin = new Padding((int)(10 * scale), 0, 0, 0),
+                AutoEllipsis = true,
             };
-            tblChecks.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-            for (int i = 0; i < 7; i++)
-                tblChecks.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / 7f));
+            tbl.Controls.Add(_downloadProgressBar, 0, 0);
+            tbl.Controls.Add(_lblDownloadStatus, 1, 0);
 
-            // Linha 0: Ativar serviços de localização do Windows (ativo por padrão)
-            _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", true);
-            tblChecks.Controls.Add(_chkEnableLocation, 0, 0);
-
-            // Linha 1: Impedir que o usuário altere a senha
-            _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
-            tblChecks.Controls.Add(_chkStandardUserNoPwdChange, 0, 1);
-
-            // Linha 2: Limpar atalhos da Área de Trabalho (ativo por padrão)
-            _chkCleanDesktop = CreateCheckBox("Limpar atalhos da Área de Trabalho", true);
-            tblChecks.Controls.Add(_chkCleanDesktop, 0, 2);
-
-            // Linha 3: Wallpaper
-            _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
-            tblChecks.Controls.Add(_chkWallpaper, 0, 3);
-
-            // Linha 4: Atalho Suporte Norte
-            _chkShortcutSuporteNorte = CreateCheckBox("Atalho Suporte Nortel", false);
-            tblChecks.Controls.Add(_chkShortcutSuporteNorte, 0, 4);
-
-            // Linha 5: Atalho Webmail Nortel
-            _chkShortcutWebmailNortel = CreateCheckBox("Atalho Webmail Nortel", false);
-            tblChecks.Controls.Add(_chkShortcutWebmailNortel, 0, 5);
-
-            // Linha 6: Atalho Webmail Nortel Terceirização
-            _chkShortcutWebmailTerceirizacao = CreateCheckBox("Atalho Webmail Nortel Terceirização", false);
-            tblChecks.Controls.Add(_chkShortcutWebmailTerceirizacao, 0, 6);
-
-            mainTbl.Controls.Add(tblChecks, 1, 0);
-
-            group.Controls.Add(mainTbl);
-            return group;
+            panel.Controls.Add(tbl);
+            return panel;
         }
 
         /// <summary>
@@ -785,7 +1072,15 @@ namespace InstallerGUI.Forms
             _installing = true;
             _btnInstall.Enabled = false;
             _btnInstall.BackColor = Color.FromArgb(0, 75, 25);
-            _txtLog.Clear();
+            if (_downloadProgressBar != null) _downloadProgressBar.Value = 0;
+            if (_lblDownloadStatus != null)
+            {
+                _lblDownloadStatus.Text = "Downloads: Aguardando...";
+                _lblDownloadStatus.ForeColor = Color.FromArgb(180, 180, 180);
+            }
+            AppendLog("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
+            AppendLog(" INICIANDO PROCESSO DE INSTALAÇÃO", ConsoleColor.Cyan);
+            AppendLog("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
 
             try
             {
@@ -837,8 +1132,12 @@ namespace InstallerGUI.Forms
                 options.CleanDesktopShortcuts = _chkCleanDesktop.Checked;
                 options.SetWallpaper = _chkWallpaper.Checked;
 
-                // ─── Atalhos de suporte ───
-                options.CreateDesktopShortcutSuporteNorte = _chkShortcutSuporteNorte.Checked;
+                // ─── Atalhos corporativos ───
+                options.CreateDesktopShortcutSuporteExabit = _chkShortcutSuporteExabit.Checked;
+                options.CreateDesktopShortcutSuporteNorte = _chkShortcutSuporteExabit.Checked;
+                options.CreateDesktopShortcutExabit = _chkShortcutExabit.Checked;
+                options.CreateDesktopShortcutExahost = _chkShortcutExahost.Checked;
+                options.CreateDesktopShortcutRemoteNeoenergia = _chkShortcutRemoteNeoenergia.Checked;
                 options.CreateDesktopShortcutWebmailNortel = _chkShortcutWebmailNortel.Checked;
                 options.CreateDesktopShortcutWebmailTerceirizacao = _chkShortcutWebmailTerceirizacao.Checked;
 
@@ -952,7 +1251,7 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Atualiza o rótulo de progresso durante o download de arquivos pela internet.
+        /// Atualiza a barra de progresso dedicada e o rótulo de download durante a transferência de arquivos online.
         /// Chamado pelo evento <see cref="InstallerService.OnDownloadProgress"/>.
         /// </summary>
         private void HandleDownloadProgress(string displayName, int percent, long bytesReceived, long totalBytes)
@@ -963,16 +1262,165 @@ namespace InstallerGUI.Forms
                 return;
             }
 
+            if (_downloadProgressBar == null || _lblDownloadStatus == null) return;
+
             if (percent >= 0)
             {
+                _downloadProgressBar.Value = Math.Max(0, Math.Min(100, percent));
                 double mbRead = (double)bytesReceived / (1024 * 1024);
                 double mbTotal = (double)totalBytes / (1024 * 1024);
-                _lblProgress.Text = string.Format("{0}% ({1:N0}/{2:N0} MB)", percent, mbRead, mbTotal);
+                _lblDownloadStatus.Text = string.Format("{0}: {1}% ({2:N0}/{3:N0} MB)", displayName, percent, mbRead, mbTotal);
+                _lblDownloadStatus.ForeColor = CorDestaque;
             }
             else
             {
                 double mbRead = (double)bytesReceived / (1024 * 1024);
-                _lblProgress.Text = string.Format("{0:N1} MB", mbRead);
+                _lblDownloadStatus.Text = string.Format("{0}: {1:N1} MB", displayName, mbRead);
+                _lblDownloadStatus.ForeColor = CorDestaque;
+            }
+        }
+
+        /// <summary>
+        /// Coleta e exibe o diagnóstico e informações do sistema operacional ao inicializar o aplicativo.
+        /// </summary>
+        private async void DisplayInitialSystemInfoAsync()
+        {
+            _txtLog.Clear();
+            AppendLog("======================================================================", ConsoleColor.Cyan);
+            AppendLog(" INFORMAÇÕES DO SISTEMA", ConsoleColor.Cyan);
+            AppendLog("======================================================================", ConsoleColor.Cyan);
+            AppendLog(string.Format("Nome do computador : {0}", Environment.MachineName), ConsoleColor.Gray);
+
+            string userRole = "";
+            try
+            {
+                var principal = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());
+                if (principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
+                    userRole = " (Administrador)";
+            }
+            catch { }
+            AppendLog(string.Format("Nome do usuário    : {0}{1}", Environment.UserName, userRole), ConsoleColor.Gray);
+
+            string ip = GetLocalIpAddress();
+            AppendLog(string.Format("Endereço IP        : {0}", ip), ConsoleColor.Gray);
+
+            bool hasInternet = await _service.HasInternetConnectionAsync();
+            if (hasInternet)
+            {
+                AppendLog("Status de conexão  : Conectado à Internet", ConsoleColor.Green);
+            }
+            else
+            {
+                AppendLog("Status de conexão  : Desconectado da Internet", ConsoleColor.Yellow);
+            }
+
+            string winVer = GetWindowsVersionInfo();
+            AppendLog(string.Format("Versão do Windows  : {0}", winVer), ConsoleColor.Gray);
+            AppendLog("======================================================================\n", ConsoleColor.Cyan);
+            AppendLog("Pronto para iniciar. Configure as opções e selecione os programas desejados.\n", ConsoleColor.Gray);
+        }
+
+        /// <summary>
+        /// Obtém o(s) endereço(s) IP IPv4 locais ativos da máquina.
+        /// </summary>
+        private static string GetLocalIpAddress()
+        {
+            try
+            {
+                var ips = new List<string>();
+                var nics = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces();
+                foreach (var nic in nics)
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up)
+                        continue;
+                    if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+                        continue;
+
+                    var ipProps = nic.GetIPProperties();
+                    foreach (var addr in ipProps.UnicastAddresses)
+                    {
+                        if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                        {
+                            string ipStr = addr.Address.ToString();
+                            if (!ipStr.StartsWith("127.") && !ipStr.StartsWith("169.254.") && !ips.Contains(ipStr))
+                            {
+                                ips.Add(ipStr);
+                            }
+                        }
+                    }
+                }
+
+                if (ips.Count > 0)
+                {
+                    return string.Join(", ", ips.ToArray());
+                }
+
+                var host = Dns.GetHostEntry(Dns.GetHostName());
+                foreach (var ip in host.AddressList)
+                {
+                    if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    {
+                        string ipStr = ip.ToString();
+                        if (!ipStr.StartsWith("127.") && !ipStr.StartsWith("169.254."))
+                            return ipStr;
+                    }
+                }
+            }
+            catch { }
+            return "Indisponível";
+        }
+
+        /// <summary>
+        /// Obtém a versão detalhada do Windows com nome comercial, arquitetura, versão de lançamento e build.
+        /// </summary>
+        private static string GetWindowsVersionInfo()
+        {
+            try
+            {
+                string prodName = "";
+                string displayVer = "";
+                string build = "";
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                {
+                    if (key != null)
+                    {
+                        prodName = (key.GetValue("ProductName") as string) ?? "";
+                        displayVer = (key.GetValue("DisplayVersion") as string) ?? (key.GetValue("ReleaseId") as string) ?? "";
+                        build = (key.GetValue("CurrentBuild") as string) ?? (key.GetValue("CurrentBuildNumber") as string) ?? "";
+                        string ubr = key.GetValue("UBR") != null ? key.GetValue("UBR").ToString() : "";
+                        if (!string.IsNullOrEmpty(ubr) && !string.IsNullOrEmpty(build))
+                        {
+                            build = build + "." + ubr;
+                        }
+                    }
+                }
+
+                string arch = Environment.Is64BitOperatingSystem ? "64 bits" : "32 bits";
+
+                int buildNum = 0;
+                if (!string.IsNullOrEmpty(build))
+                {
+                    string firstPart = build.Split('.')[0];
+                    int.TryParse(firstPart, out buildNum);
+                }
+
+                if (buildNum >= 22000 && prodName.IndexOf("Windows 10", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    prodName = prodName.Replace("Windows 10", "Windows 11");
+                }
+
+                var parts = new List<string>();
+                if (!string.IsNullOrEmpty(prodName)) parts.Add(prodName);
+                parts.Add(arch);
+                if (!string.IsNullOrEmpty(displayVer)) parts.Add("Versão " + displayVer);
+                if (!string.IsNullOrEmpty(build)) parts.Add("Build " + build);
+
+                return string.Join(" - ", parts.ToArray());
+            }
+            catch
+            {
+                return Environment.OSVersion.VersionString + (Environment.Is64BitOperatingSystem ? " 64 bits" : " 32 bits");
             }
         }
 
@@ -1008,6 +1456,13 @@ namespace InstallerGUI.Forms
             {
                 Invoke(new Action(HandleInstallationCompleted));
                 return;
+            }
+
+            if (_downloadProgressBar != null) _downloadProgressBar.Value = 100;
+            if (_lblDownloadStatus != null)
+            {
+                _lblDownloadStatus.Text = "Downloads: Concluídos";
+                _lblDownloadStatus.ForeColor = CorSucesso;
             }
 
             PlayNotificationSound();
