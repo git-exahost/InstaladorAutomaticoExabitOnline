@@ -7,6 +7,31 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.63] - 2026-11-19
+
+### Corrigido & Aprimorado
+- **Correção do Corte dos Botões de Ação ("INICIAR INSTALAÇÃO" e "PARAR")**:
+  - Reorganizado o layout do painel inferior direito para dispor `INICIAR INSTALAÇÃO` (72% de largura) e `PARAR` (28% de largura) lado a lado em uma mesma linha horizontal com altura de 40px.
+  - Resolvido o corte/truncamento na borda inferior da janela, garantindo visibilidade total dos textos, estados de hover e clique, sem comprometer a lista de seleção de programas.
+- **Barra de Progresso Ultrafina Nativa Personalizada (Estilo RustDesk)**:
+  - Criado o componente customizado `ThinProgressBar`, com desenho vetorial GDI+ com trilho escuro (`#2D2D2D`) e altura ultrafina de 5px.
+  - Substituídas as barras nativas do Windows Forms (que exibiam caixa branca e bordas do UxTheme) pelas novas barras ultrafinas tanto para o download online (laranja `CorDestaque`) quanto para o progresso geral das etapas (verde `CorSucesso`), exatamente idênticas à Central de Suporte Remoto RustDesk.
+- **TraceDraw 64-bit sem Prompt Interativo**:
+  - Atualizado o nome de arquivo alvo para `tracedraw-setup-x64.exe` em sistemas 64 bits, garantindo que o instalador nativo `tracedraw-*-windows-x86_64-setup.exe` seja baixado e executado.
+  - Adicionada exclusão preventiva de versões antigas de 32 bits (`tracedraw-setup.exe` e `tracedraw-setup-x86.exe`) no cache para evitar que sejam reexecutadas.
+  - Com o instalador 64-bit nativo correspondendo à arquitetura do Windows, a instalação ocorre 100% silenciosa sem nenhuma pergunta ou diálogo ao usuário.
+- **Google Chrome Enterprise MSI & Verificação**:
+  - Migrado o download e execução do Google Chrome para o pacote Enterprise oficial MSI (`googlechromestandaloneenterprise64.msi`), executado sincronicamente via `msiexec /i "..." /qn /norestart`.
+  - Adicionado método de verificação `IsChromeInstalled()` e fallback autônomo via `winget install --id Google.Chrome` caso ocorra qualquer intercorrência.
+- **Suporte ao Código de Saída 3010 do Adobe Acrobat Reader**:
+  - Código Win32 3010 (`ERROR_SUCCESS_REBOOT_REQUIRED`) tratado formalmente como sucesso com aviso de reinicialização pendente.
+  - Adicionada detecção profunda `IsAdobeReaderInstalled()`.
+- **7-Zip com Espelhos SourceForge e Fallback Winget**:
+  - Implementado download via espelhos diretos SourceForge para eliminar falhas de resolução de DNS em `release-assets.githubusercontent.com`.
+  - Fallback automático via `winget install --id 7zip.7zip` e verificação `Is7ZipInstalled()`.
+
+---
+
 ## [2.0.0.62] - 2026-11-19
 
 ### Corrigido & Aprimorado

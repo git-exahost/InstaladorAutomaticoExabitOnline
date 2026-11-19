@@ -824,7 +824,7 @@ namespace InstallerGUI.Services
         /// Faz o download assíncrono de um arquivo a partir de uma URL direta, salvando no cache corporativo.
         /// Informa o progresso do download em tempo real via OnDownloadProgress e em etapas no log.
         /// </summary>
-        private async Task<string> DownloadFileOnlineAsync(string url, string fileName, string displayName, long minBytes)
+        private async Task<string> DownloadFileOnlineAsync(string url, string fileName, string displayName, long minBytes, bool suppressErrorLog = false)
         {
             return await Task.Run(new Func<string>(() =>
             {
@@ -933,7 +933,10 @@ namespace InstallerGUI.Services
                     }
 
                     try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
-                    Log(string.Format("X Arquivo baixado de {0} é inválido ou incompleto.", displayName), ConsoleColor.Red);
+                    if (!suppressErrorLog)
+                    {
+                        Log(string.Format("X Arquivo baixado de {0} é inválido ou incompleto.", displayName), ConsoleColor.Red);
+                    }
                     return null;
                 }
                 catch (OperationCanceledException)
@@ -943,7 +946,14 @@ namespace InstallerGUI.Services
                 }
                 catch (Exception ex)
                 {
-                    Log(string.Format("X Erro ao baixar {0}: {1}", displayName, ex.Message), ConsoleColor.Red);
+                    if (suppressErrorLog)
+                    {
+                        Log(string.Format("  Aviso ao baixar {0}: {1}. Tentando espelho alternativo...", displayName, ex.Message), ConsoleColor.Yellow);
+                    }
+                    else
+                    {
+                        Log(string.Format("X Erro ao baixar {0}: {1}", displayName, ex.Message), ConsoleColor.Red);
+                    }
                     return null;
                 }
             }));
@@ -952,46 +962,111 @@ namespace InstallerGUI.Services
         private async Task<string> Resolve7ZipInstallerAsync(ProgramInfo program)
         {
             string cacheDir = GetDownloadCacheDirectory();
-            string destFile = Path.Combine(cacheDir, "7z_setup.exe");
 
-            if (File.Exists(destFile) && new FileInfo(destFile).Length > 1000000)
+            string[] possibleCache = new string[] { "7z_setup.exe", "7z_setup.msi", "7z2409-x64.exe", "7z2408-x64.exe" };
+            foreach (var fn in possibleCache)
             {
-                Log("  Instalador do 7-Zip pronto no cache.", ConsoleColor.Gray);
-                return destFile;
+                string p = Path.Combine(cacheDir, fn);
+                if (File.Exists(p) && new FileInfo(p).Length > 1000000)
+                {
+                    Log("  Instalador do 7-Zip pronto no cache.", ConsoleColor.Gray);
+                    program.FileName = fn;
+                    if (fn.EndsWith(".msi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        program.Arguments = "/qn /norestart";
+                    }
+                    else
+                    {
+                        program.Arguments = "/S";
+                    }
+                    return p;
+                }
             }
 
-            string downloadUrl = "https://www.7-zip.org/a/7z2409-x64.exe";
-            try
+            // Lista de espelhos confiáveis para o 7-Zip.
+            // O SourceForge fornece download direto e contorna falhas de resolução DNS
+            // em 'release-assets.githubusercontent.com'.
+            string[] mirrors = new string[]
             {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                using (var wc = new WebClient())
+                "https://downloads.sourceforge.net/project/sevenzip/7-Zip/24.09/7z2409-x64.exe",
+                "https://downloads.sourceforge.net/project/sevenzip/7-Zip/24.08/7z2408-x64.exe",
+                "https://www.7-zip.org/a/7z2409-x64.exe",
+                "https://github.com/ip7z/7zip/releases/download/24.09/7z2409-x64.exe"
+            };
+
+            for (int i = 0; i < mirrors.Length; i++)
+            {
+                string url = mirrors[i];
+                try
                 {
-                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
-                    string html = wc.DownloadString("https://www.7-zip.org/download.html");
-                    var match = Regex.Match(html, @"href=""(a/7z[0-9]+-x64\.(?:exe|msi))""", RegexOptions.IgnoreCase);
-                    if (match.Success)
+                    string ext = Path.GetExtension(url);
+                    if (string.IsNullOrEmpty(ext) || ext.IndexOf("?") >= 0) ext = ".exe";
+                    string targetName = "7z_setup" + ext;
+
+                    string result = await DownloadFileOnlineAsync(url, targetName, program.DisplayName, 1000000, i < mirrors.Length - 1);
+                    if (!string.IsNullOrEmpty(result) && File.Exists(result) && new FileInfo(result).Length > 1000000)
                     {
-                        downloadUrl = "https://www.7-zip.org/" + match.Groups[1].Value;
+                        program.FileName = targetName;
+                        if (ext.Equals(".msi", StringComparison.OrdinalIgnoreCase))
+                        {
+                            program.Arguments = "/qn /norestart";
+                        }
+                        else
+                        {
+                            program.Arguments = "/S";
+                        }
+                        return result;
                     }
                 }
+                catch { }
+            }
+
+            return null;
+        }
+
+        private async Task<string> ResolveChromeInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string msiDest = Path.Combine(cacheDir, "googlechromestandaloneenterprise64.msi");
+
+            if (File.Exists(msiDest) && new FileInfo(msiDest).Length > 50000000)
+            {
+                Log("  Instalador do Google Chrome Enterprise (MSI) pronto no cache.", ConsoleColor.Gray);
+                program.FileName = "googlechromestandaloneenterprise64.msi";
+                program.Arguments = "/qn /norestart";
+                return msiDest;
+            }
+
+            try
+            {
+                string oldExe = Path.Combine(cacheDir, "ChromeStandaloneSetup64.exe");
+                if (File.Exists(oldExe)) File.Delete(oldExe);
             }
             catch { }
 
-            string ext = Path.GetExtension(downloadUrl);
-            if (!string.IsNullOrEmpty(ext))
+            string[] mirrors = new string[]
             {
-                destFile = Path.Combine(cacheDir, "7z_setup" + ext);
-                if (string.Equals(ext, ".msi", StringComparison.OrdinalIgnoreCase))
+                "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi",
+                "https://dl.google.com/chrome/install/googlechromestandaloneenterprise64.msi"
+            };
+
+            for (int i = 0; i < mirrors.Length; i++)
+            {
+                string url = mirrors[i];
+                try
                 {
-                    program.Arguments = "/qn /norestart";
+                    string path = await DownloadFileOnlineAsync(url, "googlechromestandaloneenterprise64.msi", program.DisplayName, 50000000, i < mirrors.Length - 1);
+                    if (!string.IsNullOrEmpty(path) && File.Exists(path) && new FileInfo(path).Length > 50000000)
+                    {
+                        program.FileName = "googlechromestandaloneenterprise64.msi";
+                        program.Arguments = "/qn /norestart";
+                        return path;
+                    }
                 }
-                else
-                {
-                    program.Arguments = "/S";
-                }
+                catch { }
             }
 
-            return await DownloadFileOnlineAsync(downloadUrl, Path.GetFileName(destFile), program.DisplayName, 1000000);
+            return null;
         }
 
         private async Task<string> ResolveWinRarInstallerAsync(ProgramInfo program)
@@ -1370,6 +1445,8 @@ namespace InstallerGUI.Services
             string cacheFileName = is64 ? "tracedraw-setup-x64.exe" : "tracedraw-setup-x86.exe";
             string cacheDir = GetDownloadCacheDirectory();
             string destFile = Path.Combine(cacheDir, cacheFileName);
+
+            program.FileName = cacheFileName;
 
             try
             {
@@ -1841,11 +1918,7 @@ namespace InstallerGUI.Services
 
             if (program.Id == "chrome")
             {
-                return await DownloadFileOnlineAsync(
-                    "https://dl.google.com/chrome/install/standalonesetup64.exe",
-                    "ChromeStandaloneSetup64.exe",
-                    program.DisplayName,
-                    50000000);
+                return await ResolveChromeInstallerAsync(program);
             }
 
             if (program.Id == "firefox")
@@ -2232,6 +2305,33 @@ namespace InstallerGUI.Services
             string fullPath = await EnsureProgramDownloadedAsync(program);
             if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
             {
+                if (program.Id == "7zip")
+                {
+                    Log("  Tentando instalação do 7-Zip via Windows Package Manager (winget)...", ConsoleColor.Yellow);
+                    string wingetExe = FindWingetExecutable();
+                    int wingetExit = await RunProcessAsync(wingetExe,
+                        "install --id 7zip.7zip -e --silent --accept-package-agreements --accept-source-agreements",
+                        300000, null, false);
+                    if (wingetExit == 0 || Is7ZipInstalled())
+                    {
+                        Log("[ok] 7-Zip instalado com sucesso via winget.", ConsoleColor.Green);
+                        return;
+                    }
+                }
+                else if (program.Id == "chrome")
+                {
+                    Log("  Tentando instalação do Google Chrome via Windows Package Manager (winget)...", ConsoleColor.Yellow);
+                    string wingetExe = FindWingetExecutable();
+                    int wingetExit = await RunProcessAsync(wingetExe,
+                        "install --id Google.Chrome -e --silent --accept-package-agreements --accept-source-agreements",
+                        600000, null, false);
+                    if (wingetExit == 0 || IsChromeInstalled())
+                    {
+                        Log("[ok] Google Chrome instalado com sucesso via winget.", ConsoleColor.Green);
+                        return;
+                    }
+                }
+
                 Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
                 return;
             }
@@ -2353,22 +2453,67 @@ namespace InstallerGUI.Services
                             timeout, procWorkDir, program.UseShellExecute, suppressStdErr);
                     }
 
-                    if (exitCode == 0)
+                    if (exitCode == 0 || exitCode == 3010)
                     {
-                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        string rebootMsg = (exitCode == 3010) ? " (reinicialização do sistema necessária)" : "";
+                        Log(string.Format("[ok] {0} instalado com sucesso{1}.", program.DisplayName, rebootMsg), ConsoleColor.Green);
                         if (program.Id == "rustdesk")
                         {
                             string adminPass = options != null ? options.AdminPassword : null;
                             await ConfigureRustDeskServerAsync(adminPass);
                         }
                     }
-                    else if ((program.Id == "citrix" || program.Id == "office365") && exitCode == 3010)
+                    else if (program.Id == "adobereader" && IsAdobeReaderInstalled())
                     {
-                        Log(string.Format("[ok] {0} instalado com sucesso (reinicialização do sistema necessária).", program.DisplayName), ConsoleColor.Green);
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    }
+                    else if (program.Id == "chrome" && IsChromeInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    }
+                    else if (program.Id == "7zip" && Is7ZipInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                     }
                     else if (program.Id == "office365" && IsOffice365Installed())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    }
+                    else if (program.Id == "tracedraw" && IsTraceDrawInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    }
+                    else if (program.Id == "chrome")
+                    {
+                        Log(string.Format("  Falha na instalação do Google Chrome (código {0}). Tentando via winget...", exitCode), ConsoleColor.Yellow);
+                        string wingetExe = FindWingetExecutable();
+                        int wingetExit = await RunProcessAsync(wingetExe,
+                            "install --id Google.Chrome -e --silent --accept-package-agreements --accept-source-agreements",
+                            600000, null, false);
+                        if (wingetExit == 0 || IsChromeInstalled())
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso via winget.", program.DisplayName), ConsoleColor.Green);
+                        }
+                        else
+                        {
+                            Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                        }
+                    }
+                    else if (program.Id == "7zip")
+                    {
+                        Log(string.Format("  Falha na instalação do 7-Zip (código {0}). Tentando via winget...", exitCode), ConsoleColor.Yellow);
+                        string wingetExe = FindWingetExecutable();
+                        int wingetExit = await RunProcessAsync(wingetExe,
+                            "install --id 7zip.7zip -e --silent --accept-package-agreements --accept-source-agreements",
+                            300000, null, false);
+                        if (wingetExit == 0 || Is7ZipInstalled())
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso via winget.", program.DisplayName), ConsoleColor.Green);
+                        }
+                        else
+                        {
+                            Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                        }
                     }
                     else if (program.Id == "citrix" && (exitCode == -2147467259 || exitCode == 1603))
                     {
@@ -3300,6 +3445,107 @@ namespace InstallerGUI.Services
             {
             }
 
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Google Chrome está instalado na máquina.
+        /// </summary>
+        private static bool IsChromeInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"Google\Chrome\Application\chrome.exe")))
+                    return true;
+
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (File.Exists(Path.Combine(progFilesX86, @"Google\Chrome\Application\chrome.exe")))
+                    return true;
+
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Google\Chrome\Application\chrome.exe")))
+                    return true;
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe"))
+                {
+                    if (key != null) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Adobe Acrobat Reader está instalado na máquina.
+        /// </summary>
+        private static bool IsAdobeReaderInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"Adobe\Acrobat DC\Acrobat\Acrobat.exe")))
+                    return true;
+
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (File.Exists(Path.Combine(progFilesX86, @"Adobe\Acrobat DC\Acrobat\Acrobat.exe")))
+                    return true;
+                if (File.Exists(Path.Combine(progFilesX86, @"Adobe\Acrobat Reader DC\Reader\AcroRd32.exe")))
+                    return true;
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\AcroRd32.exe"))
+                {
+                    if (key != null) return true;
+                }
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Acrobat.exe"))
+                {
+                    if (key != null) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o 7-Zip está instalado na máquina.
+        /// </summary>
+        private static bool Is7ZipInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"7-Zip\7z.exe")))
+                    return true;
+
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (File.Exists(Path.Combine(progFilesX86, @"7-Zip\7z.exe")))
+                    return true;
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\7zFM.exe"))
+                {
+                    if (key != null) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o TraceDraw está instalado na máquina.
+        /// </summary>
+        private static bool IsTraceDrawInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"TraceDraw\tracedraw.exe")))
+                    return true;
+
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\TraceDraw\tracedraw.exe")))
+                    return true;
+            }
+            catch { }
             return false;
         }
 

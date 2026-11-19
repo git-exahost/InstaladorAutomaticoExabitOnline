@@ -62,9 +62,9 @@ namespace InstallerGUI.Forms
         private Panel _pnlPrograms;
         private Button _btnInstall;
         private Button _btnStop;
-        private ProgressBar _progressBar;
+        private ThinProgressBar _progressBar;
         private Label _lblProgress;
-        private ProgressBar _downloadProgressBar;
+        private ThinProgressBar _downloadProgressBar;
         private Label _lblDownloadStatus;
         private RichTextBox _txtLog;
 
@@ -264,7 +264,7 @@ namespace InstallerGUI.Forms
             };
             leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(250 * scale)));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale)));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(25 * scale)));
 
             leftSide.Controls.Add(BuildTabsPanel(scale), 0, 0);
             leftSide.Controls.Add(BuildLogPanel(), 0, 1);
@@ -705,7 +705,7 @@ namespace InstallerGUI.Forms
 
         /// <summary>
         /// Cria a barra de carregamento dedicada para downloads online abaixo da janela de log,
-        /// com perfil bem fino (7px) no estilo RustDesk corporativo.
+        /// com perfil ultrafino (5px) no estilo RustDesk corporativo.
         /// </summary>
         private Panel BuildDownloadProgressPanel(float scale)
         {
@@ -714,7 +714,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
                 Margin = Padding.Empty,
-                Padding = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
+                Padding = new Padding(0, (int)(1 * scale), 0, (int)(1 * scale)),
             };
 
             var tbl = new TableLayoutPanel
@@ -727,24 +727,24 @@ namespace InstallerGUI.Forms
                 Padding = Padding.Empty,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(7 * scale))); // Barra bem fina de carregamento
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(5 * scale))); // Barra ultrafina de download
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));             // Status do download
 
-            _downloadProgressBar = new ProgressBar
+            _downloadProgressBar = new ThinProgressBar
             {
                 Dock = DockStyle.Fill,
-                Style = ProgressBarStyle.Continuous,
-                ForeColor = CorDestaque,
-                BackColor = Color.FromArgb(60, 60, 60),
+                TrackColor = Color.FromArgb(45, 45, 45),
+                ProgressColor = CorDestaque,
                 Value = 0,
+                Maximum = 100,
                 Margin = Padding.Empty,
             };
 
             _lblDownloadStatus = new Label
             {
                 Text = "Downloads: Aguardando...",
-                ForeColor = Color.FromArgb(180, 180, 180),
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(170, 170, 170),
+                Font = new Font("Segoe UI", 8.25f, FontStyle.Regular),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Dock = DockStyle.Fill,
                 Margin = new Padding((int)(2 * scale), 0, 0, 0),
@@ -786,7 +786,7 @@ namespace InstallerGUI.Forms
             };
             tblContainer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             tblContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            tblContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale)));
+            tblContainer.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(32 * scale)));
 
             // ─── Linha de botões Marcar/Desmarcar (centralizados na parte inferior) ───
             var btnPanel = new TableLayoutPanel
@@ -796,7 +796,7 @@ namespace InstallerGUI.Forms
                 ColumnCount = 2,
                 RowCount = 1,
                 Margin = new Padding(0),
-                Padding = new Padding(0, (int)(2 * scale), 0, (int)(4 * scale)),
+                Padding = new Padding(0, (int)(1 * scale), 0, (int)(2 * scale)),
             };
             btnPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
             btnPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
@@ -805,13 +805,13 @@ namespace InstallerGUI.Forms
             var btnSelectAll = new Button
             {
                 Text = "Marcar",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 ForeColor = CorTexto,
                 BackColor = Color.FromArgb(60, 60, 60),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Cursor = Cursors.Hand,
-                Size = new Size((int)(105 * scale), (int)(28 * scale)),
+                Size = new Size((int)(100 * scale), (int)(26 * scale)),
                 Anchor = AnchorStyles.Right,
                 Margin = new Padding(0, 0, (int)(4 * scale), 0),
             };
@@ -821,13 +821,13 @@ namespace InstallerGUI.Forms
             var btnClearAll = new Button
             {
                 Text = "Desmarcar",
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
                 ForeColor = CorTexto,
                 BackColor = Color.FromArgb(60, 60, 60),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Cursor = Cursors.Hand,
-                Size = new Size((int)(105 * scale), (int)(28 * scale)),
+                Size = new Size((int)(100 * scale), (int)(26 * scale)),
                 Anchor = AnchorStyles.Left,
                 Margin = new Padding((int)(4 * scale), 0, 0, 0),
             };
@@ -914,7 +914,7 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria a barra de progresso geral bem fina e o rótulo de contagem (n / total).
+        /// Cria a barra de progresso geral ultrafina (estilo RustDesk) e o rótulo de contagem (n / total).
         /// </summary>
         private Panel BuildProgressBar(float scale)
         {
@@ -923,7 +923,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
                 Margin = Padding.Empty,
-                Padding = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
+                Padding = new Padding(0, (int)(1 * scale), 0, (int)(1 * scale)),
             };
 
             var tbl = new TableLayoutPanel
@@ -936,23 +936,24 @@ namespace InstallerGUI.Forms
                 Padding = Padding.Empty,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(7 * scale))); // Barra bem fina de progresso geral
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(5 * scale))); // Barra ultrafina de progresso geral
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));             // Contagem da etapa
 
-            _progressBar = new ProgressBar
+            _progressBar = new ThinProgressBar
             {
                 Dock = DockStyle.Fill,
-                Style = ProgressBarStyle.Continuous,
-                ForeColor = CorDestaque,
-                BackColor = Color.FromArgb(60, 60, 60),
+                TrackColor = Color.FromArgb(45, 45, 45),
+                ProgressColor = CorSucesso,
+                Value = 0,
+                Maximum = 100,
                 Margin = Padding.Empty,
             };
 
             _lblProgress = new Label
             {
                 Text = "0 / 0",
-                ForeColor = CorTexto,
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(180, 180, 180),
+                Font = new Font("Segoe UI", 8.25f, FontStyle.Regular),
                 TextAlign = ContentAlignment.MiddleRight,
                 Dock = DockStyle.Fill,
                 Margin = new Padding(0, 0, (int)(2 * scale), 0),
@@ -994,7 +995,7 @@ namespace InstallerGUI.Forms
 
         /// <summary>
         /// Cria o painel lateral direito combinando:
-        /// lista de programas (scroll), botão instalar e barra de progresso.
+        /// lista de programas (scroll), botões de ação (Iniciar e Parar lado a lado) e barra de progresso.
         /// </summary>
         private Panel BuildRightPanel(float scale)
         {
@@ -1009,65 +1010,62 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 4,
+                RowCount = 3,
                 BackColor = CorFundo,
             };
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // Programas
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(48 * scale))); // Botão Instalar
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(40 * scale))); // Botão Parar
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale))); // Progresso (fino)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(40 * scale))); // Botões Instalar e Parar (lado a lado)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(25 * scale))); // Progresso (ultrafino)
 
             layout.Controls.Add(BuildProgramsPanel(scale), 0, 0);
 
-            // ─── Botão Instalar ───
-            var btnInstallPanel = new Panel
+            // ─── Linha de Ação: Botões Instalar e Parar Lado a Lado ───
+            var actionButtonsTable = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
                 BackColor = CorFundo,
-                Padding = new Padding(0, (int)(4 * scale), 0, (int)(2 * scale)),
+                Margin = Padding.Empty,
+                Padding = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
             };
+            actionButtonsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72f)); // INICIAR INSTALAÇÃO
+            actionButtonsTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28f)); // PARAR
+            actionButtonsTable.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             _btnInstall = new Button
             {
                 Text = "INICIAR INSTALAÇÃO",
-                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
                 ForeColor = CorTexto,
                 BackColor = Color.FromArgb(0, 150, 50),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Cursor = Cursors.Hand,
                 Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, (int)(4 * scale), 0),
             };
             _btnInstall.FlatAppearance.MouseOverBackColor = Color.FromArgb(0, 180, 70);
             _btnInstall.Click += BtnInstall_Click;
-            btnInstallPanel.Controls.Add(_btnInstall);
-
-            layout.Controls.Add(btnInstallPanel, 0, 1);
-
-            // ─── Botão Parar ───
-            var btnStopPanel = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = CorFundo,
-                Padding = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
-            };
+            actionButtonsTable.Controls.Add(_btnInstall, 0, 0);
 
             _btnStop = new Button
             {
                 Text = "PARAR",
-                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Dock = DockStyle.Fill,
+                Margin = new Padding((int)(2 * scale), 0, 0, 0),
             };
             SetStopButtonState(false);
             _btnStop.Click += BtnStop_Click;
-            btnStopPanel.Controls.Add(_btnStop);
+            actionButtonsTable.Controls.Add(_btnStop, 1, 0);
 
-            layout.Controls.Add(btnStopPanel, 0, 2);
-            layout.Controls.Add(BuildProgressBar(scale), 0, 3);
+            layout.Controls.Add(actionButtonsTable, 0, 1);
+            layout.Controls.Add(BuildProgressBar(scale), 0, 2);
 
             panel.Controls.Add(layout);
             return panel;
@@ -1719,13 +1717,13 @@ namespace InstallerGUI.Forms
         {
             var standardList = new List<ProgramInfo>
             {
-                new ProgramInfo("7zip",        "7-Zip",                          "7z.exe",                               "/S", "", "Geral"),
+                new ProgramInfo("7zip",        "7-Zip",                          "7z_setup.exe",                         "/S", "", "Geral"),
                 new ProgramInfo("adobereader", "Adobe Acrobat Reader",           "AcroRdrDC_x64.exe",                    "/sAll /msi EULA_ACCEPT=YES /qn /norestart", "", "Geral"),
                 new ProgramInfo("anydesk",     "AnyDesk",                        "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --silent --start-with-win --create-shortcuts --create-desktop-icon", "", "Geral") { UseShellExecute = true, DefaultChecked = false },
                 new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",          "Setup.exe",                            "-q --noeula", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true },
                 new ProgramInfo("brave",       "Brave Browser",                  "BraveBrowserSetup.exe",                "/silent /install", "", "Geral"),
                 new ProgramInfo("citrix",      "Citrix Workspace",               "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot", "", "Geral"),
-                new ProgramInfo("chrome",      "Google Chrome",                  "ChromeStandaloneSetup64.exe",          "/silent /install", "", "Geral"),
+                new ProgramInfo("chrome",      "Google Chrome",                  "googlechromestandaloneenterprise64.msi", "/qn /norestart", "", "Geral"),
                 new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1", "", "Geral"),
                 new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s", "", "Geral"),
                 new ProgramInfo("office365",   "Microsoft Office 365",           "setup.exe",                            "/configure configuration_o365.xml", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
@@ -1757,7 +1755,7 @@ namespace InstallerGUI.Forms
 
             var traceDrawList = new List<ProgramInfo>
             {
-                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-", "", "TraceDraw") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup-x64.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-", "", "TraceDraw") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var devList = new List<ProgramInfo>
@@ -1791,6 +1789,101 @@ namespace InstallerGUI.Forms
             list.AddRange(mediaList);
 
             return list;
+        }
+    }
+
+    /// <summary>
+    /// Barra de progresso ultrafina e moderna personalizada (estilo RustDesk corporativo).
+    /// Renderizada com desenho nativo GDI+ com trilho escuro e preenchimento colorido,
+    /// sem bordas brancas do UxTheme do Windows.
+    /// </summary>
+    public class ThinProgressBar : Control
+    {
+        private int _value;
+        private int _maximum = 100;
+        private Color _trackColor = Color.FromArgb(45, 45, 45);
+        private Color _progressColor = Color.FromArgb(243, 146, 0);
+
+        public ThinProgressBar()
+        {
+            SetStyle(ControlStyles.UserPaint |
+                     ControlStyles.AllPaintingInWmPaint |
+                     ControlStyles.OptimizedDoubleBuffer |
+                     ControlStyles.ResizeRedraw, true);
+            Height = 5;
+            BackColor = Color.Transparent;
+        }
+
+        public int Value
+        {
+            get { return _value; }
+            set
+            {
+                int clamped = Math.Max(0, Math.Min(_maximum, value));
+                if (_value != clamped)
+                {
+                    _value = clamped;
+                    Invalidate();
+                }
+            }
+        }
+
+        public int Maximum
+        {
+            get { return _maximum; }
+            set
+            {
+                if (value > 0 && _maximum != value)
+                {
+                    _maximum = value;
+                    if (_value > _maximum) _value = _maximum;
+                    Invalidate();
+                }
+            }
+        }
+
+        public Color TrackColor
+        {
+            get { return _trackColor; }
+            set
+            {
+                _trackColor = value;
+                Invalidate();
+            }
+        }
+
+        public Color ProgressColor
+        {
+            get { return _progressColor; }
+            set
+            {
+                _progressColor = value;
+                Invalidate();
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            var g = e.Graphics;
+
+            using (var trackBrush = new SolidBrush(_trackColor))
+            {
+                g.FillRectangle(trackBrush, 0, 0, Width, Height);
+            }
+
+            if (_maximum > 0 && _value > 0)
+            {
+                int fillWidth = (int)((float)_value / _maximum * Width);
+                if (fillWidth > Width) fillWidth = Width;
+                if (fillWidth > 0)
+                {
+                    using (var fillBrush = new SolidBrush(_progressColor))
+                    {
+                        g.FillRectangle(fillBrush, 0, 0, fillWidth, Height);
+                    }
+                }
+            }
         }
     }
 }
