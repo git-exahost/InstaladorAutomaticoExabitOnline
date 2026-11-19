@@ -74,7 +74,7 @@ namespace InstallerGUI.Forms
             float scale = GetDpiScale();
 
             // Configurações da janela responsivas ao DPI
-            Text = "Instalador Automático de Programas - EXABIT Soluções em TI";
+            Text = "Auto Instalador de Programas - EXABIT Soluções em TI";
 
             // Calcula dimensões adaptáveis ao tamanho do monitor e escala
             var workingArea = Screen.PrimaryScreen.WorkingArea;
@@ -110,6 +110,7 @@ namespace InstallerGUI.Forms
             _service.OnLog += AppendLog;
             _service.OnProgress += UpdateProgress;
             _service.OnInstallationCompleted += HandleInstallationCompleted;
+            _service.OnDownloadProgress += HandleDownloadProgress;
 
             // Monta todos os controles na tela
             BuildUI();
@@ -283,7 +284,7 @@ namespace InstallerGUI.Forms
 
             leftPanel.Controls.Add(new Label
             {
-                Text = "Instalador Automático de Programas",
+                Text = "Auto Instalador de Programas",
                 Font = new Font("Segoe UI", 13.5f, FontStyle.Bold),
                 ForeColor = CorDestaque,
                 AutoSize = true,
@@ -386,13 +387,13 @@ namespace InstallerGUI.Forms
             tblInputs.Controls.Add(_txtComputerName, 1, 0);
 
             // Linha 1: Senha do usuário Admin
-            tblInputs.Controls.Add(CreateLabel("Senha do usuário Admin:"), 0, 1);
+            tblInputs.Controls.Add(CreateLabel("Senha do Admin:"), 0, 1);
             _txtAdminPass = CreateTextBox("Senha do admin");
             _txtAdminPass.Text = "";
             tblInputs.Controls.Add(_txtAdminPass, 1, 1);
 
             // Linha 2: Criar usuário padrão (Nome do usuário)
-            tblInputs.Controls.Add(CreateLabel("Criar usuário padrão:"), 0, 2);
+            tblInputs.Controls.Add(CreateLabel("Usuário padrão:"), 0, 2);
             _txtStandardUserName = CreateTextBox("Nome do usuário");
             _txtStandardUserName.Text = "";
             tblInputs.Controls.Add(_txtStandardUserName, 1, 2);
@@ -436,15 +437,15 @@ namespace InstallerGUI.Forms
             tblChecks.Controls.Add(_chkWallpaper, 0, 3);
 
             // Linha 4: Atalho Suporte Norte
-            _chkShortcutSuporteNorte = CreateCheckBox("Suporte Norte (suporte.exabit.com.br)", false);
+            _chkShortcutSuporteNorte = CreateCheckBox("Atalho Suporte Nortel", false);
             tblChecks.Controls.Add(_chkShortcutSuporteNorte, 0, 4);
 
             // Linha 5: Atalho Webmail Nortel
-            _chkShortcutWebmailNortel = CreateCheckBox("Webmail Nortel (webmail.nortel.srv.br)", false);
+            _chkShortcutWebmailNortel = CreateCheckBox("Atalho Webmail Nortel", false);
             tblChecks.Controls.Add(_chkShortcutWebmailNortel, 0, 5);
 
             // Linha 6: Atalho Webmail Nortel Terceirização
-            _chkShortcutWebmailTerceirizacao = CreateCheckBox("Webmail Nortel Terceirização (webmail.nortelterceirizacao.com.br)", false);
+            _chkShortcutWebmailTerceirizacao = CreateCheckBox("Atalho Webmail Nortel Terceirização", false);
             tblChecks.Controls.Add(_chkShortcutWebmailTerceirizacao, 0, 6);
 
             mainTbl.Controls.Add(tblChecks, 1, 0);
@@ -544,19 +545,23 @@ namespace InstallerGUI.Forms
                 AutoScrollMargin = new Size(0, (int)(8 * scale)),
                 BackColor = CorPainel,
                 BorderStyle = BorderStyle.None,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
                 Margin = new Padding(0),
                 Padding = new Padding(0, (int)(4 * scale), 0, (int)(4 * scale)),
             };
 
             int top = (int)(6 * scale);
             int leftMargin = (int)(10 * scale);
+            string lastCategory = null;
+
             foreach (ProgramInfo prog in GetDefaultProgramList())
             {
-                if (prog.Id == "artcraft")
+                string cat = prog.Category ?? "Geral";
+                if (lastCategory != null && !string.Equals(cat, lastCategory, StringComparison.OrdinalIgnoreCase))
                 {
                     top += (int)(6 * scale);
 
-                    // Divisória horizontal abaixo do WinRAR separando os aplicativos da ArtCraft
+                    // Divisória horizontal separando as categorias
                     var divider = new Panel
                     {
                         Location = new Point(leftMargin, top),
@@ -564,15 +569,28 @@ namespace InstallerGUI.Forms
                         BackColor = Color.FromArgb(70, 70, 70),
                     };
                     _pnlPrograms.Controls.Add(divider);
+                    top += (int)(6 * scale);
 
-                    top += (int)(10 * scale);
+                    // Rótulo com o título da categoria
+                    var lblCategory = new Label
+                    {
+                        Text = cat,
+                        Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                        ForeColor = CorDestaque,
+                        Location = new Point(leftMargin, top),
+                        AutoSize = true,
+                    };
+                    _pnlPrograms.Controls.Add(lblCategory);
+                    top += lblCategory.Height + (int)(4 * scale);
                 }
+                lastCategory = cat;
 
                 var chk = new CheckBox
                 {
                     Text = prog.DisplayName,
                     Checked = prog.DefaultChecked,
                     Tag = prog,
+                    Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
                     ForeColor = CorTexto,
                     BackColor = Color.Transparent,
                     UseVisualStyleBackColor = false,
@@ -617,7 +635,7 @@ namespace InstallerGUI.Forms
                 ForeColor = CorTexto,
                 TextAlign = ContentAlignment.MiddleRight,
                 Dock = DockStyle.Right,
-                Width = (int)(90 * scale),
+                Width = (int)(160 * scale),
                 Padding = new Padding((int)(5 * scale), 0, (int)(5 * scale), 0),
             };
 
@@ -750,7 +768,6 @@ namespace InstallerGUI.Forms
             if (_installing) return;
 
             var selectedPrograms = new List<ProgramInfo>();
-            var internetRequiredPrograms = new List<string>();
             foreach (Control c in _pnlPrograms.Controls)
             {
                 var chk = c as CheckBox;
@@ -760,14 +777,6 @@ namespace InstallerGUI.Forms
                     if (prog != null)
                     {
                         selectedPrograms.Add(prog);
-                        if (prog.RequiresInternet)
-                        {
-                            string localPath = prog.GetFullPath(_service.BasePath);
-                            if (prog.Id == "office365" || !File.Exists(localPath))
-                            {
-                                internetRequiredPrograms.Add(prog.DisplayName);
-                            }
-                        }
                     }
                 }
             }
@@ -780,15 +789,14 @@ namespace InstallerGUI.Forms
 
             try
             {
-                if (internetRequiredPrograms.Count > 0)
+                if (selectedPrograms.Count > 0)
                 {
                     _btnInstall.Text = "VERIFICANDO INTERNET...";
                     while (!await _service.HasInternetConnectionAsync())
                     {
-                        string progsMsg = string.Join("\n• ", internetRequiredPrograms.ToArray());
                         var retryResult = MessageBox.Show(
                             "Sem conexão com a internet.\n\n" +
-                            "Os seguintes programas selecionados requerem acesso ativo à internet para download ou instalação:\n• " + progsMsg + "\n\n" +
+                            "Os programas selecionados serão baixados e instalados online diretamente da internet.\n\n" +
                             "Conecte-se à internet antes de continuar e clique em \"Repetir\", ou em \"Cancelar\" para voltar.",
                             "Conexão com a Internet Necessária",
                             MessageBoxButtons.RetryCancel,
@@ -941,6 +949,31 @@ namespace InstallerGUI.Forms
             _progressBar.Maximum = Math.Max(totalSteps, 1);
             _progressBar.Value = Math.Min(currentStep, totalSteps);
             _lblProgress.Text = string.Format("{0} / {1}", currentStep, totalSteps);
+        }
+
+        /// <summary>
+        /// Atualiza o rótulo de progresso durante o download de arquivos pela internet.
+        /// Chamado pelo evento <see cref="InstallerService.OnDownloadProgress"/>.
+        /// </summary>
+        private void HandleDownloadProgress(string displayName, int percent, long bytesReceived, long totalBytes)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => HandleDownloadProgress(displayName, percent, bytesReceived, totalBytes)));
+                return;
+            }
+
+            if (percent >= 0)
+            {
+                double mbRead = (double)bytesReceived / (1024 * 1024);
+                double mbTotal = (double)totalBytes / (1024 * 1024);
+                _lblProgress.Text = string.Format("{0}% ({1:N0}/{2:N0} MB)", percent, mbRead, mbTotal);
+            }
+            else
+            {
+                double mbRead = (double)bytesReceived / (1024 * 1024);
+                _lblProgress.Text = string.Format("{0:N1} MB", mbRead);
+            }
         }
 
         /// <summary>
@@ -1187,61 +1220,87 @@ namespace InstallerGUI.Forms
         // ══════════════════════════════════════════════
 
         /// <summary>
-        /// Retorna a lista padrão de programas disponíveis para instalação.
-        /// Cada item contém o nome, caminho do instalador e argumentos.
-        /// 
-        /// <summary>
-        /// Retorna a lista de programas padrão disponíveis para instalação.
-        /// Estrutura organizada:
-        /// 1. Programas padrão corporativos ordenados alfabeticamente (finalizando no WinRAR).
-        /// 2. Divisória visual no menu de programas.
-        /// 3. ArtCraft Studio como primeiro item após a divisória.
-        /// 4. Demais aplicativos da suíte Craft (Storytold) ordenados alfabeticamente com seus respectivos resumos entre parênteses.
+        /// Retorna a lista de programas padrão disponíveis para instalação organizados em categorias:
+        /// 1. Programas corporativos padrão (Geral)
+        /// 2. Suíte Criativa ArtCraft (Storytold)
+        /// 3. Vetorização Automática (TraceDraw)
+        /// 4. Ferramentas para Desenvolvimento (VSCode, Antigravity, Node.js, Composer, FileZilla, DBeaver)
+        /// 5. Criação 3D, Design e Edição de Vídeo (Blender, Affinity, DaVinci Resolve)
         /// </summary>
         private static List<ProgramInfo> GetDefaultProgramList()
         {
             var standardList = new List<ProgramInfo>
             {
-                new ProgramInfo("7zip",        "7-Zip",                          "7z.msi",                               "/qn /norestart"),
-                new ProgramInfo("adobereader", "Adobe Acrobat Reader",           "AcroRdrDC.exe",                        "/sAll /msi EULA_ACCEPT=YES /qn /norestart"),
-                new ProgramInfo("anydesk",     "AnyDesk",                        "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --silent --start-with-win --create-shortcuts --create-desktop-icon") { ProcessWorkingDir = "Programas", UseShellExecute = true, DefaultChecked = false },
-                new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",          "DWGTrueView\\Setup.exe",               "-q --noeula") { ProcessWorkingDir = "DWGTrueView", UseShellExecute = true },
-                new ProgramInfo("brave",       "Brave Browser",                  "BraveBrowserSetup.exe",                "/silent /install"),
-                new ProgramInfo("citrix",      "Citrix Workspace",               "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot"),
-                new ProgramInfo("chrome",      "Google Chrome",                  "ChromeStandaloneSetup64.exe",          "/silent /install"),
-                new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1"),
-                new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s"),
-                new ProgramInfo("office",      "Microsoft Office 2016",          "Office\\setup.exe",                    "/configure configuration.xml") { ProcessWorkingDir = "Office", FireAndForget = true, TimeoutMs = 600000, DefaultChecked = false },
-                new ProgramInfo("office365",   "Microsoft Office 365 (Online)",  "OfficeSetup.exe",                      "/configure configuration_o365.xml") { UseShellExecute = true, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",     "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1") { ProcessWorkingDir = "Programas", UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = true },
-                new ProgramInfo("firefox",     "Mozilla Firefox",                "Firefox_Setup.msi",                    "/qn /norestart"),
-                new ProgramInfo("radmin",      "Radmin VPN",                     "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART") { DefaultChecked = false },
-                new ProgramInfo("rustdesk",    "RustDesk",                       "rustdesk_x86_64.exe",                  "--silent-install") { FireAndForget = true },
-                new ProgramInfo("winrar",      "WinRAR",                         "winrar.exe",                           "/S"),
+                new ProgramInfo("7zip",        "7-Zip",                          "7z.exe",                               "/S", "", "Geral"),
+                new ProgramInfo("adobereader", "Adobe Acrobat Reader",           "AcroRdrDC_x64.exe",                    "/sAll /msi EULA_ACCEPT=YES /qn /norestart", "", "Geral"),
+                new ProgramInfo("anydesk",     "AnyDesk",                        "AnyDesk.exe",                          "--install \"C:\\Program Files (x86)\\AnyDesk\" --silent --start-with-win --create-shortcuts --create-desktop-icon", "", "Geral") { UseShellExecute = true, DefaultChecked = false },
+                new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",          "Setup.exe",                            "-q --noeula", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true },
+                new ProgramInfo("brave",       "Brave Browser",                  "BraveBrowserSetup.exe",                "/silent /install", "", "Geral"),
+                new ProgramInfo("citrix",      "Citrix Workspace",               "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot", "", "Geral"),
+                new ProgramInfo("chrome",      "Google Chrome",                  "ChromeStandaloneSetup64.exe",          "/silent /install", "", "Geral"),
+                new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1", "", "Geral"),
+                new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s", "", "Geral"),
+                new ProgramInfo("office365",   "Microsoft Office 365 (Online)",  "setup.exe",                            "/configure configuration_o365.xml", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",     "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1", "", "Geral") { UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = true },
+                new ProgramInfo("firefox",     "Mozilla Firefox",                "Firefox_Setup.msi",                    "/qn /norestart", "", "Geral"),
+                new ProgramInfo("radmin",      "Radmin VPN",                     "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART", "", "Geral") { DefaultChecked = false },
+                new ProgramInfo("rustdesk",    "RustDesk",                       "rustdesk_x86_64.exe",                  "--silent-install", "", "Geral") { FireAndForget = true },
+                new ProgramInfo("winrar",      "WinRAR",                         "winrar.exe",                           "/S", "", "Geral"),
             };
             standardList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
             var craftList = new List<ProgramInfo>
             {
-                new ProgramInfo("cadcraft",    "CADCraft (Desenho Técnico CAD)",    "cadcraft-windows-x64.msi",    "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("deckcraft",   "DeckCraft (Apresentações e Slides)","deckcraft-windows-x64.msi",   "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("filmcraft",   "FilmCraft (Editor de Vídeo)",       "filmcraft-windows-x64.msi",   "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("gridcraft",   "GridCraft (Planilhas Eletrônicas)", "gridcraft-windows-x64.msi",   "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("pdfcraft",    "PdfCraft (Leitor e Editor de PDF)", "pdfcraft-windows-x64.msi",    "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("photocraft",  "PhotoCraft (Editor de Fotos)",      "photocraft-windows-x64.msi",  "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("soundcraft",  "SoundCraft (Editor de Áudio)",      "soundcraft-windows-x64.msi",  "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("vectorcraft", "VectorCraft (Ilustração Vetorial)", "vectorcraft-windows-x64.msi", "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("wordcraft",   "WordCraft (Editor de Texto)",       "wordcraft-windows-x64.msi",   "/qn /norestart") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("cadcraft",    "CADCraft (Desenho Técnico CAD)",     "cadcraft-windows-x64.msi",    "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("deckcraft",   "DeckCraft (Apresentações e Slides)", "deckcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("designcraft", "DesignCraft (Design Gráfico e UI)",  "designcraft-windows-x64.msi", "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("effectcraft", "EffectCraft (Efeitos Visuais e VFX)","effectcraft-windows-x64.msi","/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("filmcraft",   "FilmCraft (Editor de Vídeo)",        "filmcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("gridcraft",   "GridCraft (Planilhas Eletrônicas)",  "gridcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("lightcraft",  "LightCraft (Iluminação e Estúdio 3D)","lightcraft-windows-x64.msi", "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("pdfcraft",    "PdfCraft (Leitor e Editor de PDF)",  "pdfcraft-windows-x64.msi",    "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("photocraft",  "PhotoCraft (Editor de Fotos)",       "photocraft-windows-x64.msi",  "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("soundcraft",  "SoundCraft (Editor de Áudio)",       "soundcraft-windows-x64.msi",  "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("texturecraft","TextureCraft (Texturização 3D)",     "texturecraft-windows-x64.msi","/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("vectorcraft", "VectorCraft (Ilustração Vetorial)",  "vectorcraft-windows-x64.msi", "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("wordcraft",   "WordCraft (Editor de Texto)",        "wordcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
             };
             craftList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
+            var traceDrawList = new List<ProgramInfo>
+            {
+                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES", "", "TraceDraw") { RequiresInternet = true, DefaultChecked = false },
+            };
+
+            var devList = new List<ProgramInfo>
+            {
+                new ProgramInfo("vscode",      "Visual Studio Code", "VSCodeSetup_x64.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("antigravity", "Antigravity IDE",    "Antigravity_IDE.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("nodejs",      "Node.js LTS",        "node_lts_x64.msi",    "/qn /norestart",                                  "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("composer",    "Composer (PHP)",     "Composer-Setup.exe",  "/VERYSILENT /NORESTART",                          "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("filezilla",   "FileZilla Client",   "FileZilla_setup.exe", "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("dbeaver",     "DBeaver Community",  "dbeaver_setup.exe",   "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+            };
+
+            var mediaList = new List<ProgramInfo>
+            {
+                new ProgramInfo("blender",        "Blender (3D e Criação)",           "blender.msi",                 "/qn /norestart",      "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("affinity",       "Affinity Studio (Português)",      "Affinity.msix",               "",                    "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("davinciresolve", "DaVinci Resolve Free (Vídeo/Cor)", "DaVinci_Resolve_Windows.exe", "/i /q /noreboot",     "", "Design & Multimídia") { RequiresInternet = true, TimeoutMs = 1800000, DefaultChecked = false },
+            };
+
             var list = new List<ProgramInfo>();
-            // 1. Programas padrão corporativos (WinRAR fica por último nesta seção)
+            // 1. Programas corporativos padrão
             list.AddRange(standardList);
-            // 2. ArtCraft Studio como primeiro item após a divisória
-            list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S") { DefaultChecked = false });
-            // 3. Demais aplicativos da suíte Craft da Storytold em ordem alfabética
+            // 2. ArtCraft Studio como primeiro item da seção ArtCraft, seguido pelos apps Craft em ordem alfabética
+            list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S", "", "ArtCraft") { DefaultChecked = false });
             list.AddRange(craftList);
+            // 3. TraceDraw
+            list.AddRange(traceDrawList);
+            // 4. Desenvolvimento
+            list.AddRange(devList);
+            // 5. Design & Multimídia
+            list.AddRange(mediaList);
 
             return list;
         }

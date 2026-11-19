@@ -39,6 +39,12 @@ namespace InstallerGUI.Services
         /// </summary>
         public event Action OnInstallationCompleted;
 
+        /// <summary>
+        /// Disparado durante o download de arquivos na internet para relatar o progresso.
+        /// Parâmetros: (displayName, percent, bytesReceived, totalBytes).
+        /// </summary>
+        public event Action<string, int, long, long> OnDownloadProgress;
+
         // ──────────────────────────────────────────────
         // Campos
         // ──────────────────────────────────────────────
@@ -777,8 +783,1141 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Obtém o diretório local de cache corporativo onde os instaladores online são baixados.
+        /// Localizado em %ProgramData%\EXABIT\Downloads.
+        /// </summary>
+        public string GetDownloadCacheDirectory()
+        {
+            try
+            {
+                string commonData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                string cacheDir = Path.Combine(commonData, "EXABIT", "Downloads");
+                if (!Directory.Exists(cacheDir))
+                {
+                    Directory.CreateDirectory(cacheDir);
+                }
+                return cacheDir;
+            }
+            catch
+            {
+                string tempDir = Path.Combine(Path.GetTempPath(), "EXABIT_Downloads");
+                if (!Directory.Exists(tempDir))
+                {
+                    Directory.CreateDirectory(tempDir);
+                }
+                return tempDir;
+            }
+        }
+
+        /// <summary>
+        /// Dispara o evento de progresso do download para a interface.
+        /// </summary>
+        private void ReportDownloadProgress(string displayName, int percent, long bytesReceived, long totalBytes)
+        {
+            if (OnDownloadProgress != null)
+            {
+                OnDownloadProgress(displayName, percent, bytesReceived, totalBytes);
+            }
+        }
+
+        /// <summary>
+        /// Faz o download assíncrono de um arquivo a partir de uma URL direta, salvando no cache corporativo.
+        /// Informa o progresso do download em tempo real via OnDownloadProgress e em etapas no log.
+        /// </summary>
+        private async Task<string> DownloadFileOnlineAsync(string url, string fileName, string displayName, long minBytes)
+        {
+            return await Task.Run(new Func<string>(() =>
+            {
+                try
+                {
+                    ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                    string cacheDir = GetDownloadCacheDirectory();
+                    string destPath = Path.Combine(cacheDir, fileName);
+
+                    if (File.Exists(destPath))
+                    {
+                        var fi = new FileInfo(destPath);
+                        if (fi.Length >= minBytes)
+                        {
+                            Log(string.Format("  Instalador de {0} pronto no cache ({1:N1} MB).",
+                                displayName, (double)fi.Length / (1024 * 1024)), ConsoleColor.Gray);
+                            return destPath;
+                        }
+                    }
+
+                    string tempPath = destPath + ".download";
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+
+                    Log(string.Format("  Baixando {0} online...", displayName), ConsoleColor.Cyan);
+
+                    var request = (HttpWebRequest)WebRequest.Create(url);
+                    request.Method = "GET";
+                    request.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0";
+                    request.Timeout = 30000;
+                    request.ReadWriteTimeout = 60000;
+                    request.AllowAutoRedirect = true;
+
+                    using (var response = (HttpWebResponse)request.GetResponse())
+                    {
+                        long totalBytes = response.ContentLength;
+                        using (var responseStream = response.GetResponseStream())
+                        using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 65536))
+                        {
+                            byte[] buffer = new byte[65536];
+                            long totalRead = 0;
+                            int bytesRead;
+                            int lastReportedPercent = -1;
+                            DateTime lastLogTime = DateTime.MinValue;
+
+                            ReportDownloadProgress(displayName, 0, 0, totalBytes);
+
+                            while ((bytesRead = responseStream.Read(buffer, 0, buffer.Length)) > 0)
+                            {
+                                if (_cancellationTokenSource != null && _cancellationTokenSource.IsCancellationRequested)
+                                {
+                                    throw new OperationCanceledException();
+                                }
+
+                                fileStream.Write(buffer, 0, bytesRead);
+                                totalRead += bytesRead;
+
+                                if (totalBytes > 0)
+                                {
+                                    int percent = (int)((totalRead * 100) / totalBytes);
+                                    ReportDownloadProgress(displayName, percent, totalRead, totalBytes);
+
+                                    if (percent >= 25 && lastReportedPercent < 25)
+                                    {
+                                        lastReportedPercent = 25;
+                                        Log(string.Format("  Download de {0}: 25% ({1:N1} MB / {2:N1} MB)",
+                                            displayName, (double)totalRead / (1024 * 1024), (double)totalBytes / (1024 * 1024)), ConsoleColor.Gray);
+                                    }
+                                    else if (percent >= 50 && lastReportedPercent < 50)
+                                    {
+                                        lastReportedPercent = 50;
+                                        Log(string.Format("  Download de {0}: 50% ({1:N1} MB / {2:N1} MB)",
+                                            displayName, (double)totalRead / (1024 * 1024), (double)totalBytes / (1024 * 1024)), ConsoleColor.Gray);
+                                    }
+                                    else if (percent >= 75 && lastReportedPercent < 75)
+                                    {
+                                        lastReportedPercent = 75;
+                                        Log(string.Format("  Download de {0}: 75% ({1:N1} MB / {2:N1} MB)",
+                                            displayName, (double)totalRead / (1024 * 1024), (double)totalBytes / (1024 * 1024)), ConsoleColor.Gray);
+                                    }
+                                }
+                                else
+                                {
+                                    if ((DateTime.Now - lastLogTime).TotalMilliseconds >= 2500)
+                                    {
+                                        lastLogTime = DateTime.Now;
+                                        ReportDownloadProgress(displayName, -1, totalRead, -1);
+                                        Log(string.Format("  Download de {0}: {1:N1} MB baixados...",
+                                            displayName, (double)totalRead / (1024 * 1024)), ConsoleColor.Gray);
+                                    }
+                                }
+                            }
+
+                            ReportDownloadProgress(displayName, 100, totalRead, totalBytes);
+                        }
+                    }
+
+                    var downloadedFi = new FileInfo(tempPath);
+                    if (downloadedFi.Exists && downloadedFi.Length >= minBytes)
+                    {
+                        try { if (File.Exists(destPath)) File.Delete(destPath); } catch { }
+                        File.Move(tempPath, destPath);
+
+                        Log(string.Format("[ok] Download de {0} concluído com sucesso ({1:N1} MB).",
+                            displayName, (double)downloadedFi.Length / (1024 * 1024)), ConsoleColor.Green);
+                        return destPath;
+                    }
+
+                    try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+                    Log(string.Format("X Arquivo baixado de {0} é inválido ou incompleto.", displayName), ConsoleColor.Red);
+                    return null;
+                }
+                catch (OperationCanceledException)
+                {
+                    Log(string.Format("X Download de {0} cancelado pelo usuário.", displayName), ConsoleColor.Yellow);
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("X Erro ao baixar {0}: {1}", displayName, ex.Message), ConsoleColor.Red);
+                    return null;
+                }
+            }));
+        }
+
+        private async Task<string> Resolve7ZipInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "7z_setup.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 1000000)
+            {
+                Log("  Instalador do 7-Zip pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://www.7-zip.org/a/7z2409-x64.exe";
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
+                    string html = wc.DownloadString("https://www.7-zip.org/download.html");
+                    var match = Regex.Match(html, @"href=""(a/7z[0-9]+-x64\.(?:exe|msi))""", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        downloadUrl = "https://www.7-zip.org/" + match.Groups[1].Value;
+                    }
+                }
+            }
+            catch { }
+
+            string ext = Path.GetExtension(downloadUrl);
+            if (!string.IsNullOrEmpty(ext))
+            {
+                destFile = Path.Combine(cacheDir, "7z_setup" + ext);
+                if (string.Equals(ext, ".msi", StringComparison.OrdinalIgnoreCase))
+                {
+                    program.Arguments = "/qn /norestart";
+                }
+                else
+                {
+                    program.Arguments = "/S";
+                }
+            }
+
+            return await DownloadFileOnlineAsync(downloadUrl, Path.GetFileName(destFile), program.DisplayName, 1000000);
+        }
+
+        private async Task<string> ResolveWinRarInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "winrar_setup.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 2000000)
+            {
+                Log("  Instalador do WinRAR pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://www.rarlab.com/rar/winrar-x64-723br.exe";
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
+                    string html = wc.DownloadString("https://www.rarlab.com/download.htm");
+                    var match = Regex.Match(html, @"href=""([^""]*winrar-x64-[0-9]+br\.exe)""", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        string rel = match.Groups[1].Value.TrimStart('/');
+                        downloadUrl = "https://www.rarlab.com/" + rel;
+                    }
+                }
+            }
+            catch { }
+
+            return await DownloadFileOnlineAsync(downloadUrl, "winrar_setup.exe", program.DisplayName, 2000000);
+        }
+
+        private async Task<string> ResolveRadminInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "Radmin_VPN.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 15000000)
+            {
+                Log("  Instalador do Radmin VPN pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://download.radmin-vpn.com/download/files/Radmin_VPN_2.1.4952.2.exe";
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
+                    string html = wc.DownloadString("https://www.radmin-vpn.com/");
+                    var match = Regex.Match(html, @"href=""([^""]*Radmin_VPN_[0-9.]+\.exe)""", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        downloadUrl = match.Groups[1].Value;
+                    }
+                }
+            }
+            catch { }
+
+            return await DownloadFileOnlineAsync(downloadUrl, "Radmin_VPN.exe", program.DisplayName, 15000000);
+        }
+
+        private async Task<string> ResolveAdobeReaderInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "AcroRdrDCx64_MUI.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 200000000)
+            {
+                Log("  Instalador do Adobe Acrobat Reader pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://ardownload3.adobe.com/pub/adobe/acrobat/win/AcrobatDC/2600322110/AcroRdrDCx642600322110_MUI.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "AcroRdrDCx64_MUI.exe", program.DisplayName, 200000000);
+        }
+
+        private async Task<string> ResolvePowerBIInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "PBIDesktopSetup_x64.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 300000000)
+            {
+                Log("  Instalador do Microsoft Power BI Desktop pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://download.microsoft.com/download/8/8/0/880BCA75-79DD-466A-927D-1ABF1F5454B0/PBIDesktopSetup-2026-10_x64.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "PBIDesktopSetup_x64.exe", program.DisplayName, 300000000);
+        }
+
+        private async Task<string> ResolveOffice365InstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string officeDir = Path.Combine(cacheDir, "Office365");
+
+            try
+            {
+                if (!Directory.Exists(officeDir))
+                {
+                    Directory.CreateDirectory(officeDir);
+                }
+            }
+            catch { }
+
+            string setupExe = Path.Combine(officeDir, "setup.exe");
+            string configXml = Path.Combine(officeDir, "configuration_o365.xml");
+            EnsureOffice365ConfigurationXml(configXml);
+
+            if (File.Exists(setupExe) && new FileInfo(setupExe).Length > 2000000)
+            {
+                Log("  Ferramenta de instalação do Office 365 pronta no cache.", ConsoleColor.Gray);
+                program.Arguments = string.Format("/configure {0}", QuoteProcessArgument(configXml));
+                return setupExe;
+            }
+
+            // Baixa setup.exe diretamente do CDN oficial da Microsoft (Click-to-Run Bootstrapper)
+            string directUrl = "https://officecdn.microsoft.com/pr/wsus/setup.exe";
+            string downloadedSetup = await DownloadFileOnlineAsync(directUrl, Path.Combine("Office365", "setup.exe"), "Microsoft Office 365 (Setup)", 2000000);
+            if (!string.IsNullOrEmpty(downloadedSetup) && File.Exists(downloadedSetup) && new FileInfo(downloadedSetup).Length > 2000000)
+            {
+                if (!string.Equals(downloadedSetup, setupExe, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { File.Copy(downloadedSetup, setupExe, true); } catch { }
+                }
+
+                if (File.Exists(setupExe))
+                {
+                    EnsureOffice365ConfigurationXml(configXml);
+                    program.Arguments = string.Format("/configure {0}", QuoteProcessArgument(configXml));
+                    Log("[ok] Ferramenta de instalação do Office 365 pronta.", ConsoleColor.Green);
+                    return setupExe;
+                }
+            }
+
+            // Fallback via Office Deployment Tool (ODT) caso o CDN direto falhe
+            string odtUrl = "https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20527-20150.exe";
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
+                    string page = wc.DownloadString("https://www.microsoft.com/en-us/download/details.aspx?id=49117");
+                    var match = Regex.Match(page, @"https?://[^\s""'<>]*(?:officedeploymenttool[^\s""'<>]*\.exe)", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        odtUrl = match.Value;
+                    }
+                }
+            }
+            catch { }
+
+            string downloadedOdt = await DownloadFileOnlineAsync(odtUrl, "officedeploymenttool.exe", "Office Deployment Tool (ODT)", 2000000);
+            if (!string.IsNullOrEmpty(downloadedOdt) && File.Exists(downloadedOdt))
+            {
+                Log("  Extraindo arquivos oficiais de instalação do Office 365...", ConsoleColor.Cyan);
+                int extractExit = await RunProcessAsync(downloadedOdt,
+                    string.Format("/extract:{0} /quiet", QuoteProcessArgument(officeDir)),
+                    60000, officeDir, false);
+
+                for (int i = 0; i < 15; i++)
+                {
+                    if (File.Exists(setupExe)) break;
+                    await Task.Delay(1000);
+                }
+
+                if (File.Exists(setupExe))
+                {
+                    EnsureOffice365ConfigurationXml(configXml);
+                    program.Arguments = string.Format("/configure {0}", QuoteProcessArgument(configXml));
+                    Log("[ok] Arquivos de instalação do Office 365 extraídos com sucesso.", ConsoleColor.Green);
+                    return setupExe;
+                }
+            }
+
+            Log("X Falha ao obter a ferramenta de instalação do Office 365.", ConsoleColor.Red);
+            return null;
+        }
+
+        /// <summary>
+        /// Verifica se o Microsoft Office 365 ou Office 16 já está instalado no sistema operacional.
+        /// </summary>
+        private static bool IsOffice365Installed()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string wordPath64 = Path.Combine(progFiles, "Microsoft Office", "root", "Office16", "WINWORD.EXE");
+                if (File.Exists(wordPath64)) return true;
+
+                string progFiles86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                string wordPath32 = Path.Combine(progFiles86, "Microsoft Office", "root", "Office16", "WINWORD.EXE");
+                if (File.Exists(wordPath32)) return true;
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Office\ClickToRun\Configuration"))
+                {
+                    if (key != null)
+                    {
+                        var prodCodes = key.GetValue("ProductCodes") as string;
+                        if (!string.IsNullOrEmpty(prodCodes) && prodCodes.IndexOf("O365", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return true;
+                        }
+                        var version = key.GetValue("VersionToReport") as string;
+                        if (!string.IsNullOrEmpty(version))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
+                {
+                    if (key != null)
+                    {
+                        foreach (var subKeyName in key.GetSubKeyNames())
+                        {
+                            if (subKeyName.IndexOf("O365", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                subKeyName.IndexOf("Office16", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                return true;
+                            }
+
+                            using (var subKey = key.OpenSubKey(subKeyName))
+                            {
+                                if (subKey != null)
+                                {
+                                    var dispName = subKey.GetValue("DisplayName") as string;
+                                    if (!string.IsNullOrEmpty(dispName) &&
+                                        (dispName.IndexOf("Microsoft 365", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         dispName.IndexOf("Office 365", StringComparison.OrdinalIgnoreCase) >= 0))
+                                    {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Autodesk DWG TrueView já está instalado no sistema operacional.
+        /// </summary>
+        private static bool IsDwgTrueViewInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string autodeskDir = Path.Combine(progFiles, "Autodesk");
+                if (Directory.Exists(autodeskDir))
+                {
+                    var dirs = Directory.GetDirectories(autodeskDir, "*DWG TrueView*");
+                    if (dirs != null && dirs.Length > 0) return true;
+                }
+
+                string progFiles86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                string autodeskDir86 = Path.Combine(progFiles86, "Autodesk");
+                if (Directory.Exists(autodeskDir86))
+                {
+                    var dirs = Directory.GetDirectories(autodeskDir86, "*DWG TrueView*");
+                    if (dirs != null && dirs.Length > 0) return true;
+                }
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Autodesk\DWG TrueView"))
+                {
+                    if (key != null) return true;
+                }
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"))
+                {
+                    if (key != null)
+                    {
+                        foreach (var subKeyName in key.GetSubKeyNames())
+                        {
+                            if (subKeyName.IndexOf("DWG TrueView", StringComparison.OrdinalIgnoreCase) >= 0)
+                                return true;
+
+                            using (var subKey = key.OpenSubKey(subKeyName))
+                            {
+                                if (subKey != null)
+                                {
+                                    var dispName = subKey.GetValue("DisplayName") as string;
+                                    if (!string.IsNullOrEmpty(dispName) && dispName.IndexOf("DWG TrueView", StringComparison.OrdinalIgnoreCase) >= 0)
+                                        return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Obtém o instalador oficial do Autodesk DWG TrueView direto da CDN da Autodesk.
+        /// Baixa o pacote oficial SFX (1,5 GB), extrai de forma silenciosa para C:\Autodesk e localiza o Setup.exe.
+        /// </summary>
+        private async Task<string> ResolveDwgTrueViewInstallerAsync(ProgramInfo program)
+        {
+            string extractedSetup = @"C:\Autodesk\DWGTrueView_2024_English_64bit_dlm\Setup.exe";
+            if (File.Exists(extractedSetup))
+            {
+                Log("  Instalador extraído do Autodesk DWG TrueView pronto em C:\\Autodesk.", ConsoleColor.Gray);
+                return extractedSetup;
+            }
+
+            string cacheDir = GetDownloadCacheDirectory();
+            string sfxPath = Path.Combine(cacheDir, "DWGTrueView_2024_English_64bit_dlm.sfx.exe");
+
+            if (!File.Exists(sfxPath) || new FileInfo(sfxPath).Length < 1000000000)
+            {
+                string downloadUrl = "https://dds.autodesk.com/NetSWDLD/2024/ACD/9C02048D-D0DB-3E06-B903-89BD24380AAD/SFX/DWGTrueView_2024_English_64bit_dlm.sfx.exe";
+                sfxPath = await DownloadFileOnlineAsync(downloadUrl, "DWGTrueView_2024_English_64bit_dlm.sfx.exe", "Autodesk DWG TrueView (1,5 GB)", 1000000000);
+            }
+
+            if (string.IsNullOrEmpty(sfxPath) || !File.Exists(sfxPath))
+            {
+                Log("X Falha ao baixar o instalador oficial do Autodesk DWG TrueView.", ConsoleColor.Red);
+                return null;
+            }
+
+            Log("  Extraindo arquivos do Autodesk DWG TrueView (aguarde alguns instantes)...", ConsoleColor.Cyan);
+            try
+            {
+                if (!Directory.Exists(@"C:\Autodesk"))
+                {
+                    Directory.CreateDirectory(@"C:\Autodesk");
+                }
+            }
+            catch { }
+
+            int sfxExit = await RunProcessAsync(sfxPath, "-suppresslaunch -d \"C:\\Autodesk\"", 900000, @"C:\Autodesk", false);
+
+            for (int i = 0; i < 20; i++)
+            {
+                if (File.Exists(extractedSetup)) break;
+                await Task.Delay(1000);
+            }
+
+            if (File.Exists(extractedSetup))
+            {
+                Log("[ok] Arquivos do Autodesk DWG TrueView extraídos com sucesso.", ConsoleColor.Green);
+                return extractedSetup;
+            }
+
+            try
+            {
+                if (Directory.Exists(@"C:\Autodesk"))
+                {
+                    var found = Directory.GetFiles(@"C:\Autodesk", "Setup.exe", SearchOption.AllDirectories);
+                    if (found != null && found.Length > 0)
+                    {
+                        return found[0];
+                    }
+                }
+            }
+            catch { }
+
+            Log("X Setup.exe do Autodesk DWG TrueView não foi encontrado após extração.", ConsoleColor.Red);
+            return null;
+        }
+
+        private async Task<string> ResolveTraceDrawInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "tracedraw-setup.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 5000000)
+            {
+                Log("  Instalador do TraceDraw pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = null;
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                var apiReq = (HttpWebRequest)WebRequest.Create("https://api.github.com/repos/tracedraw/tracedraw/releases/latest");
+                apiReq.Method = "GET";
+                apiReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0";
+                apiReq.Timeout = 8000;
+
+                using (var apiResp = (HttpWebResponse)apiReq.GetResponse())
+                using (var reader = new StreamReader(apiResp.GetResponseStream(), Encoding.UTF8))
+                {
+                    string json = reader.ReadToEnd();
+                    var match = Regex.Match(json, @"\""browser_download_url\""\s*:\s*\""(https://[^\s\""]*tracedraw[^\s\""]*(?:windows-x86_64-setup\.exe|setup\.exe|\.exe))\""", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        downloadUrl = match.Groups[1].Value;
+                    }
+                }
+            }
+            catch { }
+
+            if (string.IsNullOrEmpty(downloadUrl))
+            {
+                try
+                {
+                    var tagReq = (HttpWebRequest)WebRequest.Create("https://github.com/tracedraw/tracedraw/releases/latest");
+                    tagReq.Method = "GET";
+                    tagReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0";
+                    tagReq.AllowAutoRedirect = false;
+                    tagReq.Timeout = 8000;
+
+                    using (var tagResp = (HttpWebResponse)tagReq.GetResponse())
+                    {
+                        string location = tagResp.Headers["Location"];
+                        if (!string.IsNullOrEmpty(location))
+                        {
+                            var tagMatch = Regex.Match(location, @"/tag/([^/?#]+)", RegexOptions.IgnoreCase);
+                            if (tagMatch.Success)
+                            {
+                                string tag = tagMatch.Groups[1].Value;
+                                string version = tag.TrimStart('v');
+                                downloadUrl = string.Format("https://github.com/tracedraw/tracedraw/releases/download/{0}/tracedraw-{1}-windows-x86_64-setup.exe", tag, version);
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (string.IsNullOrEmpty(downloadUrl))
+            {
+                downloadUrl = "https://github.com/tracedraw/tracedraw/releases/download/v1.0.0/tracedraw-1.0.0-windows-x86_64-setup.exe";
+            }
+
+            return await DownloadFileOnlineAsync(downloadUrl, "tracedraw-setup.exe", program.DisplayName, 5000000);
+        }
+
+        private async Task<string> ResolveVSCodeInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "VSCodeSetup_x64.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 50000000)
+            {
+                Log("  Instalador do Visual Studio Code pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://update.code.visualstudio.com/latest/win32-x64/stable";
+            return await DownloadFileOnlineAsync(downloadUrl, "VSCodeSetup_x64.exe", program.DisplayName, 50000000);
+        }
+
+        private async Task<string> ResolveAntigravityInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "Antigravity_IDE_setup.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 50000000)
+            {
+                Log("  Instalador do Antigravity IDE pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://edgedl.me.gvt1.com/edgedl/release2/j0qc3/antigravity/stable/2.7.0-4507555968450560/windows-x64/Antigravity%20IDE.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "Antigravity_IDE_setup.exe", program.DisplayName, 50000000);
+        }
+
+        private async Task<string> ResolveNodeJsInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "node_lts_x64.msi");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 20000000)
+            {
+                Log("  Instalador do Node.js LTS pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi";
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
+                    string indexJson = wc.DownloadString("https://nodejs.org/dist/index.json");
+                    var match = Regex.Match(indexJson, @"\{""version"":""(v[0-9.]+)"",[^}]*""lts"":""([^""]+)""", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        string ver = match.Groups[1].Value;
+                        downloadUrl = string.Format("https://nodejs.org/dist/{0}/node-{0}-x64.msi", ver);
+                    }
+                }
+            }
+            catch { }
+
+            return await DownloadFileOnlineAsync(downloadUrl, "node_lts_x64.msi", program.DisplayName, 20000000);
+        }
+
+        private async Task<string> ResolveComposerInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "Composer-Setup.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 1000000)
+            {
+                Log("  Instalador do Composer pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://getcomposer.org/Composer-Setup.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "Composer-Setup.exe", program.DisplayName, 1000000);
+        }
+
+        private async Task<string> ResolveFileZillaInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "FileZilla_setup.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 10000000)
+            {
+                Log("  Instalador do FileZilla Client pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string nupkgUrl = "https://packages.chocolatey.org/filezilla.3.72.1.nupkg";
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
+                    string page = wc.DownloadString("https://community.chocolatey.org/packages/filezilla");
+                    var match = Regex.Match(page, @"FileZilla\s*<span>([0-9.]+)<", RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        nupkgUrl = string.Format("https://packages.chocolatey.org/filezilla.{0}.nupkg", match.Groups[1].Value);
+                    }
+                }
+            }
+            catch { }
+
+            string downloadedPkg = await DownloadFileOnlineAsync(nupkgUrl, "filezilla_pkg.zip", program.DisplayName, 10000000);
+            if (!string.IsNullOrEmpty(downloadedPkg) && File.Exists(downloadedPkg))
+            {
+                try
+                {
+                    string extractDir = Path.Combine(cacheDir, "FileZilla_extract");
+                    if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
+                    Directory.CreateDirectory(extractDir);
+
+                    System.IO.Compression.ZipFile.ExtractToDirectory(downloadedPkg, extractDir);
+                    var setupFiles = Directory.GetFiles(extractDir, "FileZilla_*_win64-setup.exe", SearchOption.AllDirectories);
+                    if (setupFiles != null && setupFiles.Length > 0)
+                    {
+                        if (File.Exists(destFile)) File.Delete(destFile);
+                        File.Copy(setupFiles[0], destFile, true);
+                        try { Directory.Delete(extractDir, true); } catch { }
+                        return destFile;
+                    }
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
+        private async Task<string> ResolveDBeaverInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "dbeaver_setup.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 50000000)
+            {
+                Log("  Instalador do DBeaver Community pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://dbeaver.io/files/dbeaver-ce-latest-x86_64-setup.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "dbeaver_setup.exe", program.DisplayName, 50000000);
+        }
+
+        private async Task<string> ResolveBlenderInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "blender.msi");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 100000000)
+            {
+                Log("  Instalador do Blender pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://download.blender.org/release/Blender5.3/blender-5.3.0-windows-x64.msi";
+            return await DownloadFileOnlineAsync(downloadUrl, "blender.msi", program.DisplayName, 100000000);
+        }
+
+        private async Task<string> ResolveAffinityInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "Affinity.msix");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 100000000)
+            {
+                Log("  Instalador do Affinity Studio pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://affinity-update.serif.com/windows/3/studio/retail/Affinity-Affinity-Store-x64-5004-20596bdfdd242bf0f3a45a6fd4ce4f845132454e.msix";
+            return await DownloadFileOnlineAsync(downloadUrl, "Affinity.msix", program.DisplayName, 100000000);
+        }
+
+        private async Task<string> ResolveDaVinciResolveInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string davinciDir = Path.Combine(cacheDir, "DaVinciResolve");
+            try
+            {
+                if (!Directory.Exists(davinciDir)) Directory.CreateDirectory(davinciDir);
+            }
+            catch { }
+
+            if (Directory.Exists(davinciDir))
+            {
+                var existingExes = Directory.GetFiles(davinciDir, "DaVinci_Resolve_*.exe", SearchOption.AllDirectories);
+                if (existingExes != null && existingExes.Length > 0 && new FileInfo(existingExes[0]).Length > 500000000)
+                {
+                    Log("  Instalador do DaVinci Resolve pronto no cache.", ConsoleColor.Gray);
+                    return existingExes[0];
+                }
+            }
+
+            string localProgDir = Path.Combine(_basePath, "Programas");
+            if (Directory.Exists(localProgDir))
+            {
+                var localExes = Directory.GetFiles(localProgDir, "DaVinci_Resolve_*.exe", SearchOption.AllDirectories);
+                if (localExes != null && localExes.Length > 0 && new FileInfo(localExes[0]).Length > 500000000)
+                {
+                    Log("  Instalador do DaVinci Resolve encontrado em Programas.", ConsoleColor.Gray);
+                    return localExes[0];
+                }
+            }
+
+            string downloadUrl = null;
+            try
+            {
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+                string downloadId = null;
+
+                using (var wc = new WebClient())
+                {
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
+                    string json = wc.DownloadString("https://www.blackmagicdesign.com/api/support/us/downloads.json");
+                    var match = Regex.Match(json, @"\{[^{}]*""downloadId""\s*:\s*""([^""]+)""[^{}]*""downloadTitle""\s*:\s*""([^""]*DaVinci Resolve[^""]*)""[^{}]*\}", RegexOptions.IgnoreCase);
+                    if (match.Success && match.Groups[2].Value.IndexOf("Studio", StringComparison.OrdinalIgnoreCase) < 0)
+                    {
+                        downloadId = match.Groups[1].Value;
+                    }
+                    else
+                    {
+                        var matches = Regex.Matches(json, @"\{""releaseId"":""[^""]+"",""downloadId"":""([^""]+)"",""downloadTitle"":""([^""]*DaVinci Resolve[^""]*)""");
+                        foreach (Match m in matches)
+                        {
+                            if (m.Groups[2].Value.IndexOf("Studio", StringComparison.OrdinalIgnoreCase) < 0)
+                            {
+                                downloadId = m.Groups[1].Value;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(downloadId))
+                {
+                    string regUrl = "https://www.blackmagicdesign.com/api/register/us/download/" + downloadId;
+                    var regReq = (HttpWebRequest)WebRequest.Create(regUrl);
+                    regReq.Method = "POST";
+                    regReq.ContentType = "application/json;charset=UTF-8";
+                    regReq.Accept = "application/json, text/plain, */*";
+                    regReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+                    regReq.Headers.Add("Origin", "https://www.blackmagicdesign.com");
+                    regReq.Referer = "https://www.blackmagicdesign.com/support/download/" + downloadId;
+
+                    string payload = "{\"firstname\":\"Exabit\",\"lastname\":\"Tech\",\"email\":\"suporte@exabit.com.br\",\"phone\":\"202-555-0194\",\"country\":\"us\",\"street\":\"Bowery 146\",\"state\":\"New York\",\"city\":\"AUR\",\"product\":\"DaVinci Resolve\"}";
+                    byte[] payloadBytes = Encoding.UTF8.GetBytes(payload);
+                    regReq.ContentLength = payloadBytes.Length;
+
+                    using (var st = regReq.GetRequestStream())
+                    {
+                        st.Write(payloadBytes, 0, payloadBytes.Length);
+                    }
+
+                    using (var regResp = (HttpWebResponse)regReq.GetResponse())
+                    using (var reader = new StreamReader(regResp.GetResponseStream()))
+                    {
+                        string respText = reader.ReadToEnd();
+                        if (!string.IsNullOrEmpty(respText) && respText.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                        {
+                            downloadUrl = respText.Trim();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log(string.Format("  Aviso ao consultar API da Blackmagic: {0}", ex.Message), ConsoleColor.Yellow);
+            }
+
+            if (string.IsNullOrEmpty(downloadUrl))
+            {
+                Log("X Não foi possível gerar link direto para o DaVinci Resolve. Coloque o instalador em %ProgramData%\\EXABIT\\Downloads\\DaVinciResolve.", ConsoleColor.Yellow);
+                return null;
+            }
+
+            string zipPath = await DownloadFileOnlineAsync(downloadUrl, "DaVinci_Resolve_Windows.zip", program.DisplayName, 500000000);
+            if (!string.IsNullOrEmpty(zipPath) && File.Exists(zipPath))
+            {
+                Log("  Extraindo instalador do DaVinci Resolve...", ConsoleColor.Cyan);
+                try
+                {
+                    System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, davinciDir);
+                    try { File.Delete(zipPath); } catch { }
+
+                    var exes = Directory.GetFiles(davinciDir, "DaVinci_Resolve_*.exe", SearchOption.AllDirectories);
+                    if (exes != null && exes.Length > 0)
+                    {
+                        return exes[0];
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log(string.Format("X Erro ao extrair DaVinci Resolve: {0}", ex.Message), ConsoleColor.Red);
+                }
+            }
+
+            return null;
+        }
+
+        private static string FindWingetExecutable()
+        {
+            try
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string userWinget = Path.Combine(localApp, "Microsoft", "WindowsApps", "winget.exe");
+                if (File.Exists(userWinget)) return userWinget;
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string winApps = Path.Combine(progFiles, "WindowsApps");
+                if (Directory.Exists(winApps))
+                {
+                    var files = Directory.GetFiles(winApps, "winget.exe", SearchOption.AllDirectories);
+                    if (files != null && files.Length > 0) return files[0];
+                }
+            }
+            catch { }
+            return "winget";
+        }
+
+        private async Task<string> EnsureProgramDownloadedAsync(ProgramInfo program)
+        {
+            if (program.Id == "rustdesk")
+            {
+                return await DownloadLatestRustDeskAsync();
+            }
+
+            if (program.Id == "citrix")
+            {
+                return await DownloadLatestCitrixAsync(null);
+            }
+
+            if (program.Id == "java")
+            {
+                return await DownloadLatestJavaAsync(null);
+            }
+
+            if (IsStorytoldCraftProgram(program.Id))
+            {
+                return await DownloadLatestStorytoldCraftAsync(program);
+            }
+
+            if (program.Id == "chrome")
+            {
+                return await DownloadFileOnlineAsync(
+                    "https://dl.google.com/chrome/install/standalonesetup64.exe",
+                    "ChromeStandaloneSetup64.exe",
+                    program.DisplayName,
+                    50000000);
+            }
+
+            if (program.Id == "firefox")
+            {
+                return await DownloadFileOnlineAsync(
+                    "https://download.mozilla.org/?product=firefox-msi-latest-ssl&os=win64&lang=pt-BR",
+                    "Firefox_Setup_x64.msi",
+                    program.DisplayName,
+                    40000000);
+            }
+
+            if (program.Id == "brave")
+            {
+                return await DownloadFileOnlineAsync(
+                    "https://laptop-updates.brave.com/latest/winx64",
+                    "BraveBrowserSetup.exe",
+                    program.DisplayName,
+                    1000000);
+            }
+
+            if (program.Id == "anydesk")
+            {
+                return await DownloadFileOnlineAsync(
+                    "https://download.anydesk.com/AnyDesk.exe",
+                    "AnyDesk.exe",
+                    program.DisplayName,
+                    3000000);
+            }
+
+            if (program.Id == "googleearth")
+            {
+                return await DownloadFileOnlineAsync(
+                    "https://dl.google.com/dl/earth/client/advanced/current/googleearthprowin-x64.exe",
+                    "googleearthprowin.exe",
+                    program.DisplayName,
+                    40000000);
+            }
+
+            if (program.Id == "7zip")
+            {
+                return await Resolve7ZipInstallerAsync(program);
+            }
+
+            if (program.Id == "winrar")
+            {
+                return await ResolveWinRarInstallerAsync(program);
+            }
+
+            if (program.Id == "radmin")
+            {
+                return await ResolveRadminInstallerAsync(program);
+            }
+
+            if (program.Id == "adobereader")
+            {
+                return await ResolveAdobeReaderInstallerAsync(program);
+            }
+
+            if (program.Id == "powerbi")
+            {
+                return await ResolvePowerBIInstallerAsync(program);
+            }
+
+            if (program.Id == "dwgtrueview")
+            {
+                return await ResolveDwgTrueViewInstallerAsync(program);
+            }
+
+            if (program.Id == "office365")
+            {
+                return await ResolveOffice365InstallerAsync(program);
+            }
+
+            if (program.Id == "tracedraw")
+            {
+                return await ResolveTraceDrawInstallerAsync(program);
+            }
+
+            if (program.Id == "vscode")
+            {
+                return await ResolveVSCodeInstallerAsync(program);
+            }
+
+            if (program.Id == "antigravity")
+            {
+                return await ResolveAntigravityInstallerAsync(program);
+            }
+
+            if (program.Id == "nodejs")
+            {
+                return await ResolveNodeJsInstallerAsync(program);
+            }
+
+            if (program.Id == "composer")
+            {
+                return await ResolveComposerInstallerAsync(program);
+            }
+
+            if (program.Id == "filezilla")
+            {
+                return await ResolveFileZillaInstallerAsync(program);
+            }
+
+            if (program.Id == "dbeaver")
+            {
+                return await ResolveDBeaverInstallerAsync(program);
+            }
+
+            if (program.Id == "blender")
+            {
+                return await ResolveBlenderInstallerAsync(program);
+            }
+
+            if (program.Id == "affinity")
+            {
+                return await ResolveAffinityInstallerAsync(program);
+            }
+
+            if (program.Id == "davinciresolve")
+            {
+                return await ResolveDaVinciResolveInstallerAsync(program);
+            }
+
+            if (!string.IsNullOrEmpty(program.DownloadUrl))
+            {
+                string fn = !string.IsNullOrEmpty(program.FileName) ? Path.GetFileName(program.FileName) : (program.Id + ".exe");
+                return await DownloadFileOnlineAsync(program.DownloadUrl, fn, program.DisplayName, 500000);
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// Instala um programa específico com base nas informações do <see cref="ProgramInfo"/>.
-        /// Suporta arquivos .exe e .msi com parâmetros de instalação silenciosa.
+        /// Realiza o download online de forma transparente e executa o instalador em modo silencioso.
         /// </summary>
         /// <param name="program">Informações do programa a ser instalado</param>
         /// <param name="options">Opções gerais de instalação fornecidas pelo usuário</param>
@@ -786,61 +1925,93 @@ namespace InstallerGUI.Services
         {
             Log(string.Format("Instalando {0}...", program.DisplayName), ConsoleColor.Yellow);
 
-            string fullPath = program.GetFullPath(_basePath);
-
-            if (program.Id == "rustdesk")
+            if (program.Id == "dwgtrueview")
             {
-                bool hasInternet = await HasInternetConnectionAsync();
-                if (hasInternet)
+                if (IsDwgTrueViewInstalled())
                 {
-                    Log("Conexão com a internet detectada. Verificando versão mais recente do RustDesk...", ConsoleColor.Cyan);
-                    string latestInstaller = await DownloadLatestRustDeskAsync();
-                    if (!string.IsNullOrEmpty(latestInstaller) && File.Exists(latestInstaller))
-                    {
-                        fullPath = latestInstaller;
-                        Log("[ok] Instalador da versão mais recente do RustDesk pronto para instalação.", ConsoleColor.Green);
+                    Log("[ok] Autodesk DWG TrueView já está instalado no sistema.", ConsoleColor.Green);
+                    return;
+                }
 
-                        string localProgramPath = program.GetFullPath(_basePath);
-                        try
-                        {
-                            if (File.Exists(localProgramPath))
-                            {
-                                File.Copy(latestInstaller, localProgramPath, true);
-                                Log("  Instalador local em dist\\Programas atualizado para a versão mais recente.", ConsoleColor.Gray);
-                            }
-                        }
-                        catch
-                        {
-                        }
-                    }
-                    else
+                string wingetExe = FindWingetExecutable();
+                if (!string.IsNullOrEmpty(wingetExe))
+                {
+                    Log("Instalando Autodesk DWG TrueView online via Windows Package Manager...", ConsoleColor.Cyan);
+                    int wingetExit = await RunProcessAsync(wingetExe,
+                        "install --id Autodesk.DWGTrueView.2027 -e --silent --accept-source-agreements --accept-package-agreements",
+                        1200000, null, false);
+
+                    if (wingetExit == 0 || IsDwgTrueViewInstalled())
                     {
-                        Log("  Usando instalador local de Programas.", ConsoleColor.Yellow);
+                        Log("[ok] Autodesk DWG TrueView instalado com sucesso.", ConsoleColor.Green);
+                        return;
                     }
+
+                    Log("  Instalação via winget não foi concluída. Baixando instalador oficial direto da Autodesk...", ConsoleColor.Yellow);
+                }
+
+                string setupExe = await ResolveDwgTrueViewInstallerAsync(program);
+                if (string.IsNullOrEmpty(setupExe) || !File.Exists(setupExe))
+                {
+                    Log("X Não foi possível obter o instalador online de Autodesk DWG TrueView.", ConsoleColor.Red);
+                    return;
+                }
+
+                Log("  Executando instalação silenciosa do Autodesk DWG TrueView (aguarde alguns minutos)...", ConsoleColor.Cyan);
+                string setupDir = Path.GetDirectoryName(setupExe);
+                int exitCode = await RunProcessAsync(setupExe, "-q --noeula", 1800000, setupDir, false);
+
+                if (exitCode == 0 || exitCode == 3010 || IsDwgTrueViewInstalled())
+                {
+                    Log("[ok] Autodesk DWG TrueView instalado com sucesso.", ConsoleColor.Green);
                 }
                 else
                 {
-                    Log("Sem conexão com a internet. Usando instalador local do RustDesk da pasta Programas.", ConsoleColor.Yellow);
+                    Log(string.Format("X Autodesk DWG TrueView retornou código {0}.", exitCode), ConsoleColor.Yellow);
                 }
+                return;
+            }
+
+            if (program.Id == "office365")
+            {
+                if (IsOffice365Installed())
+                {
+                    Log("[ok] Microsoft Office 365 já está instalado no sistema.", ConsoleColor.Green);
+                    return;
+                }
+
+                string wingetExe = FindWingetExecutable();
+                if (!string.IsNullOrEmpty(wingetExe))
+                {
+                    Log("Instalando Microsoft Office 365 online via Windows Package Manager...", ConsoleColor.Cyan);
+                    int wingetExit = await RunProcessAsync(wingetExe,
+                        "install --id Microsoft.Office -e --silent --accept-source-agreements --accept-package-agreements",
+                        1800000, null, false);
+
+                    if (wingetExit == 0 || IsOffice365Installed())
+                    {
+                        Log("[ok] Microsoft Office 365 instalado com sucesso.", ConsoleColor.Green);
+                        return;
+                    }
+
+                    Log("  Instalação via winget não foi concluída. Baixando instalador oficial do Office 365...", ConsoleColor.Yellow);
+                }
+            }
+
+            if (program.Id == "powerbi" && IsPowerBIDesktopInstalled())
+            {
+                Log("[ok] Microsoft Power BI Desktop já está instalado no sistema.", ConsoleColor.Green);
+                return;
+            }
+
+            if (program.Id == "anydesk" && IsAnyDeskInstalled())
+            {
+                Log("[ok] AnyDesk já está instalado no sistema.", ConsoleColor.Green);
+                return;
             }
 
             if (program.Id == "citrix")
             {
-                bool hasInternet = await HasInternetConnectionAsync();
-                if (hasInternet)
-                {
-                    Log("Conexão com a internet detectada. Verificando versão mais recente do Citrix Workspace...", ConsoleColor.Cyan);
-                    string latestCitrix = await DownloadLatestCitrixAsync(fullPath);
-                    if (!string.IsNullOrEmpty(latestCitrix) && File.Exists(latestCitrix))
-                    {
-                        fullPath = latestCitrix;
-                    }
-                }
-                else
-                {
-                    Log("Sem conexão com a internet. Usando instalador local do Citrix Workspace da pasta Programas.", ConsoleColor.Yellow);
-                }
-
                 try
                 {
                     string[] citrixProcs = new string[] { "CitrixWorkspaceApp", "Receiver", "wfcrun32" };
@@ -848,46 +2019,14 @@ namespace InstallerGUI.Services
                     {
                         foreach (var proc in Process.GetProcessesByName(citrixProcs[i]))
                         {
-                            try { proc.Kill(); }
-                            catch { }
+                            try { proc.Kill(); } catch { }
                         }
                     }
                 }
-                catch
-                {
-                }
+                catch { }
             }
-
-            if (program.Id == "java")
+            else if (program.Id == "java")
             {
-                bool hasInternet = await HasInternetConnectionAsync();
-                if (hasInternet)
-                {
-                    Log("Conexão com a internet detectada. Verificando versão mais recente do Java JRE...", ConsoleColor.Cyan);
-                    string latestJava = await DownloadLatestJavaAsync(fullPath);
-                    if (!string.IsNullOrEmpty(latestJava) && File.Exists(latestJava))
-                    {
-                        fullPath = latestJava;
-
-                        string localProgramPath = program.GetFullPath(_basePath);
-                        try
-                        {
-                            if (File.Exists(localProgramPath) && !string.Equals(latestJava, localProgramPath, StringComparison.OrdinalIgnoreCase))
-                            {
-                                File.Copy(latestJava, localProgramPath, true);
-                                Log("  Instalador local em dist\\Programas atualizado para a versão mais recente.", ConsoleColor.Gray);
-                            }
-                        }
-                        catch
-                        {
-                        }
-                    }
-                }
-                else
-                {
-                    Log("Sem conexão com a internet. Usando instalador local do Java JRE da pasta Programas.", ConsoleColor.Yellow);
-                }
-
                 try
                 {
                     string[] javaProcs = new string[] { "java", "javaw", "javaws", "jusched" };
@@ -895,130 +2034,203 @@ namespace InstallerGUI.Services
                     {
                         foreach (var proc in Process.GetProcessesByName(javaProcs[i]))
                         {
-                            try { proc.Kill(); }
-                            catch { }
+                            try { proc.Kill(); } catch { }
                         }
                     }
                 }
-                catch
-                {
-                }
+                catch { }
             }
-
-            if (IsStorytoldCraftProgram(program.Id))
+            else if (IsStorytoldCraftProgram(program.Id))
             {
-                bool hasInternet = await HasInternetConnectionAsync();
-                if (hasInternet)
-                {
-                    Log(string.Format("Conexão com a internet detectada. Verificando versão mais recente do {0}...", program.DisplayName), ConsoleColor.Cyan);
-                    string latestInstaller = await DownloadLatestStorytoldCraftAsync(program);
-                    if (!string.IsNullOrEmpty(latestInstaller) && File.Exists(latestInstaller))
-                    {
-                        fullPath = latestInstaller;
-                        Log(string.Format("[ok] Instalador da versão mais recente do {0} pronto para instalação.", program.DisplayName), ConsoleColor.Green);
-                    }
-                    else if (File.Exists(fullPath))
-                    {
-                        Log(string.Format("  Usando instalador local de {0} da pasta Programas.", program.DisplayName), ConsoleColor.Yellow);
-                    }
-                }
-                else
-                {
-                    if (File.Exists(fullPath))
-                    {
-                        Log(string.Format("Sem conexão com a internet. Usando instalador local de {0} da pasta Programas.", program.DisplayName), ConsoleColor.Yellow);
-                    }
-                    else
-                    {
-                        Log(string.Format("X {0} requer conexão com a internet para download. Conecte-se à internet antes de instalar.", program.DisplayName), ConsoleColor.Red);
-                        return;
-                    }
-                }
-
                 CloseProcessesForStorytoldCraft(program.Id);
             }
-
-            if (program.Id == "powerbi")
+            else if (program.Id == "anydesk")
             {
-                if (IsPowerBIDesktopInstalled())
+                try
                 {
-                    Log("[ok] Microsoft Power BI Desktop já está instalado no sistema.", ConsoleColor.Green);
-                    return;
+                    foreach (var proc in Process.GetProcessesByName("AnyDesk"))
+                    {
+                        try { proc.Kill(); } catch { }
+                    }
                 }
-
-                if (!File.Exists(fullPath))
-                {
-                    Log(string.Format("X Arquivo não encontrado: {0}", fullPath), ConsoleColor.Red);
-                    return;
-                }
-
+                catch { }
+            }
+            else if (program.Id == "powerbi")
+            {
                 try
                 {
                     foreach (var proc in Process.GetProcessesByName("PBIDesktopSetup_x64"))
                     {
-                        try { proc.Kill(); }
-                        catch { }
+                        try { proc.Kill(); } catch { }
                     }
                 }
                 catch { }
+            }
 
+            if (program.Id == "antigravity")
+            {
+                Log("Instalando Antigravity IDE via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id Google.AntigravityIDE -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0)
+                {
+                    Log("[ok] Antigravity IDE instalado com sucesso via winget.", ConsoleColor.Green);
+                    return;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "blender")
+            {
+                Log("Instalando Blender via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id BlenderFoundation.Blender -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0)
+                {
+                    Log("[ok] Blender instalado com sucesso via winget.", ConsoleColor.Green);
+                    return;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador MSI...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "affinity")
+            {
+                Log("Instalando Affinity Studio via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id Canva.Affinity -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0)
+                {
+                    Log("[ok] Affinity Studio instalado com sucesso via winget.", ConsoleColor.Green);
+                    return;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando pacote MSIX...", ConsoleColor.Yellow);
+                string msixPath = await EnsureProgramDownloadedAsync(program);
+                if (!string.IsNullOrEmpty(msixPath) && File.Exists(msixPath))
+                {
+                    Log("  Instalando pacote MSIX do Affinity Studio...", ConsoleColor.Cyan);
+                    string safeMsixPath = msixPath.Replace("'", "''");
+                    int exitCode = await RunProcessAsync("powershell",
+                        string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxPackage -Path '{0}'\"", safeMsixPath),
+                        600000, null, false);
+
+                    if (exitCode == 0)
+                    {
+                        Log("[ok] Affinity Studio instalado com sucesso.", ConsoleColor.Green);
+                    }
+                    else
+                    {
+                        Log(string.Format("X Falha ao instalar Affinity Studio (código {0}).", exitCode), ConsoleColor.Yellow);
+                    }
+                    return;
+                }
+                else
+                {
+                    Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
+                    return;
+                }
+            }
+
+            if (program.Id == "davinciresolve")
+            {
+                string fullPathDavinci = await EnsureProgramDownloadedAsync(program);
+                if (string.IsNullOrEmpty(fullPathDavinci) || !File.Exists(fullPathDavinci))
+                {
+                    Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
+                    return;
+                }
+
+                Log("  Executando instalador do DaVinci Resolve (aguarde)...", ConsoleColor.Yellow);
+                string runDir = Path.GetDirectoryName(fullPathDavinci);
+                int timeout = program.TimeoutMs > 0 ? program.TimeoutMs : 1800000;
+                int exitCode = await RunProcessAsync(fullPathDavinci, "/i /q /noreboot", timeout, runDir, true);
+                if (exitCode == 0)
+                {
+                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                }
+                else
+                {
+                    Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                }
+                return;
+            }
+
+            string fullPath = await EnsureProgramDownloadedAsync(program);
+            if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
+            {
+                Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
+                return;
+            }
+
+            if (program.Id == "anydesk")
+            {
+                string runDir = Path.GetDirectoryName(fullPath);
+                int anydeskTimeout = program.TimeoutMs > 0 ? program.TimeoutMs : 120000;
+                int anydeskExit = await RunProcessAsync(fullPath, program.Arguments, anydeskTimeout, runDir, true);
+
+                for (int attempt = 0; attempt < 8; attempt++)
+                {
+                    await Task.Delay(1000);
+                    if (IsAnyDeskInstalled()) break;
+                }
+
+                if (IsAnyDeskInstalled())
+                {
+                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    return;
+                }
+                else
+                {
+                    Log(string.Format("X {0}: O instalador finalizou (código {1}), porém os arquivos não foram encontrados no sistema.", program.DisplayName, anydeskExit), ConsoleColor.Yellow);
+                    return;
+                }
+            }
+
+            if (program.Id == "powerbi")
+            {
                 string stagingDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EXABIT", "Setup");
                 try
                 {
-                    if (!Directory.Exists(stagingDir))
-                    {
-                        Directory.CreateDirectory(stagingDir);
-                    }
+                    if (!Directory.Exists(stagingDir)) Directory.CreateDirectory(stagingDir);
                 }
                 catch { }
 
-                string stagedExe = Path.Combine(stagingDir, "PBIDesktopSetup_x64.exe");
                 string pbiLog = Path.Combine(stagingDir, "powerbi_install.log");
-
-                try
-                {
-                    if (!File.Exists(stagedExe) || new FileInfo(stagedExe).Length != new FileInfo(fullPath).Length)
-                    {
-                        Log("  Preparando arquivos do instalador em área local limpa...", ConsoleColor.Yellow);
-                        File.Copy(fullPath, stagedExe, true);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log(string.Format("  Aviso ao preparar instalador: {0}. Utilizando arquivo original.", ex.Message), ConsoleColor.Yellow);
-                    stagedExe = fullPath;
-                }
-
-                string runDir = Path.GetDirectoryName(stagedExe);
+                string runDir = Path.GetDirectoryName(fullPath);
                 int pbiTimeout = program.TimeoutMs > 0 ? program.TimeoutMs : 600000;
                 string quietArgs = string.Format("-quiet -norestart ACCEPT_EULA=1 -log {0}", QuoteProcessArgument(pbiLog));
 
                 Log("  Executando instalador do Power BI Desktop (aguarde alguns minutos)...", ConsoleColor.Yellow);
-                int pbiExit = await RunProcessAsync(stagedExe, quietArgs, pbiTimeout, runDir, true);
+                int pbiExit = await RunProcessAsync(fullPath, quietArgs, pbiTimeout, runDir, true);
 
                 await Task.Delay(2000);
                 if (IsPowerBIDesktopInstalled())
                 {
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
-                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
-                    catch { }
-                    try { if (File.Exists(pbiLog)) File.Delete(pbiLog); }
-                    catch { }
+                    try { if (File.Exists(pbiLog)) File.Delete(pbiLog); } catch { }
                     return;
                 }
 
-                Log("  Instalação silenciosa não detectada. Tentando instalação em modo passivo...", ConsoleColor.Yellow);
+                Log("  Instalação silenciosa não detectada. Tentando em modo passivo...", ConsoleColor.Yellow);
                 string passiveArgs = string.Format("-passive -norestart ACCEPT_EULA=1 -log {0}", QuoteProcessArgument(pbiLog));
-                pbiExit = await RunProcessAsync(stagedExe, passiveArgs, pbiTimeout, runDir, true);
+                pbiExit = await RunProcessAsync(fullPath, passiveArgs, pbiTimeout, runDir, true);
 
                 await Task.Delay(2000);
                 if (IsPowerBIDesktopInstalled())
                 {
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
-                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
-                    catch { }
-                    try { if (File.Exists(pbiLog)) File.Delete(pbiLog); }
-                    catch { }
+                    try { if (File.Exists(pbiLog)) File.Delete(pbiLog); } catch { }
                     return;
                 }
                 else
@@ -1032,121 +2244,17 @@ namespace InstallerGUI.Services
                     {
                         Log(string.Format("X {0}: O instalador finalizou sem erro, porém os arquivos não foram encontrados no sistema.", program.DisplayName), ConsoleColor.Yellow);
                     }
-
-                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
-                    catch { }
                     return;
                 }
-            }
-
-            if (program.Id == "anydesk")
-            {
-                if (IsAnyDeskInstalled())
-                {
-                    Log("[ok] AnyDesk já está instalado no sistema.", ConsoleColor.Green);
-                    return;
-                }
-
-                if (!File.Exists(fullPath))
-                {
-                    Log(string.Format("X Arquivo não encontrado: {0}", fullPath), ConsoleColor.Red);
-                    return;
-                }
-
-                try
-                {
-                    foreach (var proc in Process.GetProcessesByName("AnyDesk"))
-                    {
-                        try { proc.Kill(); }
-                        catch { }
-                    }
-                }
-                catch { }
-
-                string stagingDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EXABIT", "Setup");
-                try
-                {
-                    if (!Directory.Exists(stagingDir))
-                    {
-                        Directory.CreateDirectory(stagingDir);
-                    }
-                }
-                catch { }
-
-                string stagedExe = Path.Combine(stagingDir, "AnyDesk.exe");
-                try
-                {
-                    if (!File.Exists(stagedExe) || new FileInfo(stagedExe).Length != new FileInfo(fullPath).Length)
-                    {
-                        File.Copy(fullPath, stagedExe, true);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log(string.Format("  Aviso ao preparar AnyDesk: {0}. Utilizando arquivo original.", ex.Message), ConsoleColor.Yellow);
-                    stagedExe = fullPath;
-                }
-
-                string runDir = Path.GetDirectoryName(stagedExe);
-                int anydeskTimeout = program.TimeoutMs > 0 ? program.TimeoutMs : 120000;
-
-                int anydeskExit = await RunProcessAsync(stagedExe, program.Arguments, anydeskTimeout, runDir, true);
-
-                for (int attempt = 0; attempt < 8; attempt++)
-                {
-                    await Task.Delay(1000);
-                    if (IsAnyDeskInstalled())
-                    {
-                        break;
-                    }
-                }
-
-                if (IsAnyDeskInstalled())
-                {
-                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
-                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
-                    catch { }
-                    return;
-                }
-                else
-                {
-                    Log(string.Format("X {0}: O instalador finalizou (código {1}), porém os arquivos não foram encontrados no sistema.", program.DisplayName, anydeskExit),
-                        ConsoleColor.Yellow);
-                    try { if (stagedExe != fullPath && File.Exists(stagedExe)) File.Delete(stagedExe); }
-                    catch { }
-                    return;
-                }
-            }
-
-            if (!File.Exists(fullPath))
-            {
-                Log(string.Format("X Arquivo não encontrado: {0}", fullPath), ConsoleColor.Red);
-                return;
-            }
-
-            if (program.Id == "office365" && !await HasInternetConnectionAsync())
-            {
-                Log(string.Format("X {0} requer conexão com a internet. Conecte-se à internet antes de instalar.", program.DisplayName),
-                    ConsoleColor.Red);
-                return;
             }
 
             try
             {
                 string extension = Path.GetExtension(fullPath).ToLower();
-
                 string procWorkDir = Path.GetDirectoryName(fullPath);
-
-                if (program.Id == "office365")
-                {
-                    string configPath = Path.Combine(procWorkDir, "configuration_o365.xml");
-                    EnsureOffice365ConfigurationXml(configPath);
-                    program.Arguments = string.Format("/configure {0}", QuoteProcessArgument(configPath));
-                }
 
                 if (program.FireAndForget)
                 {
-                    // Inicia e aguarda um tempo para o instalador trabalhar em segundo plano
                     int delay = program.TimeoutMs > 0 ? program.TimeoutMs : 30000;
                     Process.Start(new ProcessStartInfo
                     {
@@ -1157,8 +2265,7 @@ namespace InstallerGUI.Services
                     });
                     Log(string.Format("  Aguardando {0} segundos para conclusão...", delay / 1000), ConsoleColor.Gray);
                     await Task.Delay(delay);
-                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName),
-                        ConsoleColor.Green);
+                    Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
 
                     if (program.Id == "rustdesk")
                     {
@@ -1169,7 +2276,6 @@ namespace InstallerGUI.Services
                 else
                 {
                     int timeout = program.TimeoutMs > 0 ? program.TimeoutMs : 600000;
-
                     int exitCode;
                     if (extension == ".msi")
                     {
@@ -1179,69 +2285,56 @@ namespace InstallerGUI.Services
                     }
                     else
                     {
+                        bool suppressStdErr = (program.Id == "chrome");
                         exitCode = await RunProcessAsync(fullPath, program.Arguments,
-                            timeout, procWorkDir, program.UseShellExecute);
+                            timeout, procWorkDir, program.UseShellExecute, suppressStdErr);
                     }
 
                     if (exitCode == 0)
                     {
-                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName),
-                            ConsoleColor.Green);
-
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                         if (program.Id == "rustdesk")
                         {
                             string adminPass = options != null ? options.AdminPassword : null;
                             await ConfigureRustDeskServerAsync(adminPass);
                         }
                     }
-                    else if ((program.Id == "citrix" || program.Id == "office365" || program.Id == "office") && exitCode == 3010)
+                    else if ((program.Id == "citrix" || program.Id == "office365") && exitCode == 3010)
                     {
-                        Log(string.Format("[ok] {0} instalado com sucesso (reinicialização do sistema necessária).", program.DisplayName),
-                            ConsoleColor.Green);
+                        Log(string.Format("[ok] {0} instalado com sucesso (reinicialização do sistema necessária).", program.DisplayName), ConsoleColor.Green);
+                    }
+                    else if (program.Id == "office365" && IsOffice365Installed())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                     }
                     else if (program.Id == "citrix" && (exitCode == -2147467259 || exitCode == 1603))
                     {
                         string retryArgs = program.Arguments.Replace("/includeSSON", "").Trim();
                         if (retryArgs.IndexOf("/noreboot", StringComparison.OrdinalIgnoreCase) < 0)
-                        {
                             retryArgs = (retryArgs + " /noreboot").Trim();
-                        }
                         if (retryArgs.IndexOf("/forceinstall", StringComparison.OrdinalIgnoreCase) < 0)
-                        {
                             retryArgs = (retryArgs + " /forceinstall").Trim();
-                        }
 
-                        Log(string.Format("  Falha na instalação do Citrix Workspace (código {0}). Tentando novamente com parâmetros ajustados...", exitCode),
-                            ConsoleColor.Yellow);
-
+                        Log(string.Format("  Falha na instalação do Citrix Workspace (código {0}). Tentando com parâmetros ajustados...", exitCode), ConsoleColor.Yellow);
                         int retryExitCode = await RunProcessAsync(fullPath, retryArgs, timeout, procWorkDir, program.UseShellExecute);
-                        if (retryExitCode == 0)
+                        if (retryExitCode == 0 || retryExitCode == 3010)
                         {
-                            Log(string.Format("[ok] {0} instalado com sucesso na segunda tentativa.", program.DisplayName),
-                                ConsoleColor.Green);
-                        }
-                        else if (retryExitCode == 3010)
-                        {
-                            Log(string.Format("[ok] {0} instalado com sucesso na segunda tentativa (reinicialização do sistema necessária).", program.DisplayName),
-                                ConsoleColor.Green);
+                            Log(string.Format("[ok] {0} instalado com sucesso na segunda tentativa.", program.DisplayName), ConsoleColor.Green);
                         }
                         else
                         {
-                            Log(string.Format("X {0} retornou código {1} na segunda tentativa.", program.DisplayName, retryExitCode),
-                                ConsoleColor.Yellow);
+                            Log(string.Format("X {0} retornou código {1} na segunda tentativa.", program.DisplayName, retryExitCode), ConsoleColor.Yellow);
                         }
                     }
                     else
                     {
-                        Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode),
-                            ConsoleColor.Yellow);
+                        Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
                     }
                 }
             }
             catch (Exception ex)
             {
-                Log(string.Format("X Erro ao instalar {0}: {1}", program.DisplayName, ex.Message),
-                    ConsoleColor.Red);
+                Log(string.Format("X Erro ao instalar {0}: {1}", program.DisplayName, ex.Message), ConsoleColor.Red);
             }
 
             await Task.Delay(300);
@@ -1257,9 +2350,10 @@ namespace InstallerGUI.Services
             {
                 if (!File.Exists(configPath))
                 {
+                    string arch = Environment.Is64BitOperatingSystem ? "64" : "32";
                     string xmlContent =
                         "<Configuration>\r\n" +
-                        "  <Add OfficeClientEdition=\"64\" Channel=\"Current\">\r\n" +
+                        "  <Add OfficeClientEdition=\"" + arch + "\" Channel=\"Current\">\r\n" +
                         "    <Product ID=\"O365ProPlusRetail\">\r\n" +
                         "      <Language ID=\"pt-br\" />\r\n" +
                         "    </Product>\r\n" +
@@ -1269,7 +2363,7 @@ namespace InstallerGUI.Services
                         "  <Updates Enabled=\"TRUE\" Channel=\"Current\" />\r\n" +
                         "</Configuration>\r\n";
 
-                    File.WriteAllText(configPath, xmlContent, Encoding.UTF8);
+                    File.WriteAllText(configPath, xmlContent, new UTF8Encoding(false));
                     Log("  Arquivo de configuração do Office 365 em pt-br gerado com sucesso.", ConsoleColor.Gray);
                 }
             }
@@ -1368,31 +2462,7 @@ namespace InstallerGUI.Services
                         fileName = "rustdesk_latest_x86_64.exe";
                     }
 
-                    string targetDir = Path.Combine(_basePath, "Programas");
-                    bool useLocalAppDir = false;
-                    try
-                    {
-                        if (!Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                    }
-                    catch
-                    {
-                        useLocalAppDir = true;
-                    }
-
-                    if (useLocalAppDir)
-                    {
-                        targetDir = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "Exabit", "AutoInstall", "Updates");
-                        if (!Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                    }
-
+                    string targetDir = GetDownloadCacheDirectory();
                     string destFile = Path.Combine(targetDir, fileName);
 
                     Log(string.Format("  Baixando {0}...", fileName), ConsoleColor.Cyan);
@@ -1518,31 +2588,7 @@ namespace InstallerGUI.Services
                         return localPath;
                     }
 
-                    string targetDir = Path.Combine(_basePath, "Programas");
-                    bool useLocalAppDir = false;
-                    try
-                    {
-                        if (!Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                    }
-                    catch
-                    {
-                        useLocalAppDir = true;
-                    }
-
-                    if (useLocalAppDir)
-                    {
-                        targetDir = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "Exabit", "AutoInstall", "Updates");
-                        if (!Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                    }
-
+                    string targetDir = GetDownloadCacheDirectory();
                     string destFile = Path.Combine(targetDir, "CitrixWorkspaceFullInstaller_x64.exe");
                     string tempFile = destFile + ".download";
 
@@ -1700,18 +2746,7 @@ namespace InstallerGUI.Services
                         return localPath;
                     }
 
-                    string targetDir = Path.GetDirectoryName(localPath);
-                    if (string.IsNullOrEmpty(targetDir) || !Directory.Exists(targetDir))
-                    {
-                        targetDir = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                            "Exabit", "AutoInstall", "Updates");
-                        if (!Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                    }
-
+                    string targetDir = GetDownloadCacheDirectory();
                     string destFile = Path.Combine(targetDir, "jre-windows-x64.exe");
                     string tempFile = destFile + ".download";
 
@@ -1765,9 +2800,10 @@ namespace InstallerGUI.Services
         private static bool IsStorytoldCraftProgram(string id)
         {
             return id == "artcraft" || id == "cadcraft" || id == "deckcraft" ||
-                   id == "filmcraft" || id == "gridcraft" || id == "pdfcraft" ||
-                   id == "photocraft" || id == "soundcraft" || id == "vectorcraft" ||
-                   id == "wordcraft";
+                   id == "designcraft" || id == "effectcraft" || id == "filmcraft" ||
+                   id == "gridcraft" || id == "lightcraft" || id == "pdfcraft" ||
+                   id == "photocraft" || id == "soundcraft" || id == "texturecraft" ||
+                   id == "vectorcraft" || id == "wordcraft";
         }
 
         /// <summary>
@@ -1780,11 +2816,15 @@ namespace InstallerGUI.Services
                 case "artcraft": return "artcraft";
                 case "cadcraft": return "cadcraft";
                 case "deckcraft": return "deckcraft";
+                case "designcraft": return "designcraft";
+                case "effectcraft": return "effectcraft";
                 case "filmcraft": return "filmcraft";
                 case "gridcraft": return "gridcraft";
+                case "lightcraft": return "lightcraft";
                 case "pdfcraft": return "pdfcraft";
                 case "photocraft": return "photocraft";
                 case "soundcraft": return "soundcraft";
+                case "texturecraft": return "texturecraft";
                 case "vectorcraft": return "vectorcraft";
                 case "wordcraft": return "wordcraft";
                 default: return null;
@@ -1804,11 +2844,15 @@ namespace InstallerGUI.Services
                     case "artcraft": procs = new string[] { "artcraft", "ArtCraft" }; break;
                     case "cadcraft": procs = new string[] { "cadcraft", "CADCraft" }; break;
                     case "deckcraft": procs = new string[] { "deckcraft", "DeckCraft" }; break;
+                    case "designcraft": procs = new string[] { "designcraft", "DesignCraft" }; break;
+                    case "effectcraft": procs = new string[] { "effectcraft", "EffectCraft" }; break;
                     case "filmcraft": procs = new string[] { "filmcraft", "FilmCraft" }; break;
                     case "gridcraft": procs = new string[] { "gridcraft", "GridCraft" }; break;
+                    case "lightcraft": procs = new string[] { "lightcraft", "LightCraft" }; break;
                     case "pdfcraft": procs = new string[] { "pdfcraft", "PdfCraft" }; break;
                     case "photocraft": procs = new string[] { "photocraft", "PhotoCraft" }; break;
                     case "soundcraft": procs = new string[] { "soundcraft", "SoundCraft" }; break;
+                    case "texturecraft": procs = new string[] { "texturecraft", "TextureCraft" }; break;
                     case "vectorcraft": procs = new string[] { "vectorcraft", "VectorCraft" }; break;
                     case "wordcraft": procs = new string[] { "wordcraft", "WordCraft" }; break;
                     default: procs = new string[0]; break;
@@ -1858,7 +2902,7 @@ namespace InstallerGUI.Services
         /// <returns>Caminho completo do instalador em disco, ou null em caso de falha</returns>
         private async Task<string> DownloadLatestStorytoldCraftAsync(ProgramInfo program)
         {
-            return await Task.Run(new Func<string>(() =>
+            string resolvedUrlOrPath = await Task.Run(new Func<string>(() =>
             {
                 try
                 {
@@ -1971,31 +3015,7 @@ namespace InstallerGUI.Services
                     }
 
                     // Define pasta destino
-                    string targetDir = Path.Combine(_basePath, "Programas");
-                    bool useLocalAppDir = false;
-                    try
-                    {
-                        if (!Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                    }
-                    catch
-                    {
-                        useLocalAppDir = true;
-                    }
-
-                    if (useLocalAppDir)
-                    {
-                        targetDir = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "Exabit", "AutoInstall", "Updates");
-                        if (!Directory.Exists(targetDir))
-                        {
-                            Directory.CreateDirectory(targetDir);
-                        }
-                    }
-
+                    string targetDir = GetDownloadCacheDirectory();
                     string destFile = Path.Combine(targetDir, fileName);
 
                     // Verifica se este instalador exato já foi baixado previamente
@@ -2010,49 +3030,46 @@ namespace InstallerGUI.Services
                         }
                     }
 
-                    string tempFile = destFile + ".download";
-                    try
-                    {
-                        if (File.Exists(tempFile))
-                        {
-                            File.Delete(tempFile);
-                        }
-                    }
-                    catch
-                    {
-                    }
-
-                    Log(string.Format("  Baixando versão mais recente do {0} ({1})...", program.DisplayName, fileName), ConsoleColor.Cyan);
-
-                    using (var webClient = new WebClient())
-                    {
-                        webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/1.0");
-                        webClient.DownloadFile(downloadUrl, tempFile);
-                    }
-
-                    var tempInfo = new FileInfo(tempFile);
-                    if (tempInfo.Exists && tempInfo.Length > 2 * 1024 * 1024)
-                    {
-                        if (File.Exists(destFile))
-                        {
-                            try { File.Delete(destFile); } catch { }
-                        }
-                        File.Move(tempFile, destFile);
-
-                        SyncLocalCopy(destFile, targetDir, program.FileName);
-
-                        Log(string.Format("[ok] Download do {0} concluído com sucesso.", program.DisplayName), ConsoleColor.Green);
-                        return destFile;
-                    }
-
-                    return null;
+                    return downloadUrl;
                 }
                 catch (Exception ex)
                 {
-                    Log(string.Format("  Aviso ao verificar/baixar {0}: {1}", program.DisplayName, ex.Message), ConsoleColor.Yellow);
+                    Log(string.Format("  Aviso ao verificar {0}: {1}", program.DisplayName, ex.Message), ConsoleColor.Yellow);
                     return null;
                 }
             }));
+
+            if (string.IsNullOrEmpty(resolvedUrlOrPath))
+            {
+                return null;
+            }
+
+            if (File.Exists(resolvedUrlOrPath))
+            {
+                return resolvedUrlOrPath;
+            }
+
+            string urlFn = null;
+            try
+            {
+                var uri = new Uri(resolvedUrlOrPath);
+                urlFn = Path.GetFileName(uri.LocalPath);
+            }
+            catch { }
+
+            if (string.IsNullOrEmpty(urlFn))
+            {
+                urlFn = program.FileName;
+            }
+
+            string downloadedCraft = await DownloadFileOnlineAsync(resolvedUrlOrPath, urlFn, program.DisplayName, 2 * 1024 * 1024);
+            if (!string.IsNullOrEmpty(downloadedCraft) && File.Exists(downloadedCraft))
+            {
+                SyncLocalCopy(downloadedCraft, GetDownloadCacheDirectory(), program.FileName);
+                return downloadedCraft;
+            }
+
+            return null;
         }
 
         /// <summary>

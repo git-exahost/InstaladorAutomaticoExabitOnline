@@ -72,20 +72,35 @@ namespace InstallerGUI.Models
         public bool DefaultChecked { get; set; }
 
         /// <summary>
+        /// URL de download oficial do instalador na internet.
+        /// Se vazia, a URL é resolvida dinamicamente pelo instalador.
+        /// </summary>
+        public string DownloadUrl { get; set; }
+
+        /// <summary>
+        /// Categoria ou grupo do programa (ex: "Geral", "ArtCraft", "Desenvolvimento").
+        /// Utilizado pela interface para agrupar e exibir divisórias visuais.
+        /// </summary>
+        public string Category { get; set; }
+
+        /// <summary>
         /// Cria um novo programa para instalação.
         /// </summary>
         /// <param name="id">Identificador único (ex: "winrar")</param>
         /// <param name="displayName">Nome para exibição na interface</param>
-        /// <param name="fileName">Caminho do instalador relativo à WorkingDirectory</param>
+        /// <param name="fileName">Nome do arquivo instalador baixado ou local</param>
         /// <param name="arguments">Argumentos para instalação silenciosa</param>
-        /// <param name="workingDir">Pasta onde o instalador está (padrão: "Programas")</param>
-        public ProgramInfo(string id, string displayName, string fileName, string arguments, string workingDir = "Programas")
+        /// <param name="workingDir">Subpasta opcional (padrão: vazio)</param>
+        /// <param name="category">Categoria opcional (padrão: "Geral")</param>
+        public ProgramInfo(string id, string displayName, string fileName, string arguments, string workingDir = "", string category = "Geral")
         {
             Id = id;
             DisplayName = displayName;
             FileName = fileName;
             Arguments = arguments;
             WorkingDirectory = workingDir;
+            Category = category;
+            RequiresInternet = true;
             DefaultChecked = true;
         }
 

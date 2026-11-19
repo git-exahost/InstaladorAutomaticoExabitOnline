@@ -1,4 +1,4 @@
-# Instalador Automático de Programas
+# Auto Instalador de Programas
 
 ![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.8-blue)
 ![C#](https://img.shields.io/badge/C%23-5.0-green)
@@ -29,7 +29,7 @@ aplicativos.
 - **Renomear o computador** com um nome personalizado
 - **Criar usuários** (admin e/ou padrão) automaticamente
 - **Aplicar papel de parede** personalizado da empresa
-- **Instalar programas** em modo silencioso (sem intervenção do usuário)
+- **Instalação 100% online de programas** em modo silencioso (sem necessidade de arquivos pré-baixados em pasta local)
 - **Limpar atalhos** do Desktop público ao final
 - **Reiniciar** o computador ao concluir (opcional)
 

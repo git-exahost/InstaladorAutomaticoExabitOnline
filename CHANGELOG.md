@@ -7,6 +7,92 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.59] - 2026-11-19
+
+### Corrigido & Aprimorado
+- **Autodesk DWG TrueView**:
+  - Implementado mecanismo robusto de detecção de instalação prévia (`IsDwgTrueViewInstalled`) varrendo Program Files (x64/x86) e o Registro do Windows.
+  - Implementado fallback automático quando o winget falhar com código `-2145844844` (HTTP 404 devido ao link expirado no manifesto do winget): o instalador agora faz o download direto do pacote oficial SFX de 1,5 GB da CDN da Autodesk (`dds.autodesk.com`), extrai silenciosamente para `C:\Autodesk` e executa a instalação via `Setup.exe -q --noeula`.
+- **Google Chrome**:
+  - Silenciada a mensagem de diagnóstico inofensiva do atualizador do Chrome (`BinaryReadTagString: file is untagged`) através do parâmetro `suppressStdErrLog: true`, mantendo o log de instalação limpo e profissional.
+- **Microsoft Office 365 (Online)**:
+  - Corrigido o erro de execução `0xC0000142` (`-1073741510` STATUS_DLL_INIT_FAILED) gerado pela chamada anterior com `UseShellExecute = true` sob processo já elevado.
+  - Adicionada detecção preventiva de Office 365 já instalado (`IsOffice365Installed`).
+  - Suporte prioritário à instalação via Windows Package Manager (`winget install --id Microsoft.Office`).
+  - Fallback direto baixando o Click-to-Run Bootstrapper oficial `setup.exe` do CDN da Microsoft (`officecdn.microsoft.com`) e execução com `UseShellExecute = false` e arquivo `configuration_o365.xml` formatado em UTF-8 sem BOM.
+
+---
+
+## [2.0.0.58] - 2026-11-19
+
+### Adicionado & Aprimorado
+- **Remoção de Negrito na Lista de Seleção de Programas**:
+  - Os checkboxes dos programas agora utilizam fonte regular (`Segoe UI, 9.5pt Regular`) em vez de herdar o estilo em negrito do painel de grupo, proporcionando uma leitura visual muito mais leve e elegante.
+- **Relato de Progresso de Downloads em Tempo Real**:
+  - Implementado sistema de download por streaming contínuo com buffer de 64 KB via `HttpWebRequest` em `InstallerService.cs`.
+  - Disparo do evento `OnDownloadProgress(displayName, percent, bytesReceived, totalBytes)` atualizando o rótulo de status na interface gráfica (ex: `45% (85/190 MB)`).
+  - Registro de marcos percentuais no log em tempo real (25%, 50%, 75% e 100%) para dar visibilidade total do andamento dos downloads sem congestionar o log.
+- **Divisórias Visuais Categorizadas**:
+  - A interface gráfica agora agrupa os programas dinamicamente com linhas de divisão horizontais e títulos em destaque para cada categoria:
+    - **Geral**: Programas corporativos essenciais (7-Zip, Chrome, Firefox, Office 365, etc.).
+    - **ArtCraft**: Suíte Criativa completa da Storytold.
+    - **TraceDraw**: Vetorização automática e traçado.
+    - **Desenvolvimento**: Ferramentas para desenvolvedores e administradores de banco/servidores.
+    - **Design & Multimídia**: Criação 3D, design gráfico e edição de vídeo.
+- **Novos Aplicativos na Divisória ArtCraft**:
+  - Adicionados os aplicativos da Storytold:
+    - **FilmCraft** (Editor de Vídeo)
+    - **LightCraft** (Iluminação e Estúdio 3D)
+    - **EffectCraft** (Efeitos Visuais e VFX)
+    - **DesignCraft** (Design Gráfico e UI)
+    - **TextureCraft** (Texturização e Materiais 3D)
+  - Integração com encerramento preventivo de processos e download via GitHub Releases.
+- **Divisória e Aplicativo TraceDraw**:
+  - Adicionado o **TraceDraw** (Vetorização Automática) com resolução dinâmica de download direto do GitHub Releases e instalação silenciosa Inno Setup (`/VERYSILENT /NORESTART /SUPPRESSMSGBOXES`).
+- **Divisória Desenvolvimento**:
+  - Adicionados 6 programas com instalação silenciosa e autônoma:
+    - **Visual Studio Code**: download do instalador estável da Microsoft com `/VERYSILENT /NORESTART /MERGETASKS="!runcode"`.
+    - **Antigravity IDE**: instalação via Windows Package Manager (`winget`) com fallback para o instalador oficial do Google.
+    - **Node.js LTS**: download dinâmico da versão LTS oficial da OpenJS Foundation com `/qn /norestart`.
+    - **Composer (PHP)**: download do executável oficial `Composer-Setup.exe` com `/VERYSILENT /NORESTART`.
+    - **FileZilla Client**: download seguro via pacote Chocolatey CDN, extração limpa e instalação com `/S`.
+    - **DBeaver Community**: download do instalador oficial direto de dbeaver.io com `/S`.
+- **Divisória Design & Multimídia**:
+  - Adicionados 3 softwares de computação gráfica e vídeo:
+    - **Blender**: instalação via `winget` com fallback para download oficial do MSI da Blender Foundation (`/qn /norestart`).
+    - **Affinity Studio (Português)**: instalação via `winget` com fallback para pacote oficial MSIX com `Add-AppxPackage`.
+    - **DaVinci Resolve Free**: integração completa com a API oficial da Blackmagic Design para geração automática do link temporário de download do `.zip`, extração silenciosa e execução do instalador corporativo com `/i /q /noreboot`.
+
+---
+
+## [2.0.0.57] - 2026-11-18
+
+### Modificado & Adicionado
+- **Renomeação do Projeto para "Auto Instalador de Programas"**:
+  - Título da aplicação, cabeçalhos, metadados de assembly (`AssemblyInfo.cs`) e scripts atualizados para "Auto Instalador de Programas".
+- **Remoção do Microsoft Office 2016**:
+  - Removido o item `office` (Microsoft Office 2016 local) da lista padrão de programas, mantendo o `office365` ("Microsoft Office 365 (Online)").
+- **Transição para Instalação 100% Online de Todos os Programas**:
+  - Eliminada a necessidade da pasta `dist\Programas` e de instaladores pré-baixados offline.
+  - O instalador agora baixa os executáveis e pacotes oficiais diretamente da internet sob demanda para a área de cache corporativo (`%ProgramData%\EXABIT\Downloads`).
+  - Suporte a download online direto e dinâmico com resolução de versões mais recentes para:
+    - **Google Chrome**: download do instalador corporativo standalone oficial x64.
+    - **Mozilla Firefox**: download direto do pacote oficial MSI x64 em pt-BR da Mozilla.
+    - **Brave Browser**: download oficial silencioso da Brave.
+    - **AnyDesk**: download oficial direto com instalação silenciosa e autônoma.
+    - **7-Zip**: resolução dinâmica da versão mais recente em 7-zip.org.
+    - **WinRAR**: resolução dinâmica da versão mais recente em pt-BR via rarlab.com.
+    - **Radmin VPN**: download da versão mais recente oficial do site do desenvolvedor.
+    - **Adobe Acrobat Reader**: download do instalador offline corporativo oficial 64 bits MUI da Adobe.
+    - **Microsoft Power BI Desktop**: download do instalador oficial x64 da Microsoft.
+    - **Microsoft Office 365 (Online)**: download oficial do Office Deployment Tool (ODT) da Microsoft, extração silenciosa e instalação automatizada via XML pt-BR.
+    - **Autodesk DWG TrueView**: instalação online oficial automatizada via Windows Package Manager (`winget`).
+    - **RustDesk, Citrix Workspace e Java JRE 8**: atualizados para operar 100% online através do cache local corporativo.
+    - **Suíte Craft / ArtCraft Studio**: download direto dos releases oficiais da Storytold no GitHub.
+  - Validação unificada de conectividade de rede na interface gráfica antes do início da instalação com opções amigáveis de tentar novamente.
+
+---
+
 ## [2.0.0.56] - 2026-11-18
 
 ### Corrigido

@@ -5,7 +5,7 @@ que forem auxiliar na manutenção e evolução deste projeto.
 
 ## Visão Geral do Projeto
 
-**Nome:** Instalador Automático de Programas
+**Nome:** Auto Instalador de Programas
 **Linguagem:** C# 5.0 (.NET Framework 4.8)
 **Interface:** Windows Forms
 **Propósito:** Automatizar a instalação de programas e configuração inicial

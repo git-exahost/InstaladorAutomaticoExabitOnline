@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
-title Compilando Instalador AutomÃ¡tico...
+title Compilando Auto Instalador de Programas...
 
 echo ============================================
-echo  Compilando Instalador AutomÃ¡tico (C# WinForms)
+echo  Compilando Auto Instalador de Programas (C# WinForms)
 echo ============================================
 echo.
 
@@ -31,6 +31,8 @@ REM Compila todos os arquivos .cs
       /reference:System.Windows.Forms.dll ^
       /reference:Microsoft.CSharp.dll ^
       /reference:System.ServiceProcess.dll ^
+      /reference:System.IO.Compression.dll ^
+      /reference:System.IO.Compression.FileSystem.dll ^
       /resource:Image\logo_exabit.png,InstallerGUI.logo_exabit.png ^
       /resource:Sound\R2D2.mp3,InstallerGUI.R2D2.mp3 ^
       /win32icon:install.ico ^
