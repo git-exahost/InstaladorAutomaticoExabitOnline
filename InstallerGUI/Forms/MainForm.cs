@@ -1809,9 +1809,10 @@ namespace InstallerGUI.Forms
             SetStyle(ControlStyles.UserPaint |
                      ControlStyles.AllPaintingInWmPaint |
                      ControlStyles.OptimizedDoubleBuffer |
-                     ControlStyles.ResizeRedraw, true);
+                     ControlStyles.ResizeRedraw |
+                     ControlStyles.SupportsTransparentBackColor, true);
             Height = 5;
-            BackColor = Color.Transparent;
+            BackColor = Color.FromArgb(40, 40, 40);
         }
 
         public int Value

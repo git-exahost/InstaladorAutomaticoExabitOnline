@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.64] - 2026-11-19
+
+### Corrigido
+- **Correção Crítica de Inicialização do Aplicativo**:
+  - Identificada e corrigida a exceção `System.ArgumentException` disparada pelo .NET Runtime no construtor de `ThinProgressBar` devido à tentativa de definir `BackColor = Color.Transparent` sem a flag `SupportsTransparentBackColor` no WinForms.
+  - Adicionada a flag `ControlStyles.SupportsTransparentBackColor` e definido o `BackColor` padrão compatível com a cor do painel escuro (`Color.FromArgb(40, 40, 40)`), permitindo que o executável abra instantaneamente sem falhas.
+  - Implementado tratamento global de exceção em `Program.Main()` com exibição de diálogo amigável em caso de erros fatais não tratados, impedindo fechamento silencioso do processo.
+
+---
+
 ## [2.0.0.63] - 2026-11-19
 
 ### Corrigido & Aprimorado

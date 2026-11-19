@@ -46,9 +46,20 @@ namespace InstallerGUI
                 return; // Sai do processo atual
             }
 
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+            try
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                Application.Run(new MainForm());
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    string.Format("Erro fatal ao inicializar o aplicativo:\n\n{0}\n\nDetalhes:\n{1}", ex.Message, ex.StackTrace),
+                    "Erro de Inicialização - Auto Instalador",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
 
         /// <summary>
