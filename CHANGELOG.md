@@ -7,6 +7,21 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.70] - 2026-11-19
+
+### Adicionado
+- **Suporte aos Principais Clientes Desktop de Inteligência Artificial**:
+  - Criada nova seção **Inteligência Artificial** no painel de seleção de programas com divisória temática em laranja.
+  - **Gemini Desktop**: Adicionado instalador oficial do Google (`Google.GeminiDesktop` via winget / download direto `GeminiSetup.exe`), suporte a argumentos silenciosos `/S` e detecção prévia via `IsGeminiDesktopInstalled()`.
+  - **ChatGPT Desktop**: Adicionado cliente oficial da OpenAI (`OpenAI.ChatGPT` via winget / pacote direto `ChatGPT-x64.msix` via `Add-AppxPackage`) e detecção via `IsChatGPTInstalled()`.
+  - **Claude Desktop**: Adicionado cliente desktop da Anthropic (`Anthropic.Claude` via winget / instalador direto `Claude-Setup-x64.exe` com `--silent`) e detecção via `IsClaudeDesktopInstalled()`.
+  - **DeepSeek Desktop**: Adicionado cliente oficial DeepSeek Harness Desktop (`DeepSeek.DeepSeekHarnessDesktop` via winget / download direto com `/S`) e detecção via `IsDeepSeekDesktopInstalled()`.
+- **EaseUS Todo Backup Free**:
+  - Adicionado à categoria Geral o software **EaseUS Todo Backup Free** (`EaseUS.TodoBackup` via winget / download oficial direto `tb_free.exe` com argumentos `/VERYSILENT /NORESTART /SUPPRESSMSGBOXES`).
+  - Implementada detecção completa de instalação prévia em `Program Files` e Registro do Windows (`IsEaseUSTodoBackupInstalled()`).
+
+---
+
 ## [2.0.0.69] - 2026-11-19
 
 ### Aprimorado & Limpeza de Distribuição

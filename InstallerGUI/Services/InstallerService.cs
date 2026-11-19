@@ -1909,6 +1909,94 @@ namespace InstallerGUI.Services
             return null;
         }
 
+        private async Task<string> ResolveGeminiDesktopAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "GeminiSetup.exe");
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 100000000)
+            {
+                Log("  Instalador do Gemini Desktop pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://dl.google.com/release2/Google%20DeepMind/jrago3sbw7xgrkpxfotop5dwxu_1.21.1/GeminiSetup-1.21.1_uncompressed.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "GeminiSetup.exe", program.DisplayName, 100000000);
+        }
+
+        private async Task<string> ResolveChatGPTAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "ChatGPT-x64.msix");
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 500000000)
+            {
+                Log("  Pacote MSIX do ChatGPT pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://persistent.oaistatic.com/codex-app-prod/releases/26.1111.9664.0/ChatGPT-x64.msix";
+            return await DownloadFileOnlineAsync(downloadUrl, "ChatGPT-x64.msix", program.DisplayName, 500000000);
+        }
+
+        private async Task<string> ResolveClaudeDesktopAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "Claude-Setup-x64.exe");
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 100000000)
+            {
+                Log("  Instalador do Claude Desktop pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://downloads.claude.ai/releases/win32/x64/4.29.0/Claude-2609742292f7dbce2e259e76f53620cac4da9002.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "Claude-Setup-x64.exe", program.DisplayName, 100000000);
+        }
+
+        private async Task<string> ResolveDeepSeekDesktopAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "deepseek-harness-win-x64.exe");
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 100000000)
+            {
+                Log("  Instalador do DeepSeek Desktop pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.2-rc.5-win-x64.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "deepseek-harness-win-x64.exe", program.DisplayName, 100000000);
+        }
+
+        private async Task<string> ResolveEaseUSTodoBackupAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "tb_free.exe");
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 50000000)
+            {
+                Log("  Instalador do EaseUS Todo Backup Free pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string[] mirrors = new string[]
+            {
+                "https://download.easeus.com/free/tb_free.exe",
+                "https://d1.easeus.com/tb/free/TodoBackup17.5.0_free.exe"
+            };
+
+            for (int i = 0; i < mirrors.Length; i++)
+            {
+                try
+                {
+                    string path = await DownloadFileOnlineAsync(mirrors[i], "tb_free.exe", program.DisplayName, 50000000, i < mirrors.Length - 1);
+                    if (!string.IsNullOrEmpty(path) && File.Exists(path) && new FileInfo(path).Length > 50000000)
+                    {
+                        return path;
+                    }
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
         private static string FindWingetExecutable()
         {
             try
@@ -2075,6 +2163,31 @@ namespace InstallerGUI.Services
             if (program.Id == "davinciresolve")
             {
                 return await ResolveDaVinciResolveInstallerAsync(program);
+            }
+
+            if (program.Id == "easeustodo")
+            {
+                return await ResolveEaseUSTodoBackupAsync(program);
+            }
+
+            if (program.Id == "gemini")
+            {
+                return await ResolveGeminiDesktopAsync(program);
+            }
+
+            if (program.Id == "chatgpt")
+            {
+                return await ResolveChatGPTAsync(program);
+            }
+
+            if (program.Id == "claude")
+            {
+                return await ResolveClaudeDesktopAsync(program);
+            }
+
+            if (program.Id == "deepseek")
+            {
+                return await ResolveDeepSeekDesktopAsync(program);
             }
 
             if (!string.IsNullOrEmpty(program.DownloadUrl))
@@ -2346,6 +2459,146 @@ namespace InstallerGUI.Services
                 }
             }
 
+            if (program.Id == "easeustodo")
+            {
+                if (IsEaseUSTodoBackupInstalled())
+                {
+                    Log("[ok] EaseUS Todo Backup Free já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando EaseUS Todo Backup Free via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id EaseUS.TodoBackup -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsEaseUSTodoBackupInstalled())
+                {
+                    Log("[ok] EaseUS Todo Backup Free instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "gemini")
+            {
+                if (IsGeminiDesktopInstalled())
+                {
+                    Log("[ok] Gemini Desktop já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando Gemini Desktop via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id Google.GeminiDesktop -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsGeminiDesktopInstalled())
+                {
+                    Log("[ok] Gemini Desktop instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "chatgpt")
+            {
+                if (IsChatGPTInstalled())
+                {
+                    Log("[ok] ChatGPT Desktop já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando ChatGPT Desktop via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id OpenAI.ChatGPT -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsChatGPTInstalled())
+                {
+                    Log("[ok] ChatGPT Desktop instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando pacote MSIX...", ConsoleColor.Yellow);
+                string msixPath = await EnsureProgramDownloadedAsync(program);
+                if (!string.IsNullOrEmpty(msixPath) && File.Exists(msixPath))
+                {
+                    Log("  Instalando pacote MSIX do ChatGPT Desktop...", ConsoleColor.Cyan);
+                    string safeMsixPath = msixPath.Replace("'", "''");
+                    int exitCode = await RunProcessAsync("powershell",
+                        string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxPackage -Path '{0}'\"", safeMsixPath),
+                        600000, null, false);
+
+                    if (exitCode == 0 || IsChatGPTInstalled())
+                    {
+                        Log("[ok] ChatGPT Desktop instalado com sucesso.", ConsoleColor.Green);
+                        return true;
+                    }
+                    else
+                    {
+                        Log(string.Format("X Falha ao instalar ChatGPT Desktop (código {0}).", exitCode), ConsoleColor.Yellow);
+                        return false;
+                    }
+                }
+                else
+                {
+                    Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
+                    return false;
+                }
+            }
+
+            if (program.Id == "claude")
+            {
+                if (IsClaudeDesktopInstalled())
+                {
+                    Log("[ok] Claude Desktop já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando Claude Desktop via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id Anthropic.Claude -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsClaudeDesktopInstalled())
+                {
+                    Log("[ok] Claude Desktop instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "deepseek")
+            {
+                if (IsDeepSeekDesktopInstalled())
+                {
+                    Log("[ok] DeepSeek Desktop já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando DeepSeek Desktop via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id DeepSeek.DeepSeekHarnessDesktop -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsDeepSeekDesktopInstalled())
+                {
+                    Log("[ok] DeepSeek Desktop instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
             string fullPath = await EnsureProgramDownloadedAsync(program);
             if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
             {
@@ -2545,6 +2798,31 @@ namespace InstallerGUI.Services
                         return true;
                     }
                     else if (program.Id == "blender" && IsBlenderInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "gemini" && IsGeminiDesktopInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "chatgpt" && IsChatGPTInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "claude" && IsClaudeDesktopInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "deepseek" && IsDeepSeekDesktopInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "easeustodo" && IsEaseUSTodoBackupInstalled())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                         return true;
@@ -3783,6 +4061,225 @@ namespace InstallerGUI.Services
                                 }
                             }
                         }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Google Gemini Desktop está instalado na máquina.
+        /// </summary>
+        private static bool IsGeminiDesktopInstalled()
+        {
+            try
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\Google\Gemini\Gemini.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"Google\Gemini\Gemini.exe")))
+                    return true;
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"Google\Gemini\Gemini.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Gemini",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Gemini"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o ChatGPT Desktop está instalado na máquina (MSIX ou Appx).
+        /// </summary>
+        private static bool IsChatGPTInstalled()
+        {
+            try
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\ChatGPT\ChatGPT.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"OpenAI\ChatGPT\ChatGPT.exe")))
+                    return true;
+
+                string winApps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps");
+                if (Directory.Exists(winApps))
+                {
+                    string[] dirs = Directory.GetDirectories(winApps, "*OpenAI.ChatGPT*");
+                    if (dirs != null && dirs.Length > 0) return true;
+                }
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\ChatGPT",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\ChatGPT"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Claude Desktop está instalado na máquina.
+        /// </summary>
+        private static bool IsClaudeDesktopInstalled()
+        {
+            try
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\Claude\Claude.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"AnthropicClaude\Claude.exe")))
+                    return true;
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"Claude\Claude.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Claude",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Claude"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o DeepSeek Desktop está instalado na máquina.
+        /// </summary>
+        private static bool IsDeepSeekDesktopInstalled()
+        {
+            try
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\deepseek-harness\DeepSeek Harness.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"Programs\deepseek-desktop\DeepSeek Desktop.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"deepseek\DeepSeek.exe")))
+                    return true;
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"DeepSeek\deepseek.exe")) ||
+                    File.Exists(Path.Combine(progFiles, @"DeepSeek Harness\DeepSeek Harness.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var baseKey = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (baseKey != null)
+                        {
+                            foreach (string subKeyName in baseKey.GetSubKeyNames())
+                            {
+                                using (var subKey = baseKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("DeepSeek", StringComparison.OrdinalIgnoreCase) >= 0)
+                                            return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    using (var baseKey = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (baseKey != null)
+                        {
+                            foreach (string subKeyName in baseKey.GetSubKeyNames())
+                            {
+                                using (var subKey = baseKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("DeepSeek", StringComparison.OrdinalIgnoreCase) >= 0)
+                                            return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o EaseUS Todo Backup Free está instalado na máquina.
+        /// </summary>
+        private static bool IsEaseUSTodoBackupInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"EaseUS\Todo Backup\bin\Loader.exe")) ||
+                    File.Exists(Path.Combine(progFiles, @"EaseUS\Todo Backup\bin\TodoBackup.exe")))
+                    return true;
+
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (File.Exists(Path.Combine(progFilesX86, @"EaseUS\Todo Backup\bin\Loader.exe")) ||
+                    File.Exists(Path.Combine(progFilesX86, @"EaseUS\Todo Backup\bin\TodoBackup.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\EaseUS Todo Backup",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\EaseUS Todo Backup"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
                     }
                 }
             }

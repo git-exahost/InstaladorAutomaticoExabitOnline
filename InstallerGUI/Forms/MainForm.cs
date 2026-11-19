@@ -1950,6 +1950,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",          "Setup.exe",                            "-q --noeula", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true },
                 new ProgramInfo("brave",       "Brave Browser",                  "BraveBrowserSetup.exe",                "/silent /install", "", "Geral"),
                 new ProgramInfo("citrix",      "Citrix Workspace",               "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot", "", "Geral"),
+                new ProgramInfo("easeustodo",  "EaseUS Todo Backup Free",        "tb_free.exe",                          "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES", "", "Geral") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("chrome",      "Google Chrome",                  "googlechromestandaloneenterprise64.msi", "/qn /norestart", "", "Geral"),
                 new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1", "", "Geral"),
                 new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s", "", "Geral"),
@@ -2000,10 +2001,21 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("affinity", "Affinity Studio (Português)", "Affinity.msix", "",                          "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
             };
 
+            var aiList = new List<ProgramInfo>
+            {
+                new ProgramInfo("chatgpt",  "ChatGPT Desktop",  "ChatGPT-x64.msix",             "",                                    "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("claude",   "Claude Desktop",   "Claude-Setup-x64.exe",         "--silent",                            "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("deepseek", "DeepSeek Desktop", "deepseek-harness-win-x64.exe", "/S",                                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("gemini",   "Gemini Desktop",   "GeminiSetup.exe",              "/S",                                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+            };
+            aiList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
+
             var list = new List<ProgramInfo>();
             // 1. Programas corporativos padrão
             list.AddRange(standardList);
-            // 2. ArtCraft Studio como primeiro item da seção ArtCraft, seguido pelos apps Craft em ordem alfabética
+            // 2. Inteligência Artificial
+            list.AddRange(aiList);
+            // 3. ArtCraft Studio como primeiro item da seção ArtCraft, seguido pelos apps Craft em ordem alfabética
             list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S", "", "ArtCraft") { DefaultChecked = false });
             list.AddRange(craftList);
             // 3. TraceDraw
