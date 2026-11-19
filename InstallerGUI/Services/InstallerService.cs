@@ -654,13 +654,21 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Aplica os papéis de parede personalizados adicionando todos os arquivos da pasta Wallpapers
-        /// como papel de parede em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
+        /// Aplica os papéis de parede personalizados (gerais ou de cliente específico como Nortel)
+        /// adicionando todos os arquivos da pasta Wallpapers correspondente como papel de parede
+        /// em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
         /// e configurando para novos usuários e usuário atual.
         /// </summary>
-        public async Task SetWallpaperAsync()
+        public async Task SetWallpaperAsync(string client = null)
         {
-            Log("Configurando papéis de parede em todos os temas do Windows...", ConsoleColor.Yellow);
+            if (string.IsNullOrEmpty(client))
+            {
+                Log("Configurando papéis de parede em todos os temas do Windows...", ConsoleColor.Yellow);
+            }
+            else
+            {
+                Log(string.Format("Configurando papéis de parede ({0}) em todos os temas do Windows...", client), ConsoleColor.Yellow);
+            }
 
             string psScript = Path.Combine(_basePath, "Scripts", "apply_wallpapers.ps1");
             string cmdScript = Path.Combine(_basePath, "Scripts", "wallpaper.cmd");
@@ -676,14 +684,16 @@ namespace InstallerGUI.Services
 
                 string quotedPsScript = QuoteProcessArgument(psScript);
                 string quotedBasePath = QuoteProcessArgument(cleanBasePath);
+                string clientArg = !string.IsNullOrEmpty(client) ? string.Format(" -Client {0}", QuoteProcessArgument(client)) : "";
 
                 int exitCode = await RunProcessAsync("powershell",
-                    string.Format("-NoProfile -ExecutionPolicy Bypass -File {0} -BasePath {1}", quotedPsScript, quotedBasePath),
+                    string.Format("-NoProfile -ExecutionPolicy Bypass -File {0} -BasePath {1}{2}", quotedPsScript, quotedBasePath, clientArg),
                     120000, null, false);
 
                 if (exitCode == 0)
                 {
-                    Log("[ok] Papéis de parede configurados em todos os temas do Windows.", ConsoleColor.Green);
+                    Log(string.Format("[ok] Papéis de parede {0}configurados em todos os temas do Windows.",
+                        !string.IsNullOrEmpty(client) ? "(" + client + ") " : ""), ConsoleColor.Green);
                 }
                 else
                 {
@@ -824,7 +834,7 @@ namespace InstallerGUI.Services
         /// Faz o download assíncrono de um arquivo a partir de uma URL direta, salvando no cache corporativo.
         /// Informa o progresso do download em tempo real via OnDownloadProgress e em etapas no log.
         /// </summary>
-        private async Task<string> DownloadFileOnlineAsync(string url, string fileName, string displayName, long minBytes, bool suppressErrorLog = false)
+        private async Task<string> DownloadFileOnlineAsync(string url, string fileName, string displayName, long minBytes, bool suppressErrorLog = false, string customUserAgent = null)
         {
             return await Task.Run(new Func<string>(() =>
             {
@@ -852,7 +862,7 @@ namespace InstallerGUI.Services
 
                     var request = (HttpWebRequest)WebRequest.Create(url);
                     request.Method = "GET";
-                    request.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0";
+                    request.UserAgent = !string.IsNullOrEmpty(customUserAgent) ? customUserAgent : "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0";
                     request.Timeout = 30000;
                     request.ReadWriteTimeout = 60000;
                     request.AllowAutoRedirect = true;
@@ -1661,43 +1671,35 @@ namespace InstallerGUI.Services
                 return destFile;
             }
 
-            string nupkgUrl = "https://packages.chocolatey.org/filezilla.3.72.1.nupkg";
-            try
+            string[] pkgUrls = new string[]
             {
-                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                using (var wc = new WebClient())
-                {
-                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AutoInstaller/2.0");
-                    string page = wc.DownloadString("https://community.chocolatey.org/packages/filezilla");
-                    var match = Regex.Match(page, @"FileZilla\s*<span>([0-9.]+)<", RegexOptions.IgnoreCase);
-                    if (match.Success)
-                    {
-                        nupkgUrl = string.Format("https://packages.chocolatey.org/filezilla.{0}.nupkg", match.Groups[1].Value);
-                    }
-                }
-            }
-            catch { }
+                "https://community.chocolatey.org/api/v2/package/filezilla/3.72.1",
+                "https://community.chocolatey.org/api/v2/package/filezilla"
+            };
 
-            string downloadedPkg = await DownloadFileOnlineAsync(nupkgUrl, "filezilla_pkg.zip", program.DisplayName, 10000000);
-            if (!string.IsNullOrEmpty(downloadedPkg) && File.Exists(downloadedPkg))
+            foreach (string nupkgUrl in pkgUrls)
             {
-                try
+                string downloadedPkg = await DownloadFileOnlineAsync(nupkgUrl, "filezilla_pkg.zip", program.DisplayName, 10000000, true, "chocolatey/2.2.2");
+                if (!string.IsNullOrEmpty(downloadedPkg) && File.Exists(downloadedPkg))
                 {
-                    string extractDir = Path.Combine(cacheDir, "FileZilla_extract");
-                    if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
-                    Directory.CreateDirectory(extractDir);
-
-                    System.IO.Compression.ZipFile.ExtractToDirectory(downloadedPkg, extractDir);
-                    var setupFiles = Directory.GetFiles(extractDir, "FileZilla_*_win64-setup.exe", SearchOption.AllDirectories);
-                    if (setupFiles != null && setupFiles.Length > 0)
+                    try
                     {
-                        if (File.Exists(destFile)) File.Delete(destFile);
-                        File.Copy(setupFiles[0], destFile, true);
-                        try { Directory.Delete(extractDir, true); } catch { }
-                        return destFile;
+                        string extractDir = Path.Combine(cacheDir, "FileZilla_extract");
+                        if (Directory.Exists(extractDir)) Directory.Delete(extractDir, true);
+                        Directory.CreateDirectory(extractDir);
+
+                        System.IO.Compression.ZipFile.ExtractToDirectory(downloadedPkg, extractDir);
+                        var setupFiles = Directory.GetFiles(extractDir, "FileZilla_*_win64-setup.exe", SearchOption.AllDirectories);
+                        if (setupFiles != null && setupFiles.Length > 0)
+                        {
+                            if (File.Exists(destFile)) File.Delete(destFile);
+                            File.Copy(setupFiles[0], destFile, true);
+                            try { Directory.Delete(extractDir, true); } catch { }
+                            return destFile;
+                        }
                     }
+                    catch { }
                 }
-                catch { }
             }
 
             return null;
@@ -2492,6 +2494,31 @@ namespace InstallerGUI.Services
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                         return true;
+                    }
+                    else if (program.Id == "dbeaver" && IsDBeaverInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "filezilla" && IsFileZillaInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "dbeaver")
+                    {
+                        Log(string.Format("  DBeaver retornou código {0}. Tentando com parâmetro /S /allusers...", exitCode), ConsoleColor.Yellow);
+                        int retryExit = await RunProcessAsync(fullPath, "/S /allusers", timeout, procWorkDir, false);
+                        if (retryExit == 0 || IsDBeaverInstalled())
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                            return true;
+                        }
+                        else
+                        {
+                            Log(string.Format("X {0} retornou código {1}.", program.DisplayName, retryExit), ConsoleColor.Yellow);
+                            return false;
+                        }
                     }
                     else if (program.Id == "chrome")
                     {
@@ -3566,6 +3593,78 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Verifica se o DBeaver Community está instalado na máquina.
+        /// </summary>
+        private static bool IsDBeaverInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"DBeaver\dbeaver.exe")))
+                    return true;
+
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\DBeaver\dbeaver.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\DBeaver",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\DBeaver"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o FileZilla Client está instalado na máquina.
+        /// </summary>
+        private static bool IsFileZillaInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"FileZilla FTP Client\filezilla.exe")))
+                    return true;
+
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                if (File.Exists(Path.Combine(progFilesX86, @"FileZilla FTP Client\filezilla.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\FileZilla Client",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\FileZilla Client"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
         /// Configura o RustDesk com o servidor próprio da EXABIT (rustdesk.exabit.com.br),
         /// chave pública, modos de permissão (senha temporária, aprovação do usuário e senha definitiva)
         /// e define a senha definitiva igual à senha informada para o usuário Admin.
@@ -3752,7 +3851,7 @@ namespace InstallerGUI.Services
             if (options.RenameComputer) totalSteps++;
             if (options.CreateAdmin) totalSteps++;
             if (options.CreateStandardUser) totalSteps++;
-            if (options.SetWallpaper) totalSteps++;
+            if (options.SetWallpaper || options.SetWallpaperNortel) totalSteps++;
             totalSteps += options.SelectedPrograms.Count;
 
             int currentStep = 0;
@@ -3815,7 +3914,7 @@ namespace InstallerGUI.Services
                 }
 
                 // 4. Wallpaper
-                if (!cancelled && options.SetWallpaper)
+                if (!cancelled && (options.SetWallpaper || options.SetWallpaperNortel))
                 {
                     if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
                         cancelled = true;
@@ -3824,7 +3923,8 @@ namespace InstallerGUI.Services
                     {
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
-                        await SetWallpaperAsync();
+                        string client = options.SetWallpaperNortel ? "Nortel" : null;
+                        await SetWallpaperAsync(client);
                     }
                 }
 
@@ -4324,6 +4424,7 @@ namespace InstallerGUI.Services
         public bool StandardUserCannotChangePassword { get; set; }
 
         public bool SetWallpaper { get; set; }
+        public bool SetWallpaperNortel { get; set; }
         public bool EnableLocationServices { get; set; }
 
         /// <summary>

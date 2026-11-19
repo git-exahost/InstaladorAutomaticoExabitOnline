@@ -54,6 +54,7 @@ namespace InstallerGUI.Forms
         private CheckBox _chkStandardUserNoPwdChange;
         private CheckBox _chkCleanDesktop;
         private CheckBox _chkWallpaper;
+        private CheckBox _chkWallpaperNortel;
         private CheckBox _chkShortcutSuporteExabit;
         private CheckBox _chkShortcutExabit;
         private CheckBox _chkShortcutExahost;
@@ -688,14 +689,15 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 4,
+                RowCount = 5,
                 BackColor = CorPainel,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 16f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 12f));
 
             _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", true);
             tbl.Controls.Add(_chkEnableLocation, 0, 0);
@@ -704,7 +706,26 @@ namespace InstallerGUI.Forms
             tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 1);
 
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
+            _chkWallpaperNortel = CreateCheckBox("Aplicar papel de parede Nortel", false);
+
+            _chkWallpaper.CheckedChanged += (s, e) =>
+            {
+                if (_chkWallpaper.Checked && _chkWallpaperNortel.Checked)
+                {
+                    _chkWallpaperNortel.Checked = false;
+                }
+            };
+
+            _chkWallpaperNortel.CheckedChanged += (s, e) =>
+            {
+                if (_chkWallpaperNortel.Checked && _chkWallpaper.Checked)
+                {
+                    _chkWallpaper.Checked = false;
+                }
+            };
+
             tbl.Controls.Add(_chkWallpaper, 0, 2);
+            tbl.Controls.Add(_chkWallpaperNortel, 0, 3);
 
             var lblHint = new Label
             {
@@ -714,7 +735,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
             };
-            tbl.Controls.Add(lblHint, 0, 3);
+            tbl.Controls.Add(lblHint, 0, 4);
 
             pnl.Controls.Add(tbl);
             return pnl;
@@ -1322,6 +1343,7 @@ namespace InstallerGUI.Forms
                 options.EnableLocationServices = _chkEnableLocation.Checked;
                 options.CleanDesktopShortcuts = _chkCleanDesktop.Checked;
                 options.SetWallpaper = _chkWallpaper.Checked;
+                options.SetWallpaperNortel = _chkWallpaperNortel.Checked;
 
                 // ─── Atalhos corporativos ───
                 options.CreateDesktopShortcutSuporteExabit = _chkShortcutSuporteExabit.Checked;
@@ -1921,8 +1943,8 @@ namespace InstallerGUI.Forms
         /// 1. Programas corporativos padrão (Geral)
         /// 2. Suíte Criativa ArtCraft (Storytold)
         /// 3. Vetorização Automática (TraceDraw)
-        /// 4. Ferramentas para Desenvolvimento (VSCode, Antigravity, Node.js, Composer, FileZilla, DBeaver)
-        /// 5. Criação 3D, Design e Edição de Vídeo (Blender, Affinity, DaVinci Resolve)
+        /// 4. Ferramentas para Desenvolvimento (VSCode, Antigravity, Node.js, FileZilla, DBeaver)
+        /// 5. Criação 3D, Design e Edição Multimídia (Blender, Affinity)
         /// </summary>
         private static List<ProgramInfo> GetDefaultProgramList()
         {
@@ -1974,16 +1996,14 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("vscode",      "Visual Studio Code", "VSCodeSetup_x64.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("antigravity", "Antigravity IDE",    "Antigravity_IDE.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("nodejs",      "Node.js LTS",        "node_lts_x64.msi",    "/qn /norestart",                                  "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("composer",    "Composer (PHP)",     "Composer-Setup.exe",  "/VERYSILENT /NORESTART",                          "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("filezilla",   "FileZilla Client",   "FileZilla_setup.exe", "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("dbeaver",     "DBeaver Community",  "dbeaver_setup.exe",   "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("dbeaver",     "DBeaver Community",  "dbeaver_setup.exe",   "/S /allusers",                                    "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var mediaList = new List<ProgramInfo>
             {
-                new ProgramInfo("blender",        "Blender (3D e Criação)",           "blender.msi",                 "/qn /norestart",      "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("affinity",       "Affinity Studio (Português)",      "Affinity.msix",               "",                    "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("davinciresolve", "DaVinci Resolve Free (Vídeo/Cor)", "DaVinci_Resolve_Windows.exe", "/i /q /noreboot",     "", "Design & Multimídia") { RequiresInternet = true, TimeoutMs = 1800000, DefaultChecked = false },
+                new ProgramInfo("blender",  "Blender (3D e Criação)",      "blender.msi",   "/qn /norestart", "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("affinity", "Affinity Studio (Português)", "Affinity.msix", "",               "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var list = new List<ProgramInfo>();

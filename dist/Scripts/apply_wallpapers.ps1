@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Script: apply_wallpapers.ps1
 # Empresa: EXABIT Solucoes em TI
 # Finalidade: Configura todos os arquivos da pasta Wallpapers como papel de parede
@@ -8,13 +8,19 @@
 
 [CmdletBinding()]
 param(
-    [string]$BasePath = ""
+    [string]$BasePath = "",
+    [string]$Client = ""
 )
 
 $ErrorActionPreference = "Continue"
 
+if (-not [string]::IsNullOrWhiteSpace($Client)) {
+    $Client = $Client.Replace('"', '').Replace("'", "").Trim()
+}
+$clientTitle = if (-not [string]::IsNullOrWhiteSpace($Client)) { " ($Client)" } else { "" }
+
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "  Configuracao de Papeis de Parede Personalizados (EXABIT) " -ForegroundColor Cyan
+Write-Host "  Configuracao de Papeis de Parede Personalizados$clientTitle (EXABIT) " -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -35,12 +41,13 @@ if ([string]::IsNullOrWhiteSpace($BasePath) -or -not (Test-Path -LiteralPath $Ba
 }
 
 # 2. Localiza a pasta Wallpapers e as imagens disponiveis
+$targetSub = if (-not [string]::IsNullOrWhiteSpace($Client)) { "Wallpapers\$Client" } else { "Wallpapers" }
 $candidateDirs = @(
-    (Join-Path $BasePath "Wallpapers"),
-    (Join-Path $BasePath "dist\Wallpapers"),
-    (Join-Path $BasePath "Scripts\Wallpapers"),
-    (Join-Path $PSScriptRoot "Wallpapers"),
-    (Join-Path $PSScriptRoot "..\Wallpapers")
+    (Join-Path $BasePath $targetSub),
+    (Join-Path $BasePath "dist\$targetSub"),
+    (Join-Path $BasePath "Scripts\$targetSub"),
+    (Join-Path $PSScriptRoot $targetSub),
+    (Join-Path $PSScriptRoot "..\$targetSub")
 )
 
 $wallpapersDir = $null
@@ -98,10 +105,11 @@ function Grant-AdminFileAccess {
 # 3. Diretorios do sistema operacional
 $sysWeb = "$env:SystemRoot\Web"
 $wallpaperSysDir = "$sysWeb\Wallpaper"
-$customSystemDir = "$wallpaperSysDir\Personalizado"
+$folderName = if (-not [string]::IsNullOrWhiteSpace($Client)) { $Client } else { "Personalizado" }
+$customSystemDir = "$wallpaperSysDir\$folderName"
 $themesSysDir = "$env:SystemRoot\Resources\Themes"
 
-# Cria pasta central C:\Windows\Web\Wallpaper\Personalizado
+# Cria pasta central C:\Windows\Web\Wallpaper\<folderName>
 if (-not (Test-Path $customSystemDir)) {
     New-Item -Path $customSystemDir -ItemType Directory -Force | Out-Null
 }
@@ -109,7 +117,7 @@ Grant-AdminAccess $wallpaperSysDir
 Grant-AdminAccess $customSystemDir
 
 # Copia todas as imagens para a pasta central
-Write-Host "Copiando imagens para C:\Windows\Web\Wallpaper\Personalizado..." -ForegroundColor Yellow
+Write-Host "Copiando imagens para $customSystemDir..." -ForegroundColor Yellow
 $installedImages = @()
 foreach ($img in $imageFiles) {
     $dest = Join-Path $customSystemDir $img.Name
@@ -119,8 +127,11 @@ foreach ($img in $imageFiles) {
     Write-Host "  [+] $dest" -ForegroundColor Gray
 }
 
-# Define imagem principal (prioriza Porto da Barra / img0.jpg se existir, senao a primeira)
-$mainImg = $imageFiles | Where-Object { $_.Name -ieq "img0.jpg" } | Select-Object -First 1
+# Define imagem principal (prioriza 01-*, img0.jpg ou Porto da Barra se existir, senao a primeira)
+$mainImg = $imageFiles | Where-Object { $_.Name -like "01-*" -or $_.Name -like "01_*" } | Select-Object -First 1
+if (-not $mainImg) {
+    $mainImg = $imageFiles | Where-Object { $_.Name -ieq "img0.jpg" } | Select-Object -First 1
+}
 if (-not $mainImg) {
     $mainImg = $imageFiles | Where-Object { $_.Name -like "*Porto da Barra*" } | Select-Object -First 1
 }
@@ -234,9 +245,9 @@ foreach ($tName in $themeFiles) {
             [void]$sb.AppendLine("[Slideshow]")
             [void]$sb.AppendLine("Interval=1800000")
             [void]$sb.AppendLine("Shuffle=0")
-            [void]$sb.AppendLine("ImagesRootPath=%SystemRoot%\Web\Wallpaper\Personalizado")
+            [void]$sb.AppendLine("ImagesRootPath=%SystemRoot%\Web\Wallpaper\$folderName")
             for ($i = 0; $i -lt $imageFiles.Count; $i++) {
-                [void]$sb.AppendLine("Item$($i)Path=%SystemRoot%\Web\Wallpaper\Personalizado\$($imageFiles[$i].Name)")
+                [void]$sb.AppendLine("Item$($i)Path=%SystemRoot%\Web\Wallpaper\$folderName\$($imageFiles[$i].Name)")
             }
 
             if ($rawContent -match '(?is)\[Slideshow\].*?(?=(\r?\n\[|\Z))') {
@@ -342,8 +353,8 @@ exit
 # SIG # Begin signature block
 # MIIcjwYJKoZIhvcNAQcCoIIcgDCCHHwCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCASV8/jyIYaCBzh
-# 89Bn8WfB4AbAvuSc66r+UC1GUfEZ8aCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDrzNJXgRRdfoWn
+# 2JPTqKhTNEOq11bxenO1/rQbwmcjIqCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
 # t0A2pZ7si0QoMA0GCSqGSIb3DQEBCwUAME0xCzAJBgNVBAYTAkJSMR4wHAYDVQQK
 # DBVFWEFCSVQgU29sdWNvZXMgZW0gVEkxHjAcBgNVBAMMFUVYQUJJVCBTb2x1Y29l
 # cyBlbSBUSTAeFw0yNjExMTYyMjMyMDVaFw0zMTExMTYyMjQyMDVaME0xCzAJBgNV
@@ -469,28 +480,28 @@ exit
 # U29sdWNvZXMgZW0gVEkCEBrdWS49sfW3QDalnuyLRCgwDQYJYIZIAWUDBAIBBQCg
 # gYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYB
 # BAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0B
-# CQQxIgQgV0WBdevR8r1UxD+g5JNpFCHI52L4cFj7h5EsNwySAxkwDQYJKoZIhvcN
-# AQEBBQAEggEAvfoGY5n6I69L1Wu2rcmMqB+Sdosq7ulvI15Y4cvuyAvLh0Jm3dFY
-# ZBDeWZq4EwX/+6xwJhYUY9alUNBi0hG5lYLBbuVQ6CYv7Pwb1RFJ6UTefYUT3TJe
-# 47lnn3v/S2lroaTzaz7FXj/ekOVKvNJ52LZanE0RwUq4wmPy/5bZdLrzCVTyZex5
-# D/7g4SoNiic3vax5k19SezQhj3PGaWjPNCbzg+spv0J8qRFJqwSImvUU8srb47yA
-# N7z7qcZfxBbKMuHmc9F+SyLGWILd2/pTrqSw3d+QEp70ubK63UC8Y1iiOSiRZvV3
-# UAjPggJFgCwem0b0RWCua358sjpfRInGLKGCAyYwggMiBgkqhkiG9w0BCQYxggMT
+# CQQxIgQg/oQhMt5nkID4E9T+A6p4L4jCjrNDcSxy5zTOxPCTTb8wDQYJKoZIhvcN
+# AQEBBQAEggEArF2OpjCa3egTxL5fWhSwPSGK1l1QoLXzrXRuNQ819wcEemcETA+B
+# AwfYRfU6i6IcoVjPA8q70WWmzLB+/X4gjC46JxE/LJRdJhe8wY4dAKvuCAPnpnHt
+# JvRkI4HTJOkpzfvRGDk0L1E9HQVarg9/Dr1eImi4oGdD5/Gg1mKxpvqGmgKgC2n6
+# sYYYnWG44Hlstn730/lSn9WW+yX6W5vPd6uXOxax3uUf2V7TjKMhv4OBAshHXdX4
+# 3Z7HV/2wHUag+Fs2zKuGQafMdBEeDENib8jgRxukqJkWB2m/vYXSPr1G6HpTt/tX
+# 0PzhWn3v1tAV7pWgIe6Ru0oF7Yq2kNCel6GCAyYwggMiBgkqhkiG9w0BCQYxggMT
 # MIIDDwIBATB9MGkxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjFBMD8GA1UEAxM4RGlnaUNlcnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNB
 # NDA5NiBTSEEyNTYgMjAyNSBDQTECEAhP3DNPfkVO28MPj/mSGDUwDQYJYIZIAWUD
 # BAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEP
-# Fw0yNjExMTkxOTQ5NTZaMC8GCSqGSIb3DQEJBDEiBCDUM9ZP130dRm4UuafI6lik
-# jDm4bCwdBRqEN1T0ngNcyTANBgkqhkiG9w0BAQEFAASCAgCwHcvr41kHVSeeL2ZX
-# Ba27iw0dOIKqMW9FZOOZ68ffuU6wIQLCv1p1XZz3C51XFmDorb4tN/2J3nXM/PAx
-# yKI4m6ASALSvh4oOiXwZE6epur5ZuovIv9cw6pTZOvBAi9n+2ICrWeB1nSgNMiWN
-# 0EQ2VDCAhY7Kx2QpOwmCuPvhMdIsI9ZecBUIwWIFJ/rDNpz2CdLLT5NU5hpWKQZx
-# LG4QZh1ZfoBKx5BpLH+Vea4BdOeyaZsL/drgrBnv3XiAcij3dcxFrUmAjiZICcdn
-# g6ED5D3ln0+h2L9aRYSr6tqI0OyPYg42zQHWrGrW88gRRSsRYg4agoBIGTxfwaU8
-# r/I+twgGY1m85cf6+QabaoMk891uJ/7BhTc9YssF2ajtP9xUrAuAz5Jhw+oJLduu
-# 1IONA7UZ55ppL9WRxzFINeGFzIJarqSnMYNmpWLy8IFPQEWt1jiyH7oYviyGDACn
-# 5E9oSNwZmyxizF6pDIhfaitBUnr3fLFkKkVWmXb2qy0meS3GFHZSrkdnzpjSOEqS
-# rgEzThhOiVNchte1SpbURb47VhpRxJOR68RGZ1yI5wyXVboA8bC523W2nXzsN3rS
-# bsxZUoJchuM6RXYUXkY5LSwU0X7ouUTFS1ZlZHh9Vh6BtWnopUxvku10GdehFzTB
-# WWWonRDijQCDwZ9kBrBvv7783A==
+# Fw0yNjExMTkyMDE3MjFaMC8GCSqGSIb3DQEJBDEiBCC3q1YB6yDpKUKBZ3RWEhLU
+# zLEoHVYWXjIT8qr8GdX4dTANBgkqhkiG9w0BAQEFAASCAgBN3ybnuGkRB44XD9yE
+# Mp+5uWNWv6HUFIWF2tYZ4Wc4iK0T8634ICCI6xu/y9NxovDf97le/KHUKZcGWzKM
+# CMK1mwPXAHG24yIK2n/CM/dVDdU6xZmMkuvraa/ZbNMXqqx3/u8D2Hb4gyJlLh2H
+# b95cRiAKun6lwORaeHOciQBtdjMb+BJ7v3d9SgQt3iBVdRQbkS7jlCLP6aGXAgau
+# OtSlz1oBR0x9Mhyhe9RwlpgNFDD48ROs6weGTjzXFd3v9rg+YAMKgYMuRcCiOSxy
+# XG3kp8X/hpp7+3emct2ldMGvrIuGhp3hpQni1Oy0IlVzQvYQ6Xmj6WB/1Rg4MK+u
+# vHX2zJ58lPVPAwrxHm0BVNsgZCcs2AqTqwRF8019CnF96fxXKXF84Kw3IAqUNBcu
+# CT6+KAA44itGI8FUnDtBubFxp6pcC4bNiydlD5q97tOgWQs/kho4ja3+G1ZTyNrV
+# jJ/6HwrKKO2fZ4zakCvUfVVP68w4C7+oOcHskdTSIPQGmf8whbqSag7L5dsDaADL
+# EjSlkQD79iBvlB/4BZxR+i7ORDRcznwhaki2SCAU9WYvKxXHj/rrKllOOsttaQYC
+# KGy5GknKpJJRGCrEUozDudVK7wN7q5koXC7YPJ2Wc1aFC6H4y4v2Dl7A4vv+Y/jk
+# QrhpI207dZGzB105WTjpnQbYWA==
 # SIG # End signature block

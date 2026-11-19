@@ -7,6 +7,26 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.67] - 2026-11-19
+
+### Removido
+- **Composer (PHP)**: Removido da lista de programas para instalação a pedido do usuário (eliminando prompts interativos de modo de instalação).
+- **DaVinci Resolve Free**: Removido da lista de programas para instalação a pedido do usuário.
+
+### Corrigido & Aprimorado
+- **FileZilla Client (Correção do Erro 403 Proibido)**:
+  - Adicionado suporte a cabeçalho `User-Agent` customizado (`chocolatey/2.2.2`) no motor de downloads online `DownloadFileOnlineAsync`, contornando bloqueios de anti-bot do Cloudflare na CDN de pacotes.
+  - O download agora extrai diretamente o instalador oficial de 64 bits (`FileZilla_*_win64-setup.exe`), com validação profunda em `IsFileZillaInstalled()`.
+- **DBeaver Community (Correção do Código 666660)**:
+  - Corrigidos os argumentos de instalação silenciosa do DBeaver para `/S /allusers` (o código 666660 indicava sintaxe de escopo ausente no instalador NSIS).
+  - Adicionada detecção profunda pós-instalação em `IsDBeaverInstalled()` e retry autônomo com `/S /allusers`.
+- **Suporte a Papéis de Parede da Nortel (`Wallpapers\Nortel`)**:
+  - Adicionado novo checkbox **"Aplicar papel de parede Nortel"** na aba *Opções do Windows*.
+  - Mantida a opção de papel de parede personalizado padrão (`Wallpapers`), com seleção mutuamente exclusiva e intuitiva entre os perfis.
+  - Atualizado o script `apply_wallpapers.ps1` com parâmetro `-Client <nome>`, preparando a arquitetura de personalização por cliente e aplicando os papéis de parede oficiais da Nortel (`01-nortel.jpg`, `02-nortel.jpg`) em todos os temas do Windows (Aero, Dark, Spotlight, ThemeA-D).
+
+---
+
 ## [2.0.0.66] - 2026-11-19
 
 ### Adicionado & Aprimorado
