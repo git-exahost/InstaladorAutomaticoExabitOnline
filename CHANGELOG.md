@@ -7,6 +7,17 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.65] - 2026-11-19
+
+### Adicionado & Aprimorado
+- **Relatório Final dos Programas em Cores (Azul e Vermelho)**:
+  - Ao concluir o processo de instalação e registrar `=== INSTALAÇÃO CONCLUÍDA ===`, o log apresenta automaticamente um resumo completo dos programas selecionados:
+    - **Em Azul (`#00B4FF`)**: Lista de todos os programas que foram instalados com sucesso no sistema.
+    - **Em Vermelho (`#FF5050`)**: Lista de todos os programas que não foram instalados ou apresentaram erros/falhas durante a execução.
+  - Atualizado o mapeamento de cores da interface (`MapColor`) para renderizar `ConsoleColor.Blue` e `ConsoleColor.DarkBlue` em azul vibrante de alto contraste e legibilidade no tema escuro.
+
+---
+
 ## [2.0.0.64] - 2026-11-19
 
 ### Corrigido

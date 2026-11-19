@@ -1645,9 +1645,11 @@ namespace InstallerGUI.Forms
             switch (color.Value)
             {
                 case ConsoleColor.Green: return Color.FromArgb(0, 200, 80);
-                case ConsoleColor.Red: return Color.Red;
+                case ConsoleColor.Red: return Color.FromArgb(255, 80, 80);
                 case ConsoleColor.Yellow: return Color.Yellow;
                 case ConsoleColor.Cyan: return Color.Cyan;
+                case ConsoleColor.Blue: return Color.FromArgb(0, 180, 255);
+                case ConsoleColor.DarkBlue: return Color.FromArgb(0, 180, 255);
                 case ConsoleColor.Gray: return Color.Gray;
                 default: return Color.FromArgb(200, 200, 200);
             }

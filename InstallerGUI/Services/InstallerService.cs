@@ -2057,7 +2057,7 @@ namespace InstallerGUI.Services
         /// </summary>
         /// <param name="program">Informações do programa a ser instalado</param>
         /// <param name="options">Opções gerais de instalação fornecidas pelo usuário</param>
-        public async Task InstallProgramAsync(ProgramInfo program, InstallationOptions options = null)
+        public async Task<bool> InstallProgramAsync(ProgramInfo program, InstallationOptions options = null)
         {
             Log(string.Format("Instalando {0}...", program.DisplayName), ConsoleColor.Yellow);
 
@@ -2066,7 +2066,7 @@ namespace InstallerGUI.Services
                 if (IsDwgTrueViewInstalled())
                 {
                     Log("[ok] Autodesk DWG TrueView já está instalado no sistema.", ConsoleColor.Green);
-                    return;
+                    return true;
                 }
 
                 string wingetExe = FindWingetExecutable();
@@ -2080,7 +2080,7 @@ namespace InstallerGUI.Services
                     if (wingetExit == 0 || IsDwgTrueViewInstalled())
                     {
                         Log("[ok] Autodesk DWG TrueView instalado com sucesso.", ConsoleColor.Green);
-                        return;
+                        return true;
                     }
 
                     Log("  Instalação via winget não foi concluída. Baixando instalador oficial direto da Autodesk...", ConsoleColor.Yellow);
@@ -2090,7 +2090,7 @@ namespace InstallerGUI.Services
                 if (string.IsNullOrEmpty(setupExe) || !File.Exists(setupExe))
                 {
                     Log("X Não foi possível obter o instalador online de Autodesk DWG TrueView.", ConsoleColor.Red);
-                    return;
+                    return false;
                 }
 
                 Log("  Executando instalação silenciosa do Autodesk DWG TrueView (aguarde alguns minutos)...", ConsoleColor.Cyan);
@@ -2100,12 +2100,13 @@ namespace InstallerGUI.Services
                 if (exitCode == 0 || exitCode == 3010 || IsDwgTrueViewInstalled())
                 {
                     Log("[ok] Autodesk DWG TrueView instalado com sucesso.", ConsoleColor.Green);
+                    return true;
                 }
                 else
                 {
                     Log(string.Format("X Autodesk DWG TrueView retornou código {0}.", exitCode), ConsoleColor.Yellow);
+                    return false;
                 }
-                return;
             }
 
             if (program.Id == "office365")
@@ -2113,7 +2114,7 @@ namespace InstallerGUI.Services
                 if (IsOffice365Installed())
                 {
                     Log("[ok] Microsoft Office 365 já está instalado no sistema.", ConsoleColor.Green);
-                    return;
+                    return true;
                 }
 
                 string wingetExe = FindWingetExecutable();
@@ -2127,7 +2128,7 @@ namespace InstallerGUI.Services
                     if (wingetExit == 0 || IsOffice365Installed())
                     {
                         Log("[ok] Microsoft Office 365 instalado com sucesso.", ConsoleColor.Green);
-                        return;
+                        return true;
                     }
 
                     Log("  Instalação via winget não foi concluída. Baixando instalador oficial do Office 365...", ConsoleColor.Yellow);
@@ -2137,13 +2138,13 @@ namespace InstallerGUI.Services
             if (program.Id == "powerbi" && IsPowerBIDesktopInstalled())
             {
                 Log("[ok] Microsoft Power BI Desktop já está instalado no sistema.", ConsoleColor.Green);
-                return;
+                return true;
             }
 
             if (program.Id == "anydesk" && IsAnyDeskInstalled())
             {
                 Log("[ok] AnyDesk já está instalado no sistema.", ConsoleColor.Green);
-                return;
+                return true;
             }
 
             if (program.Id == "citrix")
@@ -2214,7 +2215,7 @@ namespace InstallerGUI.Services
                 if (wingetExit == 0)
                 {
                     Log("[ok] Antigravity IDE instalado com sucesso via winget.", ConsoleColor.Green);
-                    return;
+                    return true;
                 }
 
                 Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
@@ -2231,7 +2232,7 @@ namespace InstallerGUI.Services
                 if (wingetExit == 0)
                 {
                     Log("[ok] Blender instalado com sucesso via winget.", ConsoleColor.Green);
-                    return;
+                    return true;
                 }
 
                 Log("  Instalação via winget não foi concluída. Baixando instalador MSI...", ConsoleColor.Yellow);
@@ -2248,7 +2249,7 @@ namespace InstallerGUI.Services
                 if (wingetExit == 0)
                 {
                     Log("[ok] Affinity Studio instalado com sucesso via winget.", ConsoleColor.Green);
-                    return;
+                    return true;
                 }
 
                 Log("  Instalação via winget não foi concluída. Baixando pacote MSIX...", ConsoleColor.Yellow);
@@ -2264,17 +2265,18 @@ namespace InstallerGUI.Services
                     if (exitCode == 0)
                     {
                         Log("[ok] Affinity Studio instalado com sucesso.", ConsoleColor.Green);
+                        return true;
                     }
                     else
                     {
                         Log(string.Format("X Falha ao instalar Affinity Studio (código {0}).", exitCode), ConsoleColor.Yellow);
+                        return false;
                     }
-                    return;
                 }
                 else
                 {
                     Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
-                    return;
+                    return false;
                 }
             }
 
@@ -2284,7 +2286,7 @@ namespace InstallerGUI.Services
                 if (string.IsNullOrEmpty(fullPathDavinci) || !File.Exists(fullPathDavinci))
                 {
                     Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
-                    return;
+                    return false;
                 }
 
                 Log("  Executando instalador do DaVinci Resolve (aguarde)...", ConsoleColor.Yellow);
@@ -2294,12 +2296,13 @@ namespace InstallerGUI.Services
                 if (exitCode == 0)
                 {
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                    return true;
                 }
                 else
                 {
                     Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                    return false;
                 }
-                return;
             }
 
             string fullPath = await EnsureProgramDownloadedAsync(program);
@@ -2315,7 +2318,7 @@ namespace InstallerGUI.Services
                     if (wingetExit == 0 || Is7ZipInstalled())
                     {
                         Log("[ok] 7-Zip instalado com sucesso via winget.", ConsoleColor.Green);
-                        return;
+                        return true;
                     }
                 }
                 else if (program.Id == "chrome")
@@ -2328,12 +2331,12 @@ namespace InstallerGUI.Services
                     if (wingetExit == 0 || IsChromeInstalled())
                     {
                         Log("[ok] Google Chrome instalado com sucesso via winget.", ConsoleColor.Green);
-                        return;
+                        return true;
                     }
                 }
 
                 Log(string.Format("X Não foi possível obter o instalador online de {0}.", program.DisplayName), ConsoleColor.Red);
-                return;
+                return false;
             }
 
             if (program.Id == "anydesk")
@@ -2351,12 +2354,12 @@ namespace InstallerGUI.Services
                 if (IsAnyDeskInstalled())
                 {
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
-                    return;
+                    return true;
                 }
                 else
                 {
                     Log(string.Format("X {0}: O instalador finalizou (código {1}), porém os arquivos não foram encontrados no sistema.", program.DisplayName, anydeskExit), ConsoleColor.Yellow);
-                    return;
+                    return false;
                 }
             }
 
@@ -2382,7 +2385,7 @@ namespace InstallerGUI.Services
                 {
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                     try { if (File.Exists(pbiLog)) File.Delete(pbiLog); } catch { }
-                    return;
+                    return true;
                 }
 
                 Log("  Instalação silenciosa não detectada. Tentando em modo passivo...", ConsoleColor.Yellow);
@@ -2394,7 +2397,7 @@ namespace InstallerGUI.Services
                 {
                     Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                     try { if (File.Exists(pbiLog)) File.Delete(pbiLog); } catch { }
-                    return;
+                    return true;
                 }
                 else
                 {
@@ -2407,7 +2410,7 @@ namespace InstallerGUI.Services
                     {
                         Log(string.Format("X {0}: O instalador finalizou sem erro, porém os arquivos não foram encontrados no sistema.", program.DisplayName), ConsoleColor.Yellow);
                     }
-                    return;
+                    return false;
                 }
             }
 
@@ -2435,6 +2438,7 @@ namespace InstallerGUI.Services
                         string adminPass = options != null ? options.AdminPassword : null;
                         await ConfigureRustDeskServerAsync(adminPass);
                     }
+                    return true;
                 }
                 else
                 {
@@ -2462,26 +2466,32 @@ namespace InstallerGUI.Services
                             string adminPass = options != null ? options.AdminPassword : null;
                             await ConfigureRustDeskServerAsync(adminPass);
                         }
+                        return true;
                     }
                     else if (program.Id == "adobereader" && IsAdobeReaderInstalled())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
                     }
                     else if (program.Id == "chrome" && IsChromeInstalled())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
                     }
                     else if (program.Id == "7zip" && Is7ZipInstalled())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
                     }
                     else if (program.Id == "office365" && IsOffice365Installed())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
                     }
                     else if (program.Id == "tracedraw" && IsTraceDrawInstalled())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
                     }
                     else if (program.Id == "chrome")
                     {
@@ -2493,10 +2503,12 @@ namespace InstallerGUI.Services
                         if (wingetExit == 0 || IsChromeInstalled())
                         {
                             Log(string.Format("[ok] {0} instalado com sucesso via winget.", program.DisplayName), ConsoleColor.Green);
+                            return true;
                         }
                         else
                         {
                             Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                            return false;
                         }
                     }
                     else if (program.Id == "7zip")
@@ -2509,10 +2521,12 @@ namespace InstallerGUI.Services
                         if (wingetExit == 0 || Is7ZipInstalled())
                         {
                             Log(string.Format("[ok] {0} instalado com sucesso via winget.", program.DisplayName), ConsoleColor.Green);
+                            return true;
                         }
                         else
                         {
                             Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                            return false;
                         }
                     }
                     else if (program.Id == "citrix" && (exitCode == -2147467259 || exitCode == 1603))
@@ -2528,24 +2542,26 @@ namespace InstallerGUI.Services
                         if (retryExitCode == 0 || retryExitCode == 3010)
                         {
                             Log(string.Format("[ok] {0} instalado com sucesso na segunda tentativa.", program.DisplayName), ConsoleColor.Green);
+                            return true;
                         }
                         else
                         {
                             Log(string.Format("X {0} retornou código {1} na segunda tentativa.", program.DisplayName, retryExitCode), ConsoleColor.Yellow);
+                            return false;
                         }
                     }
                     else
                     {
                         Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                        return false;
                     }
                 }
             }
             catch (Exception ex)
             {
                 Log(string.Format("X Erro ao instalar {0}: {1}", program.DisplayName, ex.Message), ConsoleColor.Red);
+                return false;
             }
-
-            await Task.Delay(300);
         }
 
         /// <summary>
@@ -3812,6 +3828,9 @@ namespace InstallerGUI.Services
                     }
                 }
 
+                var installedPrograms = new List<string>();
+                var failedPrograms = new List<string>();
+
                 // 5. Instalar cada programa selecionado
                 if (!cancelled)
                 {
@@ -3825,7 +3844,15 @@ namespace InstallerGUI.Services
 
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
-                        await InstallProgramAsync(program, options);
+                        bool success = await InstallProgramAsync(program, options);
+                        if (success)
+                        {
+                            installedPrograms.Add(program.DisplayName);
+                        }
+                        else
+                        {
+                            failedPrograms.Add(program.DisplayName);
+                        }
                     }
                 }
 
@@ -3842,6 +3869,32 @@ namespace InstallerGUI.Services
                     await CreateDesktopShortcutsAsync(options);
 
                     Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
+
+                    if (options.SelectedPrograms != null && options.SelectedPrograms.Count > 0)
+                    {
+                        Log("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
+                        Log(" RESUMO DOS PROGRAMAS:", ConsoleColor.Cyan);
+
+                        if (installedPrograms.Count > 0)
+                        {
+                            Log(string.Format(" Programas instalados ({0}):", installedPrograms.Count), ConsoleColor.Blue);
+                            for (int i = 0; i < installedPrograms.Count; i++)
+                            {
+                                Log(string.Format("   • {0}", installedPrograms[i]), ConsoleColor.Blue);
+                            }
+                        }
+
+                        if (failedPrograms.Count > 0)
+                        {
+                            Log(string.Format(" Programas não instalados ou com erro ({0}):", failedPrograms.Count), ConsoleColor.Red);
+                            for (int i = 0; i < failedPrograms.Count; i++)
+                            {
+                                Log(string.Format("   • {0}", failedPrograms[i]), ConsoleColor.Red);
+                            }
+                        }
+
+                        Log("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
+                    }
 
                     var handler = OnInstallationCompleted;
                     if (handler != null)
