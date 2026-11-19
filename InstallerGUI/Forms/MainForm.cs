@@ -316,7 +316,7 @@ namespace InstallerGUI.Forms
                 BackColor = Color.FromArgb(45, 45, 45),
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(260 * scale)));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(340 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             // ─── Lado esquerdo: título e diretório empilhados verticalmente ───
@@ -349,12 +349,12 @@ namespace InstallerGUI.Forms
 
             tbl.Controls.Add(leftPanel, 0, 0);
 
-            // ─── Lado direito: logo EXABIT proporcional ───
+            // ─── Lado direito: logo EXABIT proporcional centralizada com o painel de programas ───
             var rightPanel = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(45, 45, 45),
-                Padding = new Padding((int)(10 * scale), (int)(4 * scale), (int)(15 * scale), (int)(6 * scale)),
+                Padding = new Padding((int)(10 * scale), (int)(4 * scale), 0, (int)(6 * scale)),
             };
 
             try

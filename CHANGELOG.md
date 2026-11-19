@@ -7,6 +7,51 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.68] - 2026-11-19
+
+### Aprimorado
+- **Alinhamento Centralizado da Marca EXABIT com o Painel de Programas**:
+  - Ajustada a coluna direita do cabeçalho (`BuildHeader`) de `260px * scale` para `340px * scale`, casando exatamente com a largura da coluna do painel de seleção de programas (`BuildRightPanel`).
+  - Ajustado o padding horizontal do container da logo (`Padding.Left = 10px * scale`, `Padding.Right = 0`), alinhando o PictureBox com o GroupBox "Programas para Instalar" e centralizando a marca EXABIT com precisão geométrica.
+
+---
+
+## [2.0.0.67] - 2026-11-19
+
+### Removido
+- **Composer (PHP)**: Removido da lista de programas para instalação a pedido do usuário (eliminando prompts interativos de modo de instalação).
+- **DaVinci Resolve Free**: Removido da lista de programas para instalação a pedido do usuário.
+
+### Corrigido & Aprimorado
+- **FileZilla Client (Correção do Erro 403 Proibido)**:
+  - Adicionado suporte a cabeçalho `User-Agent` customizado (`chocolatey/2.2.2`) no motor de downloads online `DownloadFileOnlineAsync`, contornando bloqueios de anti-bot do Cloudflare na CDN de pacotes.
+  - O download agora extrai diretamente o instalador oficial de 64 bits (`FileZilla_*_win64-setup.exe`), com validação profunda em `IsFileZillaInstalled()`.
+- **DBeaver Community (Correção do Código 666660)**:
+  - Corrigidos os argumentos de instalação silenciosa do DBeaver para `/S /allusers` (o código 666660 indicava sintaxe de escopo ausente no instalador NSIS).
+  - Adicionada detecção profunda pós-instalação em `IsDBeaverInstalled()` e retry autônomo com `/S /allusers`.
+- **Suporte a Papéis de Parede da Nortel (`Wallpapers\Nortel`)**:
+  - Adicionado novo checkbox **"Aplicar papel de parede Nortel"** na aba *Opções do Windows*.
+  - Mantida a opção de papel de parede personalizado padrão (`Wallpapers`), com seleção mutuamente exclusiva e intuitiva entre os perfis.
+  - Atualizado o script `apply_wallpapers.ps1` com parâmetro `-Client <nome>`, preparando a arquitetura de personalização por cliente e aplicando os papéis de parede oficiais da Nortel (`01-nortel.jpg`, `02-nortel.jpg`) em todos os temas do Windows (Aero, Dark, Spotlight, ThemeA-D).
+
+---
+
+## [2.0.0.66] - 2026-11-19
+
+### Adicionado & Aprimorado
+- **Barras de Rolagem Personalizadas Modernas (Tema Escuro com Thumb Laranja)**:
+  - Desenvolvido o componente visual `DarkScrollBar` com renderização vetorial suave via GDI+:
+    - **Trilho (Fundo)**: Renderizado exatamente na mesma cor de fundo do container (`CorPainel = #282828` na lista de programas e `#141414` no log de instalação), eliminando 100% as barras brancas/cinzas nativas do Windows Forms (UxTheme).
+    - **Cursor Clicável (Thumb)**: Desenhado em formato de pílula arredondada com bordas suaves na cor laranja corporativa (`CorDestaque = #F39200`), com estados táteis de hover (`#FFAA28`) e clique/arrasto (`#DC7D00`).
+  - **Lista de Seleção de Programas**:
+    - Substituído o `AutoScroll` nativo por uma arquitetura viewport de alta performance com suporte a rolagem fluida por roda do mouse em qualquer ponto do painel ou sobre qualquer checkbox/categoria.
+    - Sincronização automática com foco por teclado (Tab) e redimensionamento responsivo.
+  - **Console de Mensagens e Log**:
+    - Ocultada a barra nativa branca do `RichTextBox` e integrada a `DarkScrollBar` sincronizada via mensagens de alta precisão do Win32 (`EM_GETLINECOUNT`, `EM_GETFIRSTVISIBLELINE`, `EM_LINESCROLL`).
+    - Rolagem fluida com mouse wheel e atualização automática ao receber novas mensagens de progresso.
+
+---
+
 ## [2.0.0.67] - 2026-11-19
 
 ### Removido
