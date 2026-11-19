@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$DistPath = "..\dist"
 )
 
@@ -28,12 +28,10 @@ try {
     Write-Host "Certificado publico exportado para: $cerPath" -ForegroundColor Gray
 } catch {}
 
-# 3. Assina os executaveis e scripts
+# 3. Assina os executaveis
 $FilesToSign = @(
     "bin\Release\install.exe",
-    (Join-Path $DistPath "install.exe"),
-    (Join-Path $DistPath "Scripts\rustdesk_server.ps1"),
-    (Join-Path $DistPath "Scripts\apply_wallpapers.ps1")
+    (Join-Path $DistPath "install.exe")
 )
 
 $timestampServer = "http://timestamp.digicert.com"

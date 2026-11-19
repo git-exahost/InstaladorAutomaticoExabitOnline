@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -659,6 +660,51 @@ namespace InstallerGUI.Services
         /// em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
         /// e configurando para novos usuários e usuário atual.
         /// </summary>
+        /// <summary>
+        /// Obtém o caminho do script de papel de parede (apply_wallpapers.ps1).
+        /// Se não existir no disco, extrai o recurso embutido para o diretório temporário.
+        /// </summary>
+        private string GetApplyWallpapersScriptPath()
+        {
+            try
+            {
+                string localScript = Path.Combine(_basePath, "Scripts", "apply_wallpapers.ps1");
+                if (File.Exists(localScript))
+                {
+                    return localScript;
+                }
+
+                string tempScript = Path.Combine(Path.GetTempPath(), "apply_wallpapers.ps1");
+                var assembly = Assembly.GetExecutingAssembly();
+                using (var stream = assembly.GetManifestResourceStream("InstallerGUI.apply_wallpapers.ps1"))
+                {
+                    if (stream != null)
+                    {
+                        using (var fileStream = File.Create(tempScript))
+                        {
+                            stream.CopyTo(fileStream);
+                        }
+                        return tempScript;
+                    }
+                }
+
+                if (File.Exists(tempScript))
+                {
+                    return tempScript;
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Configura os papéis de parede copiando todos os arquivos da pasta Wallpapers
+        /// em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
+        /// e configurando para novos usuários e usuário atual.
+        /// </summary>
         public async Task SetWallpaperAsync(string client = null)
         {
             if (string.IsNullOrEmpty(client))
@@ -670,10 +716,9 @@ namespace InstallerGUI.Services
                 Log(string.Format("Configurando papéis de parede ({0}) em todos os temas do Windows...", client), ConsoleColor.Yellow);
             }
 
-            string psScript = Path.Combine(_basePath, "Scripts", "apply_wallpapers.ps1");
-            string cmdScript = Path.Combine(_basePath, "Scripts", "wallpaper.cmd");
+            string psScript = GetApplyWallpapersScriptPath();
 
-            if (File.Exists(psScript))
+            if (!string.IsNullOrEmpty(psScript) && File.Exists(psScript))
             {
                 string safeBasePath = _basePath ?? string.Empty;
                 string cleanBasePath = safeBasePath.TrimEnd('\\', '/');
@@ -700,21 +745,9 @@ namespace InstallerGUI.Services
                     Log(string.Format("X Aviso: Configuração de papéis de parede retornou código {0}.", exitCode), ConsoleColor.Yellow);
                 }
             }
-            else if (File.Exists(cmdScript))
-            {
-                int exitCode = await RunProcessAsync(cmdScript, "", 60000);
-                if (exitCode == 0)
-                {
-                    Log("[ok] Papel de parede configurado com sucesso.", ConsoleColor.Green);
-                }
-                else
-                {
-                    Log(string.Format("X Aviso: Script de wallpaper retornou código {0}.", exitCode), ConsoleColor.Yellow);
-                }
-            }
             else
             {
-                Log("Script de wallpaper não encontrado em: " + psScript, ConsoleColor.Yellow);
+                Log("X Aviso: Script de papel de parede não encontrado nos recursos embutidos.", ConsoleColor.Yellow);
             }
 
             await Task.Delay(500);
@@ -2225,13 +2258,19 @@ namespace InstallerGUI.Services
 
             if (program.Id == "blender")
             {
+                if (IsBlenderInstalled())
+                {
+                    Log("[ok] Blender já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
                 Log("Instalando Blender via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
                     "install --id BlenderFoundation.Blender -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
-                if (wingetExit == 0)
+                if (wingetExit == 0 || IsBlenderInstalled())
                 {
                     Log("[ok] Blender instalado com sucesso via winget.", ConsoleColor.Green);
                     return true;
@@ -2501,6 +2540,11 @@ namespace InstallerGUI.Services
                         return true;
                     }
                     else if (program.Id == "filezilla" && IsFileZillaInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "blender" && IsBlenderInstalled())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                         return true;
@@ -3657,6 +3701,88 @@ namespace InstallerGUI.Services
                     using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
                     {
                         if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Blender já está instalado no sistema,
+        /// consultando as pastas de programas e o registro do Windows.
+        /// </summary>
+        /// <returns>true se o Blender estiver instalado; caso contrário, false.</returns>
+        private static bool IsBlenderInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+                string[] searchDirs = new string[]
+                {
+                    Path.Combine(progFiles, "Blender Foundation"),
+                    Path.Combine(progFilesX86, "Blender Foundation")
+                };
+
+                foreach (string dir in searchDirs)
+                {
+                    if (Directory.Exists(dir))
+                    {
+                        string[] exeFiles = Directory.GetFiles(dir, "blender.exe", SearchOption.AllDirectories);
+                        if (exeFiles != null && exeFiles.Length > 0)
+                            return true;
+                    }
+                }
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+                };
+
+                foreach (string keyPath in regKeys)
+                {
+                    using (var baseKey = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (baseKey != null)
+                        {
+                            foreach (string subKeyName in baseKey.GetSubKeyNames())
+                            {
+                                using (var subKey = baseKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("Blender", StringComparison.OrdinalIgnoreCase) >= 0)
+                                        {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    using (var baseKey = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (baseKey != null)
+                        {
+                            foreach (string subKeyName in baseKey.GetSubKeyNames())
+                            {
+                                using (var subKey = baseKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("Blender", StringComparison.OrdinalIgnoreCase) >= 0)
+                                        {
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

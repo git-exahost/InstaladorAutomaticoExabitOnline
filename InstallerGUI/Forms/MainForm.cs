@@ -1795,12 +1795,6 @@ namespace InstallerGUI.Forms
                 return localPath;
             }
 
-            string projectPath = @"D:\OneDrive\Programas\ISO\Personalização de ISO\Auto Install\InstallerGUI\Sound\R2D2.mp3";
-            if (File.Exists(projectPath))
-            {
-                return projectPath;
-            }
-
             try
             {
                 var assembly = Assembly.GetExecutingAssembly();
@@ -2002,8 +1996,8 @@ namespace InstallerGUI.Forms
 
             var mediaList = new List<ProgramInfo>
             {
-                new ProgramInfo("blender",  "Blender (3D e Criação)",      "blender.msi",   "/qn /norestart", "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("affinity", "Affinity Studio (Português)", "Affinity.msix", "",               "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("blender",  "Blender (3D e Criação)",      "blender.msi",   "/qn /norestart ALLUSERS=1", "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("affinity", "Affinity Studio (Português)", "Affinity.msix", "",                          "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var list = new List<ProgramInfo>();

@@ -35,6 +35,7 @@ REM Compila todos os arquivos .cs
       /reference:System.IO.Compression.FileSystem.dll ^
       /resource:Image\logo_exabit.png,InstallerGUI.logo_exabit.png ^
       /resource:Sound\R2D2.mp3,InstallerGUI.R2D2.mp3 ^
+      /resource:Scripts\apply_wallpapers.ps1,InstallerGUI.apply_wallpapers.ps1 ^
       /win32icon:install.ico ^
       /optimize+ ^
       /nologo ^
@@ -61,11 +62,6 @@ if %errorlevel% equ 0 (
         copy /Y "app.config" "..\dist\install.exe.config" >nul
     )
 
-    REM Copia a pasta de som para a pasta dist
-    if exist "Sound" (
-        if not exist "..\dist\Sound" mkdir "..\dist\Sound"
-        copy /Y "Sound\R2D2.mp3" "..\dist\Sound\R2D2.mp3" >nul
-    )
 
     echo Destino: ..\dist\install.exe
     for %%I in ("..\dist\install.exe") do echo Tamanho: %%~zI bytes

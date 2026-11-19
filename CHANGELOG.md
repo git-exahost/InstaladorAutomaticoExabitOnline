@@ -7,6 +7,27 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.69] - 2026-11-19
+
+### Aprimorado & Limpeza de Distribuição
+- **Script de Papel de Parede Embutido no Executável**:
+  - O script PowerShell `apply_wallpapers.ps1` agora é compilado e embutido diretamente como recurso do assembly (`/resource:Scripts\apply_wallpapers.ps1,InstallerGUI.apply_wallpapers.ps1`) no `install.exe`.
+  - Criado o método de extração dinâmica `GetApplyWallpapersScriptPath()`, extraindo o script para `%TEMP%` em tempo de execução quando necessário.
+  - Removida a dependência da pasta física `dist\Scripts`.
+- **Limpeza Total da Pasta `dist`**:
+  - Excluída a pasta `dist\Scripts` e todos os scripts obsoletos (`dwgtrueview.cmd`, `office.cmd`, `program_base.cmd`, `radmin.cmd`, `rustdesk_server.ps1`, `wallpaper.cmd`).
+  - Excluída a pasta `dist\Sound` (o áudio `R2D2.mp3` já é nativamente embutido como recurso no assembly).
+  - A pasta `dist` agora é 100% limpa, autossuficiente e portátil, mantendo apenas `install.exe`, `install.exe.config`, `Wallpapers\` e certificados corporativos.
+
+### Corrigido
+- **Blender (Detecção de Instalação Prévia e Correção do Código 1603)**:
+  - Implementado o método `IsBlenderInstalled()` para detecção precisa em `Program Files\Blender Foundation`, `Program Files (x86)` e Chaves do Registro do Windows (`HKLM`/`HKCU` Uninstall).
+  - O instalador agora verifica previamente se o Blender já se encontra instalado no sistema, evitando falhas de upgrade causadas por pacotes MSI órfãos anteriores.
+  - Atualizados os argumentos do instalador MSI para `/qn /norestart ALLUSERS=1`.
+  - Tratado o retorno do winget e do MSI para considerar sucesso caso o Blender esteja presente e funcional na máquina.
+
+---
+
 ## [2.0.0.68] - 2026-11-19
 
 ### Aprimorado
