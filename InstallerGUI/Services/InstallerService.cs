@@ -1366,12 +1366,24 @@ namespace InstallerGUI.Services
 
         private async Task<string> ResolveTraceDrawInstallerAsync(ProgramInfo program)
         {
+            bool is64 = Environment.Is64BitOperatingSystem;
+            string cacheFileName = is64 ? "tracedraw-setup-x64.exe" : "tracedraw-setup-x86.exe";
             string cacheDir = GetDownloadCacheDirectory();
-            string destFile = Path.Combine(cacheDir, "tracedraw-setup.exe");
+            string destFile = Path.Combine(cacheDir, cacheFileName);
+
+            try
+            {
+                string oldGeneric = Path.Combine(cacheDir, "tracedraw-setup.exe");
+                if (File.Exists(oldGeneric))
+                {
+                    File.Delete(oldGeneric);
+                }
+            }
+            catch { }
 
             if (File.Exists(destFile) && new FileInfo(destFile).Length > 5000000)
             {
-                Log("  Instalador do TraceDraw pronto no cache.", ConsoleColor.Gray);
+                Log(string.Format("  Instalador do TraceDraw ({0}) pronto no cache.", is64 ? "64 bits" : "32 bits"), ConsoleColor.Gray);
                 return destFile;
             }
 
@@ -1388,10 +1400,43 @@ namespace InstallerGUI.Services
                 using (var reader = new StreamReader(apiResp.GetResponseStream(), Encoding.UTF8))
                 {
                     string json = reader.ReadToEnd();
-                    var match = Regex.Match(json, @"\""browser_download_url\""\s*:\s*\""(https://[^\s\""]*tracedraw[^\s\""]*(?:windows-x86_64-setup\.exe|setup\.exe|\.exe))\""", RegexOptions.IgnoreCase);
-                    if (match.Success)
+                    var matches = Regex.Matches(json, @"\""browser_download_url\""\s*:\s*\""(https://[^\s\""]+\.exe)\""", RegexOptions.IgnoreCase);
+
+                    for (int i = 0; i < matches.Count; i++)
                     {
-                        downloadUrl = match.Groups[1].Value;
+                        string candidate = matches[i].Groups[1].Value;
+                        if (is64)
+                        {
+                            if ((candidate.IndexOf("x86_64", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 candidate.IndexOf("x64", StringComparison.OrdinalIgnoreCase) >= 0) &&
+                                candidate.IndexOf("setup.exe", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                downloadUrl = candidate;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            if (candidate.IndexOf("windows-x86-setup.exe", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                candidate.IndexOf("x86-setup.exe", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                downloadUrl = candidate;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(downloadUrl))
+                    {
+                        for (int i = 0; i < matches.Count; i++)
+                        {
+                            string candidate = matches[i].Groups[1].Value;
+                            if (candidate.IndexOf("setup.exe", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                downloadUrl = candidate;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -1417,7 +1462,8 @@ namespace InstallerGUI.Services
                             {
                                 string tag = tagMatch.Groups[1].Value;
                                 string version = tag.TrimStart('v');
-                                downloadUrl = string.Format("https://github.com/tracedraw/tracedraw/releases/download/{0}/tracedraw-{1}-windows-x86_64-setup.exe", tag, version);
+                                string archSuffix = is64 ? "windows-x86_64-setup.exe" : "windows-x86-setup.exe";
+                                downloadUrl = string.Format("https://github.com/tracedraw/tracedraw/releases/download/{0}/tracedraw-{1}-{2}", tag, version, archSuffix);
                             }
                         }
                     }
@@ -1427,10 +1473,12 @@ namespace InstallerGUI.Services
 
             if (string.IsNullOrEmpty(downloadUrl))
             {
-                downloadUrl = "https://github.com/tracedraw/tracedraw/releases/download/v1.0.0/tracedraw-1.0.0-windows-x86_64-setup.exe";
+                downloadUrl = is64
+                    ? "https://github.com/tracedraw/tracedraw/releases/download/v0.48.0/tracedraw-0.48.0-windows-x86_64-setup.exe"
+                    : "https://github.com/tracedraw/tracedraw/releases/download/v0.48.0/tracedraw-0.48.0-windows-x86-setup.exe";
             }
 
-            return await DownloadFileOnlineAsync(downloadUrl, "tracedraw-setup.exe", program.DisplayName, 5000000);
+            return await DownloadFileOnlineAsync(downloadUrl, cacheFileName, program.DisplayName, 5000000);
         }
 
         private async Task<string> ResolveVSCodeInstallerAsync(ProgramInfo program)

@@ -7,6 +7,18 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.60] - 2026-11-19
+
+### Corrigido & Aprimorado
+- **TraceDraw (Vetorização Automática)**:
+  - Corrigida a seleção do instalador para corresponder exatamente à arquitetura do Windows: em sistemas operacionais de 64 bits (`Environment.Is64BitOperatingSystem`), agora baixa obrigatoriamente a versão nativa `tracedraw-*-windows-x86_64-setup.exe` (e em 32 bits, `windows-x86-setup.exe`).
+  - Eliminada completamente a janela interativa que solicitava ao usuário confirmação para instalar a versão de 32 bits em sistema 64 bits.
+  - Adicionado o parâmetro `/SP-` (Silent Prompt disable) aos argumentos de instalação Inno Setup (`/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-`), garantindo instalação 100% autônoma e silenciosa.
+- **Menu Microsoft Office 365**:
+  - Removido o sufixo `(Online)` da interface (`Microsoft Office 365`), padronizando o catálogo de programas, visto que todos os instaladores agora operam em modelo de download online automático.
+
+---
+
 ## [2.0.0.59] - 2026-11-19
 
 ### Corrigido & Aprimorado

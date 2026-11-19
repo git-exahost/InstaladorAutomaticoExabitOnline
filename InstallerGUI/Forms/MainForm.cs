@@ -1240,7 +1240,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("chrome",      "Google Chrome",                  "ChromeStandaloneSetup64.exe",          "/silent /install", "", "Geral"),
                 new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1", "", "Geral"),
                 new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s", "", "Geral"),
-                new ProgramInfo("office365",   "Microsoft Office 365 (Online)",  "setup.exe",                            "/configure configuration_o365.xml", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("office365",   "Microsoft Office 365",           "setup.exe",                            "/configure configuration_o365.xml", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",     "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1", "", "Geral") { UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = true },
                 new ProgramInfo("firefox",     "Mozilla Firefox",                "Firefox_Setup.msi",                    "/qn /norestart", "", "Geral"),
                 new ProgramInfo("radmin",      "Radmin VPN",                     "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART", "", "Geral") { DefaultChecked = false },
@@ -1269,7 +1269,7 @@ namespace InstallerGUI.Forms
 
             var traceDrawList = new List<ProgramInfo>
             {
-                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES", "", "TraceDraw") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-", "", "TraceDraw") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var devList = new List<ProgramInfo>
