@@ -72,9 +72,6 @@ namespace InstallerGUI.Forms
         private Button _btnTabConfig;
         private Button _btnTabShortcuts;
         private Button _btnTabOptions;
-        private Panel _indicatorConfig;
-        private Panel _indicatorShortcuts;
-        private Panel _indicatorOptions;
         private Panel _pnlTabContent;
         private Panel _pnlTabConfig;
         private Panel _pnlTabShortcuts;
@@ -267,7 +264,7 @@ namespace InstallerGUI.Forms
             };
             leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(250 * scale)));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(44 * scale)));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale)));
 
             leftSide.Controls.Add(BuildTabsPanel(scale), 0, 0);
             leftSide.Controls.Add(BuildLogPanel(), 0, 1);
@@ -378,8 +375,8 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
-                Margin = new Padding(0, (int)(3 * scale), 0, (int)(3 * scale)),
-                Padding = new Padding((int)(6 * scale), (int)(6 * scale), (int)(6 * scale), (int)(6 * scale)),
+                Margin = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
+                Padding = new Padding((int)(6 * scale), (int)(4 * scale), (int)(6 * scale), (int)(4 * scale)),
             };
 
             var mainLayout = new TableLayoutPanel
@@ -388,8 +385,10 @@ namespace InstallerGUI.Forms
                 ColumnCount = 1,
                 RowCount = 2,
                 BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(36 * scale))); // Barra de abas
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(44 * scale))); // Barra de abas com altura generosa (44px)
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Conteúdo da aba ativa
 
             // ─── Barra de Abas (Estilo Bootstrap With Tabs) ───
@@ -400,23 +399,24 @@ namespace InstallerGUI.Forms
                 RowCount = 1,
                 BackColor = Color.FromArgb(32, 32, 32),
                 Margin = new Padding(0, 0, 0, (int)(4 * scale)),
+                Padding = Padding.Empty,
             };
-            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38f));
-            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24f));
             tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36f));
             tabHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             // Aba 1: Configurações do Sistema
-            var tabItem1 = CreateTabHeaderButton("Configurações do Sistema", 0, scale, out _btnTabConfig, out _indicatorConfig);
-            tabHeader.Controls.Add(tabItem1, 0, 0);
+            _btnTabConfig = CreateTabHeaderButton("Configurações do Sistema", 0, scale);
+            tabHeader.Controls.Add(_btnTabConfig, 0, 0);
 
             // Aba 2: Atalhos
-            var tabItem2 = CreateTabHeaderButton("Atalhos", 1, scale, out _btnTabShortcuts, out _indicatorShortcuts);
-            tabHeader.Controls.Add(tabItem2, 1, 0);
+            _btnTabShortcuts = CreateTabHeaderButton("Atalhos", 1, scale);
+            tabHeader.Controls.Add(_btnTabShortcuts, 1, 0);
 
             // Aba 3: Opções do Windows
-            var tabItem3 = CreateTabHeaderButton("Opções do Windows", 2, scale, out _btnTabOptions, out _indicatorOptions);
-            tabHeader.Controls.Add(tabItem3, 2, 0);
+            _btnTabOptions = CreateTabHeaderButton("Opções do Windows", 2, scale);
+            tabHeader.Controls.Add(_btnTabOptions, 2, 0);
 
             mainLayout.Controls.Add(tabHeader, 0, 0);
 
@@ -425,6 +425,8 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
 
             _pnlTabConfig = BuildTabConfigContent(scale);
@@ -447,48 +449,56 @@ namespace InstallerGUI.Forms
         /// <summary>
         /// Cria o botão de cabeçalho da aba com indicador inferior de seleção no estilo Bootstrap.
         /// </summary>
-        private Panel CreateTabHeaderButton(string title, int tabIndex, float scale, out Button outButton, out Panel outIndicator)
+        private Button CreateTabHeaderButton(string title, int tabIndex, float scale)
         {
-            var panel = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                BackColor = Color.Transparent,
-                Margin = new Padding(0),
-            };
-            panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(3 * scale)));
-
             var btn = new Button
             {
                 Text = title,
+                Tag = tabIndex,
                 Dock = DockStyle.Fill,
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Cursor = Cursors.Hand,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
+                Font = new Font("Segoe UI", 10f, FontStyle.Regular),
                 ForeColor = Color.FromArgb(170, 170, 170),
                 BackColor = Color.FromArgb(32, 32, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+                UseVisualStyleBackColor = false,
             };
-            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 45, 45);
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(48, 48, 48);
 
             int targetIndex = tabIndex;
             btn.Click += (sender, args) => SwitchTab(targetIndex);
 
-            var indicator = new Panel
+            btn.Paint += (sender, e) =>
             {
-                Dock = DockStyle.Fill,
-                BackColor = Color.FromArgb(50, 50, 50),
+                var b = (Button)sender;
+                int idx = (int)b.Tag;
+                bool active = (idx == _currentTabIndex);
+
+                int indicatorHeight = (int)(3 * scale);
+                if (indicatorHeight < 2) indicatorHeight = 2;
+                int y = b.Height - indicatorHeight;
+
+                if (active)
+                {
+                    using (var brush = new SolidBrush(CorDestaque))
+                    {
+                        e.Graphics.FillRectangle(brush, 0, y, b.Width, indicatorHeight);
+                    }
+                }
+                else
+                {
+                    using (var brush = new SolidBrush(Color.FromArgb(55, 55, 55)))
+                    {
+                        e.Graphics.FillRectangle(brush, 0, b.Height - 1, b.Width, 1);
+                    }
+                }
             };
 
-            panel.Controls.Add(btn, 0, 0);
-            panel.Controls.Add(indicator, 0, 1);
-
-            outButton = btn;
-            outIndicator = indicator;
-            return panel;
+            return btn;
         }
 
         /// <summary>
@@ -514,31 +524,33 @@ namespace InstallerGUI.Forms
                 if (index == 2) _pnlTabOptions.BringToFront();
             }
 
-            UpdateTabButtonStyle(_btnTabConfig, _indicatorConfig, index == 0);
-            UpdateTabButtonStyle(_btnTabShortcuts, _indicatorShortcuts, index == 1);
-            UpdateTabButtonStyle(_btnTabOptions, _indicatorOptions, index == 2);
+            UpdateTabButtonStyle(_btnTabConfig, index == 0);
+            UpdateTabButtonStyle(_btnTabShortcuts, index == 1);
+            UpdateTabButtonStyle(_btnTabOptions, index == 2);
+
+            if (_btnTabConfig != null) _btnTabConfig.Invalidate();
+            if (_btnTabShortcuts != null) _btnTabShortcuts.Invalidate();
+            if (_btnTabOptions != null) _btnTabOptions.Invalidate();
         }
 
         /// <summary>
         /// Atualiza o estilo visual do botão da aba (destaque ativo vs inativo).
         /// </summary>
-        private void UpdateTabButtonStyle(Button btn, Panel indicator, bool isActive)
+        private void UpdateTabButtonStyle(Button btn, bool isActive)
         {
-            if (btn == null || indicator == null) return;
+            if (btn == null) return;
 
             if (isActive)
             {
                 btn.ForeColor = CorDestaque;
-                btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+                btn.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
                 btn.BackColor = CorPainel;
-                indicator.BackColor = CorDestaque;
             }
             else
             {
                 btn.ForeColor = Color.FromArgb(170, 170, 170);
-                btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
+                btn.Font = new Font("Segoe UI", 10f, FontStyle.Regular);
                 btn.BackColor = Color.FromArgb(32, 32, 32);
-                indicator.BackColor = Color.FromArgb(50, 50, 50);
             }
         }
 
@@ -692,7 +704,8 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria a barra de progresso dedicada para downloads online abaixo da janela de log.
+        /// Cria a barra de carregamento dedicada para downloads online abaixo da janela de log,
+        /// com perfil bem fino (7px) no estilo RustDesk corporativo.
         /// </summary>
         private Panel BuildDownloadProgressPanel(float scale)
         {
@@ -700,20 +713,22 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
-                Margin = new Padding(0, (int)(3 * scale), 0, 0),
-                Padding = new Padding((int)(8 * scale), (int)(4 * scale), (int)(8 * scale), (int)(4 * scale)),
+                Margin = Padding.Empty,
+                Padding = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
             };
 
             var tbl = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 1,
+                ColumnCount = 1,
+                RowCount = 2,
                 BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60f));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(7 * scale))); // Barra bem fina de carregamento
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));             // Status do download
 
             _downloadProgressBar = new ProgressBar
             {
@@ -722,6 +737,7 @@ namespace InstallerGUI.Forms
                 ForeColor = CorDestaque,
                 BackColor = Color.FromArgb(60, 60, 60),
                 Value = 0,
+                Margin = Padding.Empty,
             };
 
             _lblDownloadStatus = new Label
@@ -729,13 +745,14 @@ namespace InstallerGUI.Forms
                 Text = "Downloads: Aguardando...",
                 ForeColor = Color.FromArgb(180, 180, 180),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
-                TextAlign = ContentAlignment.MiddleRight,
+                TextAlign = ContentAlignment.MiddleLeft,
                 Dock = DockStyle.Fill,
+                Margin = new Padding((int)(2 * scale), 0, 0, 0),
                 AutoEllipsis = true,
             };
 
             tbl.Controls.Add(_downloadProgressBar, 0, 0);
-            tbl.Controls.Add(_lblDownloadStatus, 1, 0);
+            tbl.Controls.Add(_lblDownloadStatus, 0, 1);
 
             panel.Controls.Add(tbl);
             return panel;
@@ -897,7 +914,7 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria a barra de progresso e o rótulo de contagem (n / total).
+        /// Cria a barra de progresso geral bem fina e o rótulo de contagem (n / total).
         /// </summary>
         private Panel BuildProgressBar(float scale)
         {
@@ -905,8 +922,22 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
-                Padding = new Padding(0, (int)(6 * scale), 0, (int)(6 * scale)),
+                Margin = Padding.Empty,
+                Padding = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
             };
+
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(7 * scale))); // Barra bem fina de progresso geral
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));             // Contagem da etapa
 
             _progressBar = new ProgressBar
             {
@@ -914,21 +945,23 @@ namespace InstallerGUI.Forms
                 Style = ProgressBarStyle.Continuous,
                 ForeColor = CorDestaque,
                 BackColor = Color.FromArgb(60, 60, 60),
+                Margin = Padding.Empty,
             };
 
             _lblProgress = new Label
             {
                 Text = "0 / 0",
                 ForeColor = CorTexto,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
                 TextAlign = ContentAlignment.MiddleRight,
-                Dock = DockStyle.Right,
-                Width = (int)(160 * scale),
-                Padding = new Padding((int)(5 * scale), 0, (int)(5 * scale), 0),
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 0, (int)(2 * scale), 0),
             };
 
-            panel.Controls.Add(_progressBar);
-            panel.Controls.Add(_lblProgress);
+            tbl.Controls.Add(_progressBar, 0, 0);
+            tbl.Controls.Add(_lblProgress, 0, 1);
 
+            panel.Controls.Add(tbl);
             return panel;
         }
 
@@ -982,9 +1015,9 @@ namespace InstallerGUI.Forms
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // Programas
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Botão Instalar
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(44 * scale))); // Botão Parar
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(36 * scale))); // Progresso
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(48 * scale))); // Botão Instalar
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(40 * scale))); // Botão Parar
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale))); // Progresso (fino)
 
             layout.Controls.Add(BuildProgramsPanel(scale), 0, 0);
 

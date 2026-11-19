@@ -7,6 +7,20 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.62] - 2026-11-19
+
+### Corrigido & Aprimorado
+- **Correção da Altura e Enquadramento dos Botões das Abas**:
+  - Eliminado o corte/truncamento vertical nos botões das abas ("Configurações do Sistema", "Atalhos", "Opções do Windows").
+  - Aumentada a altura do cabeçalho de abas para 44px com remoção de margens e preenchimentos internos concorrentes.
+  - O indicador inferior ativo (3px em `CorDestaque`) e a linha base das abas inativas agora são renderizados via evento `Paint` customizado diretamente no botão, garantindo alinhamento pixel-perfect e sem recortes em qualquer escala de DPI.
+- **Barra de Carregamento Ultra-Fina (Estilo RustDesk)**:
+  - Redesenhada a barra de progresso de downloads para perfil fino de 7px de altura, idêntica ao design limpo adotado na Central de Suporte Remoto RustDesk.
+  - A barra agora estende-se por toda a largura horizontal abaixo do painel de log, acompanhada por um rótulo compacto de status textual logo abaixo.
+  - A barra de progresso geral das etapas (lado direito) também foi padronizada com perfil fino de 7px, otimizando o aproveitamento vertical da interface.
+
+---
+
 ## [2.0.0.61] - 2026-11-19
 
 ### Adicionado & Aprimorado
