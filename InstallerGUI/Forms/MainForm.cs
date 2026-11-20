@@ -42,6 +42,11 @@ namespace InstallerGUI.Forms
 
         private readonly InstallerService _service;
         private bool _installing;
+        private System.Windows.Forms.Timer _connectionMonitorTimer;
+        private bool? _lastDetectedInternet;
+        private string _lastDetectedIp;
+        private bool _isUpdatingSystemInfo;
+        private int _connectionMonitorTicks;
 
         // ──────────────────────────────────────────────
         // Controles da UI
@@ -143,6 +148,9 @@ namespace InstallerGUI.Forms
 
             // Monta todos os controles na tela
             BuildUI();
+
+            // Inicia o monitor de conectividade de rede em tempo real
+            InitConnectionMonitor();
         }
 
         /// <summary>
@@ -187,6 +195,7 @@ namespace InstallerGUI.Forms
         private const int EM_GETLINECOUNT = 0x00BA;
         private const int EM_LINESCROLL = 0x00B6;
         private const int EM_GETFIRSTVISIBLELINE = 0x00CE;
+        private const int WM_SETREDRAW = 0x000B;
 
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19;
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
@@ -238,7 +247,26 @@ namespace InstallerGUI.Forms
                 _updateProgramListLayout();
             }
             SyncLogScrollBar();
-            DisplayInitialSystemInfoAsync();
+            TriggerNetworkAvailabilityCheck();
+        }
+
+        /// <summary>
+        /// Libera os recursos e timers em background ao fechar a janela.
+        /// </summary>
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            try
+            {
+                if (_connectionMonitorTimer != null)
+                {
+                    _connectionMonitorTimer.Stop();
+                    _connectionMonitorTimer.Dispose();
+                    _connectionMonitorTimer = null;
+                }
+                System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
+            }
+            catch { }
+            base.OnFormClosing(e);
         }
 
         // ══════════════════════════════════════════════
@@ -786,9 +814,9 @@ namespace InstallerGUI.Forms
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 16f));
 
-            _chkUninstallGames = CreateCheckBox("Desinstalar silenciosamente todos os jogos do computador", false);
-            _chkRemoveOtherProfiles = CreateCheckBox("Remover e apagar todos os perfis do Windows (exceto novos)", false);
-            _chkUninstallThirdPartyAntivirus = CreateCheckBox("Desinstalar silenciosamente todo e qualquer antivírus de terceiros", false);
+            _chkUninstallGames = CreateCheckBox("Desinstalar todos os jogos deste computador", false);
+            _chkRemoveOtherProfiles = CreateCheckBox("Remover e apagar todos os perfis do Windows", false);
+            _chkUninstallThirdPartyAntivirus = CreateCheckBox("Desinstalar todo e qualquer antivírus de terceiros", false);
 
             tbl.Controls.Add(_chkUninstallGames, 0, 0);
             tbl.Controls.Add(_chkRemoveOtherProfiles, 0, 1);
@@ -1564,49 +1592,148 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Coleta e exibe o diagnóstico e informações do sistema operacional ao inicializar o aplicativo.
+        /// Inicializa o timer de monitoramento contínuo de conectividade de rede (a cada 2 segundos).
+        /// Permite detectar imediatamente quando a internet cai ou volta na tela inicial, atualizando IP e Ping sem travamento.
         /// </summary>
-        private async void DisplayInitialSystemInfoAsync()
+        private void InitConnectionMonitor()
         {
-            _txtLog.Clear();
-            SyncLogScrollBar();
-            AppendLog("======================================================================", ConsoleColor.Cyan);
-            AppendLog(" INFORMAÇÕES DO SISTEMA", ConsoleColor.Cyan);
-            AppendLog("======================================================================", ConsoleColor.Cyan);
-            AppendLog(string.Format("Nome do computador : {0}", Environment.MachineName), ConsoleColor.Gray);
+            _connectionMonitorTimer = new System.Windows.Forms.Timer();
+            _connectionMonitorTimer.Interval = 2000;
+            _connectionMonitorTimer.Tick += ConnectionMonitorTimer_Tick;
+            _connectionMonitorTimer.Start();
 
-            string userRole = "";
             try
             {
-                var principal = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());
-                if (principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
-                    userRole = " (Administrador)";
+                System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
             }
             catch { }
-            AppendLog(string.Format("Nome do usuário    : {0}{1}", Environment.UserName, userRole), ConsoleColor.Gray);
+        }
 
-            string ip = GetLocalIpAddress();
-            AppendLog(string.Format("Endereço IP        : {0}", ip), ConsoleColor.Gray);
-
-            bool hasInternet = await _service.HasInternetConnectionAsync();
-            if (hasInternet)
+        private void OnNetworkAvailabilityChanged(object sender, System.Net.NetworkInformation.NetworkAvailabilityEventArgs e)
+        {
+            if (_installing || IsDisposed) return;
+            try
             {
-                AppendLog("Status de conexão  : Conectado à Internet", ConsoleColor.Green);
-                var pingDiag = await _service.MeasureInternetPingAsync();
-                AppendLog(string.Format("Teste de Ping      : {0}", pingDiag.Text), pingDiag.Color);
+                if (InvokeRequired)
+                {
+                    BeginInvoke(new Action(TriggerNetworkAvailabilityCheck));
+                }
+                else
+                {
+                    TriggerNetworkAvailabilityCheck();
+                }
             }
-            else
+            catch { }
+        }
+
+        private async void TriggerNetworkAvailabilityCheck()
+        {
+            await CheckAndRefreshConnectionStatusAsync(true);
+        }
+
+        private async void ConnectionMonitorTimer_Tick(object sender, EventArgs e)
+        {
+            if (_installing || IsDisposed) return;
+            await CheckAndRefreshConnectionStatusAsync(false);
+        }
+
+        /// <summary>
+        /// Verifica a conectividade com a internet e atualiza a tela inicial dinamicamente se o status mudou.
+        /// </summary>
+        private async Task CheckAndRefreshConnectionStatusAsync(bool forceCheck)
+        {
+            if (_installing || _isUpdatingSystemInfo || IsDisposed) return;
+
+            _isUpdatingSystemInfo = true;
+            try
             {
-                AppendLog("Status de conexão  : Desconectado da Internet", ConsoleColor.Yellow);
+                _connectionMonitorTicks++;
+                bool currentInternet = await _service.HasInternetConnectionAsync();
+                string currentIp = GetLocalIpAddress();
+
+                bool statusChanged = (!_lastDetectedInternet.HasValue) ||
+                                     (currentInternet != _lastDetectedInternet.Value) ||
+                                     (currentIp != _lastDetectedIp);
+
+                bool periodicRefresh = currentInternet && (_connectionMonitorTicks % 6 == 0);
+
+                if (statusChanged || periodicRefresh || forceCheck)
+                {
+                    _lastDetectedInternet = currentInternet;
+                    _lastDetectedIp = currentIp;
+
+                    PingDiagnosis pingDiag = null;
+                    if (currentInternet)
+                    {
+                        pingDiag = await _service.MeasureInternetPingAsync();
+                    }
+
+                    if (!_installing && !IsDisposed)
+                    {
+                        RenderInitialSystemInfo(currentInternet, currentIp, pingDiag);
+                    }
+                }
             }
+            catch { }
+            finally
+            {
+                _isUpdatingSystemInfo = false;
+            }
+        }
 
-            var diskDiag = GetSystemDriveFreeSpaceDiagnosis();
-            AppendLog(string.Format("Espaço livre em C: : {0}", diskDiag.Text), diskDiag.Color);
+        /// <summary>
+        /// Renderiza as informações de diagnóstico do sistema no painel de log sem cintilação (flicker-free).
+        /// </summary>
+        private void RenderInitialSystemInfo(bool hasInternet, string ip, PingDiagnosis pingDiag)
+        {
+            if (_installing || IsDisposed) return;
 
-            string winVer = GetWindowsVersionInfo();
-            AppendLog(string.Format("Versão do Windows  : {0}", winVer), ConsoleColor.Gray);
-            AppendLog("======================================================================\n", ConsoleColor.Cyan);
-            AppendLog("Pronto para iniciar. Configure as opções e selecione os programas desejados.\n", ConsoleColor.Gray);
+            SendMessage(_txtLog.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+            try
+            {
+                _txtLog.Clear();
+                AppendLog("======================================================================", ConsoleColor.Cyan);
+                AppendLog(" INFORMAÇÕES DO SISTEMA", ConsoleColor.Cyan);
+                AppendLog("======================================================================", ConsoleColor.Cyan);
+                AppendLog(string.Format("Nome do computador : {0}", Environment.MachineName), ConsoleColor.Gray);
+
+                string userRole = "";
+                try
+                {
+                    var principal = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());
+                    if (principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
+                        userRole = " (Administrador)";
+                }
+                catch { }
+                AppendLog(string.Format("Nome do usuário    : {0}{1}", Environment.UserName, userRole), ConsoleColor.Gray);
+
+                AppendLog(string.Format("Endereço IP        : {0}", ip), ConsoleColor.Gray);
+
+                if (hasInternet)
+                {
+                    AppendLog("Status de conexão  : Conectado à Internet", ConsoleColor.Green);
+                    if (pingDiag != null)
+                        AppendLog(string.Format("Teste de Ping      : {0}", pingDiag.Text), pingDiag.Color);
+                }
+                else
+                {
+                    AppendLog("Status de conexão  : Desconectado da Internet", ConsoleColor.Yellow);
+                }
+
+                var diskDiag = GetSystemDriveFreeSpaceDiagnosis();
+                AppendLog(string.Format("Espaço livre em C: : {0}", diskDiag.Text), diskDiag.Color);
+
+                string winVer = GetWindowsVersionInfo();
+                AppendLog(string.Format("Versão do Windows  : {0}", winVer), ConsoleColor.Gray);
+                AppendLog("======================================================================\n", ConsoleColor.Cyan);
+                AppendLog("Pronto para iniciar. Configure as opções e selecione os programas desejados.\n", ConsoleColor.Gray);
+            }
+            finally
+            {
+                SendMessage(_txtLog.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
+                _txtLog.Invalidate();
+                SyncLogScrollBar();
+            }
         }
 
         /// <summary>

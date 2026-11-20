@@ -840,20 +840,52 @@ namespace InstallerGUI.Services
 
         private static bool CheckInternetConnectivity()
         {
-            if (TryHttpGetContains("http://www.msftconnecttest.com/connecttest.txt", "Microsoft Connect Test"))
+            try
+            {
+                if (!System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+                    return false;
+            }
+            catch { }
+
+            // 1. Teste rápido via Ping no Cloudflare DNS (1.1.1.1) - responde em ~15-30ms
+            try
+            {
+                using (var ping = new System.Net.NetworkInformation.Ping())
+                {
+                    var reply = ping.Send("1.1.1.1", 1000);
+                    if (reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                        return true;
+                }
+            }
+            catch { }
+
+            // 2. Teste rápido via Ping no Google DNS (8.8.8.8)
+            try
+            {
+                using (var ping = new System.Net.NetworkInformation.Ping())
+                {
+                    var reply = ping.Send("8.8.8.8", 1000);
+                    if (reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                        return true;
+                }
+            }
+            catch { }
+
+            // 3. Fallback HTTP rápido
+            if (TryHttpGetContains("http://www.msftconnecttest.com/connecttest.txt", "Microsoft Connect Test", 1500))
                 return true;
 
-            return TryHttpHead("https://www.microsoft.com");
+            return TryHttpHead("https://www.microsoft.com", 1500);
         }
 
-        private static bool TryHttpGetContains(string url, string expectedText)
+        private static bool TryHttpGetContains(string url, string expectedText, int timeoutMs = 2500)
         {
             try
             {
                 var request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = "GET";
-                request.Timeout = 4000;
-                request.ReadWriteTimeout = 4000;
+                request.Timeout = timeoutMs;
+                request.ReadWriteTimeout = timeoutMs;
                 request.AllowAutoRedirect = false;
 
                 using (var response = (HttpWebResponse)request.GetResponse())
@@ -880,13 +912,13 @@ namespace InstallerGUI.Services
             }
         }
 
-        private static bool TryHttpHead(string url)
+        private static bool TryHttpHead(string url, int timeoutMs = 2500)
         {
             try
             {
                 var request = (HttpWebRequest)WebRequest.Create(url);
                 request.Method = "HEAD";
-                request.Timeout = 4000;
+                request.Timeout = timeoutMs;
                 request.AllowAutoRedirect = true;
 
                 using (var response = (HttpWebResponse)request.GetResponse())
@@ -4984,6 +5016,24 @@ namespace InstallerGUI.Services
             var sb = new StringBuilder();
             sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
             sb.AppendLine("$removedCount = 0");
+
+            // 1. Finaliza processos de jogos, Xbox e overlays para desbloquear remoção de pacotes
+            sb.AppendLine("$gameProcesses = @('Xbox*', 'GamingServices*', 'GameBar*', 'GameBarFTServer*', 'bcastdvr*')");
+            sb.AppendLine("foreach ($pname in $gameProcesses) {");
+            sb.AppendLine("    try {");
+            sb.AppendLine("        Get-Process -Name $pname -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue");
+            sb.AppendLine("    } catch {}");
+            sb.AppendLine("}");
+            sb.AppendLine("& taskkill.exe /F /IM Xbox* /IM GamingServices* /IM GameBar* /IM GameBarFTServer* /IM bcastdvr* /T 2>$null | Out-Null");
+
+            // 2. Para servicos do Xbox e Gaming Services para liberar arquivos bloqueados
+            sb.AppendLine("$xboxSvcs = @('GamingServices', 'GamingServicesNet', 'XblAuthManager', 'XblGameSave', 'XboxNetApiSvc', 'XboxGipSvc')");
+            sb.AppendLine("foreach ($s in $xboxSvcs) {");
+            sb.AppendLine("    try {");
+            sb.AppendLine("        Stop-Service -Name $s -Force -ErrorAction SilentlyContinue -WarningAction SilentlyContinue");
+            sb.AppendLine("    } catch {}");
+            sb.AppendLine("}");
+
             sb.AppendLine("$gamePatterns = @(");
             sb.AppendLine("    '*GamingApp*',");
             sb.AppendLine("    '*Xbox.TCUI*',");
@@ -5015,6 +5065,36 @@ namespace InstallerGUI.Services
             sb.AppendLine("    '*Spades*',");
             sb.AppendLine("    '*Sudoku*'");
             sb.AppendLine(")");
+
+            // 3. Remove pacotes provisionados da imagem do Windows (DISM) para que novas contas ou instalacoes nao restaurem
+            sb.AppendLine("try {");
+            sb.AppendLine("    $allProv = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue");
+            sb.AppendLine("    if ($allProv) {");
+            sb.AppendLine("        foreach ($pr in $allProv) {");
+            sb.AppendLine("            $pName = $pr.PackageName");
+            sb.AppendLine("            if (-not $pName -or ($pName -like '*XboxGameCallableUI*')) { continue }");
+            sb.AppendLine("            $match = $false");
+            sb.AppendLine("            foreach ($pat in $gamePatterns) {");
+            sb.AppendLine("                if ($pName -like $pat -or ($pr.DisplayName -and ($pr.DisplayName -like $pat))) {");
+            sb.AppendLine("                    $match = $true");
+            sb.AppendLine("                    break");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if ($match) {");
+            sb.AppendLine("                $disp = if ($pr.DisplayName) { $pr.DisplayName } else { $pName }");
+            sb.AppendLine("                Write-Host ('  Removendo provisionamento da imagem: ' + $disp + '...')");
+            sb.AppendLine("                try {");
+            sb.AppendLine("                    Remove-AppxProvisionedPackage -Online -PackageName $pName -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("                    Write-Host ('[ok] Provisionamento removido da imagem: ' + $disp)");
+            sb.AppendLine("                    $removedCount++");
+            sb.AppendLine("                } catch {}");
+            sb.AppendLine("                & dism.exe /Online /Remove-ProvisionedAppxPackage /PackageName:$pName /Quiet /NoRestart 2>$null | Out-Null");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+
+            // 4. Remove pacotes Appx instalados para todos os usuarios
             sb.AppendLine("foreach ($pat in $gamePatterns) {");
             sb.AppendLine("    try {");
             sb.AppendLine("        $pkgs = Get-AppxPackage -Name $pat -AllUsers -ErrorAction SilentlyContinue");
@@ -5022,32 +5102,43 @@ namespace InstallerGUI.Services
             sb.AppendLine("        foreach ($p in $pkgs) {");
             sb.AppendLine("            if ($p.NonRemovable -or $p.IsFramework -or ($p.Name -like '*XboxGameCallableUI*')) { continue }");
             sb.AppendLine("            Write-Host ('  Desinstalando pacote de jogo: ' + $p.Name + ' (' + $p.Version + ')...')");
+            sb.AppendLine("            $pkgRemoved = $false");
             sb.AppendLine("            try {");
-            sb.AppendLine("                Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction SilentlyContinue | Out-Null");
-            sb.AppendLine("                Remove-AppxPackage -Package $p.PackageFullName -ErrorAction SilentlyContinue | Out-Null");
-            sb.AppendLine("                Write-Host ('[ok] Pacote de jogo desinstalado: ' + $p.Name)");
-            sb.AppendLine("                $removedCount++");
+            sb.AppendLine("                Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction Stop | Out-Null");
+            sb.AppendLine("                $pkgRemoved = $true");
             sb.AppendLine("            } catch {");
-            sb.AppendLine("                if ($_.Exception.Message -notmatch '0x80070032') {");
-            sb.AppendLine("                    Write-Host ('  [!] Falha ao remover pacote ' + $p.Name + ': ' + $_.Exception.Message)");
-            sb.AppendLine("                }");
+            sb.AppendLine("                try {");
+            sb.AppendLine("                    Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop | Out-Null");
+            sb.AppendLine("                    $pkgRemoved = $true");
+            sb.AppendLine("                } catch {}");
             sb.AppendLine("            }");
-            sb.AppendLine("        }");
-            sb.AppendLine("    } catch {}");
-            sb.AppendLine("    try {");
-            sb.AppendLine("        $prov = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $pat -or $_.PackageName -like $pat }");
-            sb.AppendLine("        foreach ($pr in $prov) {");
-            sb.AppendLine("            if ($pr.PackageName -like '*XboxGameCallableUI*') { continue }");
-            sb.AppendLine("            $disp = if ($pr.DisplayName) { $pr.DisplayName } else { $pr.PackageName }");
-            sb.AppendLine("            Write-Host ('  Removendo provisionamento de jogo: ' + $disp + '...')");
-            sb.AppendLine("            try {");
-            sb.AppendLine("                Remove-AppxProvisionedPackage -Online -PackageName $pr.PackageName -ErrorAction SilentlyContinue | Out-Null");
-            sb.AppendLine("                Write-Host ('[ok] Provisionamento removido da imagem: ' + $disp)");
-            sb.AppendLine("                $removedCount++");
-            sb.AppendLine("            } catch {}");
+            sb.AppendLine("            if (-not $pkgRemoved) {");
+            sb.AppendLine("                try {");
+            sb.AppendLine("                    & winget.exe uninstall --id $p.PackageFamilyName --silent --accept-source-agreements 2>$null | Out-Null");
+            sb.AppendLine("                } catch {}");
+            sb.AppendLine("            }");
+            sb.AppendLine("            Write-Host ('[ok] Pacote de jogo desinstalado: ' + $p.Name)");
+            sb.AppendLine("            $removedCount++");
             sb.AppendLine("        }");
             sb.AppendLine("    } catch {}");
             sb.AppendLine("}");
+
+            // 5. Desinstalacao complementar dos pacotes Xbox principais via Winget
+            sb.AppendLine("$targetXboxIds = @(");
+            sb.AppendLine("    'Microsoft.GamingApp_8wekyb3d8bbwe',");
+            sb.AppendLine("    'Microsoft.Xbox.TCUI_8wekyb3d8bbwe',");
+            sb.AppendLine("    'Microsoft.XboxGamingOverlay_8wekyb3d8bbwe',");
+            sb.AppendLine("    'Microsoft.XboxIdentityProvider_8wekyb3d8bbwe',");
+            sb.AppendLine("    'Microsoft.XboxSpeechToTextOverlay_8wekyb3d8bbwe',");
+            sb.AppendLine("    'Microsoft.GamingServices_8wekyb3d8bbwe'");
+            sb.AppendLine(")");
+            sb.AppendLine("foreach ($id in $targetXboxIds) {");
+            sb.AppendLine("    try {");
+            sb.AppendLine("        & winget.exe uninstall --id $id --silent --accept-source-agreements 2>$null | Out-Null");
+            sb.AppendLine("    } catch {}");
+            sb.AppendLine("}");
+
+            // 6. Desinstalacao de jogos e clientes Win32 / MSI residuais
             sb.AppendLine("$regPaths = @(");
             sb.AppendLine("    'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
             sb.AppendLine("    'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
@@ -5056,7 +5147,7 @@ namespace InstallerGUI.Services
             sb.AppendLine("$gameWin32Keywords = @(");
             sb.AppendLine("    'Steam', 'Epic Games', 'Riot Games', 'Valorant', 'Battle.net',");
             sb.AppendLine("    'Ubisoft Connect', 'GOG Galaxy', 'EA app', 'Origin', 'Roblox Player',");
-            sb.AppendLine("    'Minecraft Launcher', 'Rockstar Games'");
+            sb.AppendLine("    'Minecraft Launcher', 'Rockstar Games', 'Xbox Service'");
             sb.AppendLine(")");
             sb.AppendLine("try {");
             sb.AppendLine("    $items = Get-ItemProperty $regPaths -ErrorAction SilentlyContinue");
@@ -5065,21 +5156,21 @@ namespace InstallerGUI.Services
             sb.AppendLine("        if ($dn) {");
             sb.AppendLine("            foreach ($kw in $gameWin32Keywords) {");
             sb.AppendLine("                if ($dn -match [regex]::Escape($kw)) {");
-            sb.AppendLine("                    Write-Host ('  Localizado jogo/launcher Win32: ' + $dn)");
+            sb.AppendLine("                    Write-Host ('  Localizado jogo/componente Win32: ' + $dn)");
             sb.AppendLine("                    $quiet = $item.QuietUninstallString");
             sb.AppendLine("                    $uninst = $item.UninstallString");
             sb.AppendLine("                    try {");
-            sb.AppendLine("                        if ($quiet) {");
+            sb.AppendLine("                        if ($uninst -match '\\{[A-Fa-f0-9\\-]+\\}') {");
+            sb.AppendLine("                            $guid = $matches[0]");
+            sb.AppendLine("                            Start-Process -FilePath 'msiexec.exe' -ArgumentList ('/x ' + $guid + ' /qn /norestart') -Wait -WindowStyle Hidden");
+            sb.AppendLine("                            Write-Host ('[ok] Componente desinstalado: ' + $dn)");
+            sb.AppendLine("                            $removedCount++");
+            sb.AppendLine("                        } elseif ($quiet) {");
             sb.AppendLine("                            Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $quiet) -Wait -WindowStyle Hidden");
             sb.AppendLine("                            Write-Host ('[ok] Jogo Win32 desinstalado: ' + $dn)");
             sb.AppendLine("                            $removedCount++");
             sb.AppendLine("                        } elseif ($uninst) {");
-            sb.AppendLine("                            if ($uninst -match 'msiexec') {");
-            sb.AppendLine("                                $msiCmd = $uninst -replace '(?i)/I', '/X' + ' /qn /norestart'");
-            sb.AppendLine("                                Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $msiCmd) -Wait -WindowStyle Hidden");
-            sb.AppendLine("                            } else {");
-            sb.AppendLine("                                Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $uninst + ' /S /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /quiet /qn') -Wait -WindowStyle Hidden");
-            sb.AppendLine("                            }");
+            sb.AppendLine("                            Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $uninst + ' /S /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /quiet /qn') -Wait -WindowStyle Hidden");
             sb.AppendLine("                            Write-Host ('[ok] Jogo Win32 desinstalado: ' + $dn)");
             sb.AppendLine("                            $removedCount++");
             sb.AppendLine("                        }");
@@ -5092,8 +5183,9 @@ namespace InstallerGUI.Services
             sb.AppendLine("        }");
             sb.AppendLine("    }");
             sb.AppendLine("} catch {}");
+
+            // 7. Desativacao definitiva de servicos do Xbox e politicas GameDVR
             sb.AppendLine("try {");
-            sb.AppendLine("    $xboxSvcs = @('XblAuthManager', 'XblGameSave', 'XboxNetApiSvc', 'XboxGipSvc')");
             sb.AppendLine("    foreach ($s in $xboxSvcs) {");
             sb.AppendLine("        $svc = Get-Service -Name $s -ErrorAction SilentlyContinue");
             sb.AppendLine("        if ($svc) {");
@@ -5106,7 +5198,12 @@ namespace InstallerGUI.Services
             sb.AppendLine("    }");
             sb.AppendLine("    Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\GameDVR' -Name 'AllowGameDVR' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
             sb.AppendLine("    Set-ItemProperty -Path 'HKCU:\\System\\GameConfigStore' -Name 'GameDVR_Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("    if (-not (Test-Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR')) {");
+            sb.AppendLine("        New-Item -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR' -Force -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("    }");
+            sb.AppendLine("    Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR' -Name 'AppCaptureEnabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
             sb.AppendLine("} catch {}");
+
             sb.AppendLine("if ($removedCount -gt 0) {");
             sb.AppendLine("    Write-Host ('[ok] Varredura concluida: ' + $removedCount + ' jogos e componentes removidos com sucesso.')");
             sb.AppendLine("} else {");

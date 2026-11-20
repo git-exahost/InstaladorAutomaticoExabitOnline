@@ -7,6 +7,21 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.79] - 2026-11-20
+
+### Aprimorado
+- **Detecção e Atualização Dinâmica da Conexão à Internet a Cada 2 Segundos**:
+  - Implementado monitoramento de rede contínuo em tempo real na tela inicial (`MainForm`) através de `System.Windows.Forms.Timer` com intervalo de 2000 ms e escuta ativa de eventos de hardware `NetworkChange.NetworkAvailabilityChanged`.
+  - Atualização automática sem cintilação (*flicker-free* via congelamento de redesenho `WM_SETREDRAW` na Win32 API): quando a internet cai ou volta, o status de conexão é atualizado instantaneamente entre `"Conectado à Internet"` (verde) e `"Desconectado da Internet"` (amarelo), o IP da máquina é atualizado e o diagnóstico de latência de Ping é mensurado e exibido em tempo real.
+  - Verificação de conectividade ultra-rápida em `InstallerService` com pré-checagem em nanossegundos via `NetworkInterface.GetIsNetworkAvailable()` e teste rápido via Ping em DNS primários (Cloudflare `1.1.1.1` e Google `8.8.8.8`) com fallback HTTP acelerado.
+- **Remoção Definitiva e Completa de Xbox e Xbox Live**:
+  - Finalização forçada prévia de todos os processos em segundo plano de jogos, Xbox e overlays (`Xbox*`, `GamingServices*`, `GameBar*`, etc.) e interrupção de serviços antes da tentativa de desinstalação para liberar o bloqueio de arquivos no Windows.
+  - Remoção prioritária de pacotes provisionados na imagem do Windows (`Get-AppxProvisionedPackage` e `dism.exe /Online /Remove-ProvisionedAppxPackage`), garantindo que tanto novos perfis quanto os existentes nunca restaurem os aplicativos.
+  - Remoção em todas as contas de usuário via `Remove-AppxPackage -AllUsers`, remoção per-user e camada de contingência via `winget uninstall` para IDs oficiais (`Microsoft.GamingApp_8wekyb3d8bbwe`, `Microsoft.Xbox.TCUI_8wekyb3d8bbwe`, etc.).
+  - Remoção de componentes residuais Win32/MSI como `Xbox Service` (`{81F706B1-AB0A-4D88-B2DB-E5BAF88C87C6}`) e desativação permanente de serviços e GameDVR via registro.
+
+---
+
 ## [2.0.0.78] - 2026-11-20
 
 ### Corrigido
