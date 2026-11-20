@@ -5020,6 +5020,7 @@ namespace InstallerGUI.Services
             sb.AppendLine("        $pkgs = Get-AppxPackage -Name $pat -AllUsers -ErrorAction SilentlyContinue");
             sb.AppendLine("        if (-not $pkgs) { $pkgs = Get-AppxPackage -Name $pat -ErrorAction SilentlyContinue }");
             sb.AppendLine("        foreach ($p in $pkgs) {");
+            sb.AppendLine("            if ($p.NonRemovable -or $p.IsFramework -or ($p.Name -like '*XboxGameCallableUI*')) { continue }");
             sb.AppendLine("            Write-Host ('  Desinstalando pacote de jogo: ' + $p.Name + ' (' + $p.Version + ')...')");
             sb.AppendLine("            try {");
             sb.AppendLine("                Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction SilentlyContinue | Out-Null");
@@ -5027,13 +5028,16 @@ namespace InstallerGUI.Services
             sb.AppendLine("                Write-Host ('[ok] Pacote de jogo desinstalado: ' + $p.Name)");
             sb.AppendLine("                $removedCount++");
             sb.AppendLine("            } catch {");
-            sb.AppendLine("                Write-Host ('  [!] Falha ao remover pacote ' + $p.Name + ': ' + $_.Exception.Message)");
+            sb.AppendLine("                if ($_.Exception.Message -notmatch '0x80070032') {");
+            sb.AppendLine("                    Write-Host ('  [!] Falha ao remover pacote ' + $p.Name + ': ' + $_.Exception.Message)");
+            sb.AppendLine("                }");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine("    } catch {}");
             sb.AppendLine("    try {");
             sb.AppendLine("        $prov = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $pat -or $_.PackageName -like $pat }");
             sb.AppendLine("        foreach ($pr in $prov) {");
+            sb.AppendLine("            if ($pr.PackageName -like '*XboxGameCallableUI*') { continue }");
             sb.AppendLine("            $disp = if ($pr.DisplayName) { $pr.DisplayName } else { $pr.PackageName }");
             sb.AppendLine("            Write-Host ('  Removendo provisionamento de jogo: ' + $disp + '...')");
             sb.AppendLine("            try {");
@@ -5093,8 +5097,8 @@ namespace InstallerGUI.Services
             sb.AppendLine("    foreach ($s in $xboxSvcs) {");
             sb.AppendLine("        $svc = Get-Service -Name $s -ErrorAction SilentlyContinue");
             sb.AppendLine("        if ($svc) {");
-            sb.AppendLine("            Stop-Service -Name $s -Force -ErrorAction SilentlyContinue");
-            sb.AppendLine("            Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue");
+            sb.AppendLine("            Stop-Service -Name $s -Force -ErrorAction SilentlyContinue -WarningAction SilentlyContinue");
+            sb.AppendLine("            Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue -WarningAction SilentlyContinue");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
             sb.AppendLine("    if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\GameDVR')) {");
@@ -5349,8 +5353,8 @@ namespace InstallerGUI.Services
             sb.AppendLine("    } | ForEach-Object {");
             sb.AppendLine("        try {");
             sb.AppendLine("            Write-Host ('  Finalizando servico residual: ' + $_.DisplayName)");
-            sb.AppendLine("            Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue");
-            sb.AppendLine("            Set-Service -Name $_.Name -StartupType Disabled -ErrorAction SilentlyContinue");
+            sb.AppendLine("            Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue -WarningAction SilentlyContinue");
+            sb.AppendLine("            Set-Service -Name $_.Name -StartupType Disabled -ErrorAction SilentlyContinue -WarningAction SilentlyContinue");
             sb.AppendLine("        } catch {}");
             sb.AppendLine("    }");
             sb.AppendLine("} catch {}");

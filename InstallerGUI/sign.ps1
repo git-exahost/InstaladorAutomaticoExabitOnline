@@ -28,8 +28,9 @@ try {
     Write-Host "Certificado publico exportado para: $cerPath" -ForegroundColor Gray
 } catch {}
 
-# 3. Assina os executaveis
+# 3. Assina os executaveis e scripts
 $FilesToSign = @(
+    "Scripts\apply_wallpapers.ps1",
     "bin\Release\Instalador Automatico Exabit.exe",
     (Join-Path $DistPath "Instalador Automatico Exabit.exe")
 )

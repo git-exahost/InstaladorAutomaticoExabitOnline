@@ -7,6 +7,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.78] - 2026-11-20
+
+### Corrigido
+- **Correção no Script de Papéis de Parede (`apply_wallpapers.ps1`)**:
+  - Corrigido erro de sintaxe na linha 352 onde constava o comando truncado `exi` em vez de `exit 0`, eliminando o erro de comando não reconhecido durante a configuração dos papéis de parede.
+  - Script adicionado à rotina de assinatura digital Authenticode com certificado corporativo da EXABIT.
+- **Tratamento de Pacotes de Sistema Protegidos (`Microsoft.XboxGameCallableUI`)**:
+  - Adicionada verificação de pacotes não removíveis (`NonRemovable` / componentes de sistema invariantes) na rotina de remoção de jogos, ignorando pacotes protegidos pelo Windows como `Microsoft.XboxGameCallableUI` e eliminando a mensagem de erro `0x80070032`.
+- **Supressão de Avisos Repetitivos de Encerramento de Serviços (`Stop-Service`)**:
+  - Adicionado `-WarningAction SilentlyContinue` na interrupção de serviços de antivírus (ex: AVG Firewall) e componentes do Xbox, evitando repetição desnecessária de avisos de espera no log.
+
+---
+
 ## [2.0.0.77] - 2026-11-19
 
 ### Aprimorado
