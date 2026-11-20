@@ -161,7 +161,9 @@ namespace InstallerGUI.Forms
             int formHeight = Math.Min(workingArea.Height - 20, Math.Max(700, desiredHeight));
 
             Size = new Size(formWidth, formHeight);
-            MinimumSize = new Size(700, 600);
+            int minTrackW = Math.Max(700, (int)(700 * scale));
+            int minTrackH = Math.Max(580, (int)(580 * scale));
+            MinimumSize = new Size(minTrackW, minTrackH);
             MinimizeBox = true;
             MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
@@ -240,7 +242,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.86";
+            return "2.0.0.87";
         }
 
         // ──────────────────────────────────────────────
@@ -273,6 +275,19 @@ namespace InstallerGUI.Forms
         }
 
         private const int WM_GETMINMAXINFO = 0x0024;
+        private const int WM_SIZING = 0x0214;
+        private const int WMSZ_LEFT = 1;
+        private const int WMSZ_TOPLEFT = 4;
+        private const int WMSZ_BOTTOMLEFT = 7;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left;
+            public int Top;
+            public int Right;
+            public int Bottom;
+        }
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -292,8 +307,8 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Trava a largura mínima do formulário em 700px no nível da mensagem do Windows (WM_GETMINMAXINFO),
-        /// impedindo fisicamente que o mouse consiga redimensionar para menos de 700px de largura.
+        /// Trava a largura mínima do formulário em 700px no nível da mensagem do Windows (WM_GETMINMAXINFO e WM_SIZING),
+        /// impedindo fisicamente que o mouse consiga redimensionar para menos de 700px de largura durante o arrasto.
         /// </summary>
         protected override void WndProc(ref Message m)
         {
@@ -318,6 +333,39 @@ namespace InstallerGUI.Forms
                 }
                 catch { }
                 return;
+            }
+            else if (m.Msg == WM_SIZING)
+            {
+                try
+                {
+                    RECT r = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
+                    float scale = GetDpiScale();
+                    int minW = Math.Max(700, (int)(700 * scale));
+                    int minH = Math.Max(580, (int)(580 * scale));
+                    int currentW = r.Right - r.Left;
+                    int currentH = r.Bottom - r.Top;
+
+                    if (currentW < minW)
+                    {
+                        int edge = m.WParam.ToInt32();
+                        if (edge == WMSZ_LEFT || edge == WMSZ_TOPLEFT || edge == WMSZ_BOTTOMLEFT)
+                        {
+                            r.Left = r.Right - minW;
+                        }
+                        else
+                        {
+                            r.Right = r.Left + minW;
+                        }
+                    }
+
+                    if (currentH < minH)
+                    {
+                        r.Bottom = r.Top + minH;
+                    }
+
+                    Marshal.StructureToPtr(r, m.LParam, false);
+                }
+                catch { }
             }
             base.WndProc(ref m);
         }

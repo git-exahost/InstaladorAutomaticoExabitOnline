@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.87] - 2026-11-20
+
+### Corrigido / Aprimorado
+- **Trava Estrita de Largura Mínima (700px)**:
+  - Implementada a interceptação em tempo real da mensagem do Windows `WM_SIZING (0x0214)`, recalculando e corrigindo o retângulo de arrasto (`drag rectangle`) no ato da movimentação do mouse.
+  - Atualizado `MinimumSize` para considerar a escala de DPI (`minTrackW` / `minTrackH`) desde o construtor do formulário.
+  - Documentado no código a estrutura de formulários de `BuildMachineAccountsCard`.
+
 ## [2.0.0.86] - 2026-11-20
 
 ### Adicionado
