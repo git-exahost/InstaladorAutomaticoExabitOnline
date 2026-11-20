@@ -79,11 +79,12 @@ Todas as abas (Configurações, Atalhos, Opções do Windows, Funcionalidades, o
   - Distância entre campos sucessivos: **`6px` a `10px`**.
 
 ### 4.3. Cards de Diagnóstico e Informação
-- **Container**: `Padding = Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(10 * scale))`.
-- **Linha do Título do Card**: altura **`28px`**, com margem inferior de **`6px`** separando o título em destaque do primeiro dado.
-- **Coluna de Rótulos (Coluna 0)**: fixada em **`125px`** (`SizeType.Absolute, (int)(125 * scale)`), garantindo que termos como `Computador:`, `Processador:` ou `Memória RAM:` nunca quebrem linha ou sofram corte horizontal.
+- **Container**: `Padding = Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale))`, proporcionando 18px adicionais de altura útil para conteúdo.
+- **Linha do Título do Card**: altura **`22px`** (com fonte `9.0pt, Bold`), com margem inferior de **`2px`**.
+- **Coluna de Rótulos (Coluna 0)**: fixada entre **`95px` e `102px`** (`SizeType.Absolute`), garantindo que termos como `Computador:`, `Número de Série:` ou `Memória RAM:` nunca quebrem linha e deixando espaço de sobra na Coluna 1 para dados longos em linha única.
+- **Prevenção de Truncamento Vertical (DarkScrollBar)**: Cards com dados dinâmicos extensos (ex: Identificação com Build em 2 linhas, Segurança com antivírus de terceiros) devem usar container com viewport e barra de rolagem estilizada (`DarkScrollBar`), garantindo suporte a rolagem via `MouseWheel` e evitando qualquer truncamento de texto na base.
 - **Alinhamento dos Rótulos**: Todos os labels devem usar `Margin = Padding.Empty` para alinhamento horizontal 100% nivelado.
-- **Linhas de Dados**: altura padronizada de **`24px`** por linha.
+- **Linhas de Dados**: altura padronizada de **`22px` a `24px`** por linha.
 
 ### 4.4. Barras de Consumo / MiniUsageBar
 - Altura padrão da barra: **`8px`**.

@@ -178,6 +178,11 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 - **Sem Botão Maximizar**: `MaximizeBox = false` e `MinimizeBox = true` (apenas botões Minimizar e Fechar na barra de título).
 - **Dimensões Travadas (Compatível com 720p 1280x720)**: Dimensão ideal calculada em `1200 x 650px` (com clamping a `workingArea - 16px` para garantir folga com barra de tarefas do Windows de 48px), travada com `MinimumSize = MaximumSize = Size = new Size(formWidth, formHeight)`.
 
+### 7. Rolagem em Cards de Diagnóstico e Legendas Informativas
+- **Prevenção de Truncamento Vertical**: Em cards cujo texto pode variar de tamanho (ex: compilação do Windows, antivírus de terceiros como Kaspersky, status de reinicialização pendente), utilizar container com viewport e barra de rolagem `DarkScrollBar` personalizada (cor laranja, evento `MouseWheel`), garantindo que nenhum texto seja cortado pela base.
+- **Largura da Coluna de Rótulos (Coluna 0)**: Ajustada entre 95px e 102px conforme o tamanho do maior rótulo (`Computador:`, `Número de Série:`, `Memória RAM:`), garantindo que termos de valores longos (como RAM com uso e porcentagem) tenham espaço suficiente na Coluna 1 sem quebrar linhas ou cortar com reticências.
+- **Legendas de Orientações**: Linhas informativas e de advertência (ex: "Os campos acima só funcionam caso preenchidos...") devem seguir rigorosamente o padrão `Segoe UI`, 8.5pt, Itálico, `#A0A0A0`, com altura de 24px e espaçador flexível abaixo.
+
 ## Regras Críticas de Operação
 
 - **NUNCA fazer `git push` sem ordem do usuário**: Qualquer alteração, commit ou build deve permanecer estritamente local. O envio de atualizações para o repositório remoto (GitHub) **só pode ser feito quando o usuário mandar explicitamente**.

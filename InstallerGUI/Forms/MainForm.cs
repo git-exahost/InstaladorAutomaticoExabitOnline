@@ -118,6 +118,9 @@ namespace InstallerGUI.Forms
 
         // Card Expandido (Painel Completo)
         private Button _btnBackToMain;
+        private Panel _pnlIdentViewport;
+        private Panel _pnlIdentContent;
+        private DarkScrollBar _scrollBarIdent;
         private Label _lblExpComputer;
         private Label _lblExpUser;
         private Label _lblExpOs;
@@ -135,7 +138,12 @@ namespace InstallerGUI.Forms
         private Label _lblExpManufacturer;
         private Label _lblExpModel;
         private Label _lblExpSerial;
+        private Panel _pnlSecViewport;
+        private Panel _pnlSecContent;
+        private DarkScrollBar _scrollBarSec;
+        private Label _lblSecTitle;
         private Label _lblExpSecurity;
+        private Label _lblStateTitle;
         private Label _lblExpSystemState;
 
         // ──────────────────────────────────────────────
@@ -244,7 +252,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.91";
+            return "2.0.0.92";
         }
 
         // ──────────────────────────────────────────────
@@ -773,7 +781,7 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 5,
+                RowCount = 6,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
@@ -782,6 +790,7 @@ namespace InstallerGUI.Forms
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Nome do computador (Label + Input)
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Senha do Admin (Label + Input)
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Usuário padrão e Senha (Labels + Inputs)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale))); // Dica informativa (padrão idêntico às demais abas)
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Espaçador inferior flexível
 
             var lblTitle = new Label
@@ -902,6 +911,17 @@ namespace InstallerGUI.Forms
             tblUsers.Controls.Add(_txtStandardUserPass, 1, 1);
 
             layout.Controls.Add(tblUsers, 0, 3);
+
+            var lblHint = new Label
+            {
+                Text = "Os campos acima só funcionam caso preenchidos (em branco = não alterar).",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                ForeColor = Color.FromArgb(160, 160, 160),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
+            };
+            layout.Controls.Add(lblHint, 0, 4);
 
             pnlCard.Controls.Add(layout);
             return pnlCard;
@@ -1357,32 +1377,80 @@ namespace InstallerGUI.Forms
 
         private Panel BuildCardIdentAndOs(float scale)
         {
-            var content = new TableLayoutPanel
+            _pnlIdentViewport = new Panel
             {
                 Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            EnableDoubleBuffering(_pnlIdentViewport);
+
+            _scrollBarIdent = new DarkScrollBar
+            {
+                Dock = DockStyle.Right,
+                Width = (int)(8 * scale),
+                TrackColor = Color.FromArgb(28, 28, 28),
+                ThumbColor = CorDestaqueLaranja,
+                SmallChange = (int)(18 * scale),
+                Visible = false,
+            };
+
+            _pnlIdentContent = new Panel
+            {
+                Location = new Point(0, 0),
+                BackColor = Color.Transparent,
+                AutoScroll = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            EnableDoubleBuffering(_pnlIdentContent);
+
+            Action<MouseEventArgs> handleIdentWheel = (e) =>
+            {
+                if (_scrollBarIdent != null && _scrollBarIdent.Visible)
+                {
+                    _scrollBarIdent.ScrollBy(-Math.Sign(e.Delta) * (int)(18 * scale));
+                }
+            };
+            _pnlIdentViewport.MouseWheel += (s, e) => handleIdentWheel(e);
+            _pnlIdentContent.MouseWheel += (s, e) => handleIdentWheel(e);
+
+            _scrollBarIdent.ValueChanged += (s, e) =>
+            {
+                _pnlIdentContent.Top = -_scrollBarIdent.Value;
+            };
+
+            _pnlIdentViewport.Resize += (s, e) => UpdateIdentLayout();
+
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Top,
                 ColumnCount = 2,
                 RowCount = 3,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale))); // 125px garante "Computador:" sem truncamento
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(102 * scale))); // 102px acomoda "Computador:" sem corte ou quebra
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            content.Controls.Add(CreateDiagHeaderLabel("Computador:"), 0, 0);
+            tbl.Controls.Add(CreateDiagHeaderLabel("Computador:"), 0, 0);
             _lblExpComputer = CreateDiagValueLabel("Identificando...");
-            content.Controls.Add(_lblExpComputer, 1, 0);
+            tbl.Controls.Add(_lblExpComputer, 1, 0);
 
-            content.Controls.Add(CreateDiagHeaderLabel("Usuário:"), 0, 1);
+            tbl.Controls.Add(CreateDiagHeaderLabel("Usuário:"), 0, 1);
             _lblExpUser = CreateDiagValueLabel("Identificando...");
-            content.Controls.Add(_lblExpUser, 1, 1);
+            tbl.Controls.Add(_lblExpUser, 1, 1);
 
             var lblSys = CreateDiagHeaderLabel("Sistema:");
             lblSys.TextAlign = ContentAlignment.TopLeft;
-            content.Controls.Add(lblSys, 0, 2);
+            tbl.Controls.Add(lblSys, 0, 2);
 
             _lblExpOs = new Label
             {
@@ -1391,13 +1459,40 @@ namespace InstallerGUI.Forms
                 Font = new Font("Segoe UI", 8.5f),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.TopLeft,
-                AutoSize = false,
+                AutoSize = true,
                 UseMnemonic = false,
                 Margin = Padding.Empty,
             };
-            content.Controls.Add(_lblExpOs, 1, 2);
+            tbl.Controls.Add(_lblExpOs, 1, 2);
 
-            return CreateCardContainer("Identificação e Sistema", content, scale);
+            _pnlIdentContent.Controls.Add(tbl);
+            _pnlIdentViewport.Controls.Add(_pnlIdentContent);
+            _pnlIdentViewport.Controls.Add(_scrollBarIdent);
+
+            return CreateCardContainer("Identificação e Sistema", _pnlIdentViewport, scale);
+        }
+
+        private void UpdateIdentLayout()
+        {
+            if (_pnlIdentViewport == null || _pnlIdentContent == null || _scrollBarIdent == null) return;
+            int viewH = _pnlIdentViewport.ClientSize.Height;
+            int viewW = _pnlIdentViewport.ClientSize.Width;
+
+            int scrollW = _scrollBarIdent.Visible ? _scrollBarIdent.Width : 0;
+            _pnlIdentContent.Width = Math.Max(10, viewW - scrollW);
+            _pnlIdentContent.PerformLayout();
+
+            int totalH = 0;
+            foreach (Control c in _pnlIdentContent.Controls)
+            {
+                if (c.Bottom > totalH) totalH = c.Bottom;
+            }
+            _pnlIdentContent.Height = Math.Max(totalH, viewH);
+            int maxScroll = Math.Max(0, totalH - viewH);
+            _scrollBarIdent.Maximum = maxScroll;
+            _scrollBarIdent.LargeChange = Math.Max(1, viewH);
+            _scrollBarIdent.Visible = maxScroll > 0;
+            _pnlIdentContent.Width = Math.Max(10, viewW - (_scrollBarIdent.Visible ? _scrollBarIdent.Width : 0));
         }
 
         private Panel BuildCardNetwork(float scale)
@@ -1411,14 +1506,14 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(95 * scale))); // 95px suficiente para "Conexão:" e "Interfaces:"
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            // 1. Status de conexão
-            content.Controls.Add(CreateDiagHeaderLabel("Status de conexão:"), 0, 0);
+            // 1. Conexão
+            content.Controls.Add(CreateDiagHeaderLabel("Conexão:"), 0, 0);
             _lblExpNetStatus = CreateDiagValueLabel("Verificando...");
             _lblExpNetStatus.ForeColor = CorSucesso;
             _lblExpNetStatus.Cursor = Cursors.Hand;
@@ -1592,7 +1687,7 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale))); // 125px garante "Memória RAM:" em uma linha só sem quebrar
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(95 * scale))); // 95px suficiente para "Memória RAM:" e "Processador:"
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale))); // Processador (2 linhas)
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(32 * scale))); // Memória RAM (texto + barra próxima, padrão idêntico ao disco)
@@ -1635,6 +1730,7 @@ namespace InstallerGUI.Forms
                 Height = (int)(18 * scale),
                 TextAlign = ContentAlignment.MiddleLeft,
                 UseMnemonic = false,
+                AutoEllipsis = true,
                 Margin = Padding.Empty,
             };
             _barExpRam = new MiniUsageBar
@@ -1663,7 +1759,7 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(102 * scale))); // 102px suficiente para "Número de Série:"
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
@@ -1687,28 +1783,59 @@ namespace InstallerGUI.Forms
 
         private Panel BuildCardSecurity(float scale)
         {
-            var content = new TableLayoutPanel
+            _pnlSecViewport = new Panel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 5,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            EnableDoubleBuffering(_pnlSecViewport);
 
-            var lblSecTitle = new Label
+            _scrollBarSec = new DarkScrollBar
+            {
+                Dock = DockStyle.Right,
+                Width = (int)(8 * scale),
+                TrackColor = Color.FromArgb(28, 28, 28),
+                ThumbColor = CorDestaqueLaranja,
+                SmallChange = (int)(18 * scale),
+                Visible = false,
+            };
+
+            _pnlSecContent = new Panel
+            {
+                Location = new Point(0, 0),
+                BackColor = Color.Transparent,
+                AutoScroll = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            EnableDoubleBuffering(_pnlSecContent);
+
+            Action<MouseEventArgs> handleSecWheel = (e) =>
+            {
+                if (_scrollBarSec != null && _scrollBarSec.Visible)
+                {
+                    _scrollBarSec.ScrollBy(-Math.Sign(e.Delta) * (int)(18 * scale));
+                }
+            };
+            _pnlSecViewport.MouseWheel += (s, e) => handleSecWheel(e);
+            _pnlSecContent.MouseWheel += (s, e) => handleSecWheel(e);
+
+            _scrollBarSec.ValueChanged += (s, e) =>
+            {
+                _pnlSecContent.Top = -_scrollBarSec.Value;
+            };
+
+            _pnlSecViewport.Resize += (s, e) => UpdateSecurityLayout();
+
+            _lblSecTitle = new Label
             {
                 Text = "Segurança:",
                 ForeColor = Color.FromArgb(170, 170, 170),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                Dock = DockStyle.Fill,
+                Location = new Point(0, 0),
+                Size = new Size(280, (int)(16 * scale)),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Margin = Padding.Empty,
             };
@@ -1717,17 +1844,20 @@ namespace InstallerGUI.Forms
                 Text = "Windows Defender: Ativo | BitLocker: Desativado",
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8.5f),
-                Dock = DockStyle.Fill,
+                Location = new Point(0, (int)(16 * scale)),
+                Size = new Size(280, (int)(20 * scale)),
                 TextAlign = ContentAlignment.MiddleLeft,
+                AutoSize = true,
                 Margin = Padding.Empty,
             };
 
-            var lblStateTitle = new Label
+            _lblStateTitle = new Label
             {
                 Text = "Estado do Sistema:",
                 ForeColor = Color.FromArgb(170, 170, 170),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                Dock = DockStyle.Fill,
+                Location = new Point(0, (int)(38 * scale)),
+                Size = new Size(280, (int)(16 * scale)),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Margin = Padding.Empty,
             };
@@ -1736,17 +1866,50 @@ namespace InstallerGUI.Forms
                 Text = "Reboot Pendente: Não | Fonte: Na tomada",
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8.5f),
-                Dock = DockStyle.Fill,
+                Location = new Point(0, (int)(54 * scale)),
+                Size = new Size(280, (int)(20 * scale)),
                 TextAlign = ContentAlignment.MiddleLeft,
+                AutoSize = true,
                 Margin = Padding.Empty,
             };
 
-            content.Controls.Add(lblSecTitle, 0, 0);
-            content.Controls.Add(_lblExpSecurity, 0, 1);
-            content.Controls.Add(lblStateTitle, 0, 2);
-            content.Controls.Add(_lblExpSystemState, 0, 3);
+            _pnlSecContent.Controls.Add(_lblSecTitle);
+            _pnlSecContent.Controls.Add(_lblExpSecurity);
+            _pnlSecContent.Controls.Add(_lblStateTitle);
+            _pnlSecContent.Controls.Add(_lblExpSystemState);
 
-            return CreateCardContainer("Segurança e Status", content, scale);
+            _pnlSecViewport.Controls.Add(_pnlSecContent);
+            _pnlSecViewport.Controls.Add(_scrollBarSec);
+
+            return CreateCardContainer("Segurança e Status", _pnlSecViewport, scale);
+        }
+
+        private void UpdateSecurityLayout()
+        {
+            if (_pnlSecViewport == null || _pnlSecContent == null || _scrollBarSec == null || _lblSecTitle == null || _lblExpSecurity == null || _lblStateTitle == null || _lblExpSystemState == null) return;
+            float scale = GetDpiScale();
+            int viewH = _pnlSecViewport.ClientSize.Height;
+            int viewW = _pnlSecViewport.ClientSize.Width;
+            int scrollW = _scrollBarSec.Visible ? _scrollBarSec.Width : 0;
+            int contentW = Math.Max(50, viewW - scrollW);
+
+            _lblSecTitle.Width = contentW;
+            _lblExpSecurity.MaximumSize = new Size(contentW, 0);
+            _lblStateTitle.Width = contentW;
+            _lblExpSystemState.MaximumSize = new Size(contentW, 0);
+
+            _lblSecTitle.Top = 0;
+            _lblExpSecurity.Top = _lblSecTitle.Bottom;
+            _lblStateTitle.Top = _lblExpSecurity.Bottom + (int)(3 * scale);
+            _lblExpSystemState.Top = _lblStateTitle.Bottom;
+
+            int totalH = _lblExpSystemState.Bottom + (int)(2 * scale);
+            _pnlSecContent.Height = Math.Max(totalH, viewH);
+            int maxScroll = Math.Max(0, totalH - viewH);
+            _scrollBarSec.Maximum = maxScroll;
+            _scrollBarSec.LargeChange = Math.Max(1, viewH);
+            _scrollBarSec.Visible = maxScroll > 0;
+            _pnlSecContent.Width = Math.Max(10, viewW - (_scrollBarSec.Visible ? _scrollBarSec.Width : 0));
         }
 
         private Panel CreateCardContainer(string title, Control content, float scale, Color? titleColor = null)
@@ -1756,7 +1919,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(32, 32, 32),
                 Margin = new Padding((int)(4 * scale)),
-                Padding = new Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(10 * scale)),
+                Padding = new Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale)),
             };
             pnlCard.Paint += (s, e) =>
             {
@@ -1775,18 +1938,18 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale))); // Título com altura e respiro
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale))); // Título com altura otimizada
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Conteúdo dos itens
 
             var lblTitle = new Label
             {
                 Text = title,
                 ForeColor = titleColor ?? CorDestaqueLaranja,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.0f, FontStyle.Bold),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 UseMnemonic = false,
-                Margin = new Padding(0, 0, 0, (int)(6 * scale)), // Margem inferior separando título dos itens
+                Margin = new Padding(0, 0, 0, (int)(2 * scale)),
             };
             layout.Controls.Add(lblTitle, 0, 0);
 
@@ -1843,6 +2006,10 @@ namespace InstallerGUI.Forms
                 {
                     RefreshExpandedDiagnosticsUI(_lastDiag);
                 }
+                UpdateIdentLayout();
+                UpdateNetIpsLayout();
+                UpdateStorageDrivesLayout();
+                UpdateSecurityLayout();
             }
             else
             {
@@ -1972,6 +2139,7 @@ namespace InstallerGUI.Forms
             if (_lblExpComputer != null) _lblExpComputer.Text = string.Format("{0} ({1})", diag.ComputerName, diag.DomainOrWorkgroup);
             if (_lblExpUser != null) _lblExpUser.Text = string.Format("{0}{1}", diag.UserName, diag.IsAdmin ? " (Admin)" : "");
             if (_lblExpOs != null) _lblExpOs.Text = string.Format("{0}\n{1}", diag.WindowsEdition, diag.WindowsBuild);
+            UpdateIdentLayout();
 
             // Card 2: Conexão e Rede
             if (_lblExpNetStatus != null)
@@ -2122,6 +2290,7 @@ namespace InstallerGUI.Forms
             {
                 _lblExpSystemState.Text = string.Format("Reboot Pendente: {0} | Fonte: {1}", diag.PendingRebootText, diag.PowerSourceText);
             }
+            UpdateSecurityLayout();
         }
 
         /// <summary>

@@ -7,6 +7,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.92] - 2026-11-20
+
+### Aprimorado / Corrigido
+- **Barras de Rolagem (`DarkScrollBar`) em Cards com Overflow no Diagnóstico Expandido**:
+  - Implementado container rolável com viewport e barra de rolagem estilizada (`DarkScrollBar`) no Card 1 (**Identificação e Sistema**) e no Card 6 (**Segurança e Status**).
+  - Caso o conteúdo de Sistema (edição do Windows + compilação/Build em duas linhas) ou de Segurança (antivírus de terceiros como Kaspersky em conjunto com o Windows Defender e status de reinicialização pendente) ultrapasse a área visível do card, uma barra vertical laranja aparece automaticamente com suporte a scroll via roda do mouse (`MouseWheel`), eliminando qualquer corte de texto.
+  - Otimizado o container de cards (`CreateCardContainer`): padding vertical reduzido de 10px para 6px e altura do título otimizada de 28px para 22px, gerando **18px extras de altura útil** por card.
+  - Largura da Coluna 0 ajustada para 102px (Identificação e Sistema), 95px (Conexão e Rede) e 95px (Recursos de Hardware), garantindo que termos como `Computador:`, `Conexão:` e `Memória RAM:` nunca quebrem ou cortem, enquanto termos longos como `64 GB DDR5 (28,4 GB em uso - 44%)` cabem com folga em uma única linha.
+- **Legenda Informativa no Formulário de Contas da Máquina**:
+  - Adicionada legenda informativa padronizada abaixo dos campos na Aba 1:
+    `"Os campos acima só funcionam caso preenchidos (em branco = não alterar)."`
+  - Tipografia consistente (`Segoe UI`, 8.5pt, Itálico, `#A0A0A0`) com altura fixa de 24px e espaçador flexível de 100%, em total harmonia com os rodapés das abas de Opções e Funcionalidades.
+
 ## [2.0.0.91] - 2026-11-20
 
 ### Aprimorado
