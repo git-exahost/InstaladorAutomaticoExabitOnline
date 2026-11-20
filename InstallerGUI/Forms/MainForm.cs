@@ -161,7 +161,7 @@ namespace InstallerGUI.Forms
             int formHeight = Math.Min(workingArea.Height - 20, Math.Max(700, desiredHeight));
 
             Size = new Size(formWidth, formHeight);
-            MinimumSize = new Size(700, 550);
+            MinimumSize = new Size(716, 558);
             MinimizeBox = true;
             MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
@@ -240,7 +240,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.88";
+            return "2.0.0.89";
         }
 
         // ──────────────────────────────────────────────
@@ -249,6 +249,14 @@ namespace InstallerGUI.Forms
 
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+        private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -262,6 +270,46 @@ namespace InstallerGUI.Forms
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
         private const int DWMWA_CAPTION_COLOR = 35;
         private const int DWMWA_TEXT_COLOR = 36;
+
+        /// <summary>
+        /// Obtém a largura extra de bordas invisíveis aplicadas pelo DWM do Windows 10/11 (normalmente 16px: 8px esq + 8px dir).
+        /// </summary>
+        private static int GetDwmExtraWidth(IntPtr hwnd)
+        {
+            try
+            {
+                RECT winRect;
+                RECT dwmRect;
+                if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out winRect) &&
+                    DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out dwmRect, Marshal.SizeOf(typeof(RECT))) == 0)
+                {
+                    int diff = (winRect.Right - winRect.Left) - (dwmRect.Right - dwmRect.Left);
+                    if (diff > 0) return diff;
+                }
+            }
+            catch { }
+            return 16;
+        }
+
+        /// <summary>
+        /// Obtém a altura extra de bordas invisíveis aplicadas pelo DWM do Windows 10/11 (normalmente 8px inferior).
+        /// </summary>
+        private static int GetDwmExtraHeight(IntPtr hwnd)
+        {
+            try
+            {
+                RECT winRect;
+                RECT dwmRect;
+                if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out winRect) &&
+                    DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out dwmRect, Marshal.SizeOf(typeof(RECT))) == 0)
+                {
+                    int diff = (winRect.Bottom - winRect.Top) - (dwmRect.Bottom - dwmRect.Top);
+                    if (diff > 0) return diff;
+                }
+            }
+            catch { }
+            return 8;
+        }
 
         /// <summary>
         /// Aplica tema escuro nativo e cor personalizada à barra de título assim que a janela é criada.
@@ -310,8 +358,9 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Trava o tamanho mínimo do formulário em 700x550px no nível das mensagens do Windows (WM_GETMINMAXINFO e WM_SIZING),
-        /// impedindo fisicamente que o mouse consiga redimensionar para menos de 700px de largura e 550px de altura.
+        /// Trava o tamanho mínimo visível do formulário em rigorosamente 700x550px no nível das mensagens do Windows
+        /// (WM_GETMINMAXINFO e WM_SIZING), compensando as margens invisíveis do DWM para que o screenshot/área visível
+        /// nunca meça menos de 700px de largura e 550px de altura.
         /// </summary>
         protected override void WndProc(ref Message m)
         {
@@ -321,8 +370,10 @@ namespace InstallerGUI.Forms
                 try
                 {
                     MINMAXINFO mmi = (MINMAXINFO)Marshal.PtrToStructure(m.LParam, typeof(MINMAXINFO));
-                    mmi.ptMinTrackSize.x = 700;
-                    mmi.ptMinTrackSize.y = 550;
+                    int minW = 700 + GetDwmExtraWidth(Handle);
+                    int minH = 550 + GetDwmExtraHeight(Handle);
+                    mmi.ptMinTrackSize.x = minW;
+                    mmi.ptMinTrackSize.y = minH;
                     Marshal.StructureToPtr(mmi, m.LParam, false);
                 }
                 catch { }
@@ -333,8 +384,8 @@ namespace InstallerGUI.Forms
                 try
                 {
                     RECT r = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
-                    const int minW = 700;
-                    const int minH = 550;
+                    int minW = 700 + GetDwmExtraWidth(Handle);
+                    int minH = 550 + GetDwmExtraHeight(Handle);
                     int currentW = r.Right - r.Left;
                     int currentH = r.Bottom - r.Top;
 
@@ -374,26 +425,30 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Garante que qualquer tentativa de redimensionamento respeite a dimensão mínima de 700x550px.
+        /// Garante que qualquer tentativa de redimensionamento respeite a dimensão mínima visível de 700x550px.
         /// </summary>
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
             if (WindowState != FormWindowState.Minimized)
             {
-                if (Width < 700) Width = 700;
-                if (Height < 550) Height = 550;
+                int minW = 700 + GetDwmExtraWidth(Handle);
+                int minH = 550 + GetDwmExtraHeight(Handle);
+                if (Width < minW) Width = minW;
+                if (Height < minH) Height = minH;
             }
         }
 
         /// <summary>
-        /// Força o tamanho mínimo de 700x550px logo após o usuário soltar o botão de redimensionamento da janela.
+        /// Força o tamanho mínimo visível de 700x550px logo após o usuário soltar o botão de redimensionamento da janela.
         /// </summary>
         protected override void OnResizeEnd(EventArgs e)
         {
             base.OnResizeEnd(e);
-            if (Width < 700) Width = 700;
-            if (Height < 550) Height = 550;
+            int minW = 700 + GetDwmExtraWidth(Handle);
+            int minH = 550 + GetDwmExtraHeight(Handle);
+            if (Width < minW) Width = minW;
+            if (Height < minH) Height = minH;
         }
 
         /// <summary>
@@ -657,22 +712,22 @@ namespace InstallerGUI.Forms
                 Margin = new Padding(0, 0, 0, (int)(2 * scale)),
                 Padding = Padding.Empty,
             };
-            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 31f));
             tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18f));
-            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24f));
-            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 21f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
             tabHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            // Aba 1: Configurações do Sistema
-            _btnTabConfig = CreateTabHeaderButton("Configurações do Sistema", 0, scale);
+            // Aba 1: Configurações
+            _btnTabConfig = CreateTabHeaderButton("Configurações", 0, scale);
             tabHeader.Controls.Add(_btnTabConfig, 0, 0);
 
             // Aba 2: Atalhos
             _btnTabShortcuts = CreateTabHeaderButton("Atalhos", 1, scale);
             tabHeader.Controls.Add(_btnTabShortcuts, 1, 0);
 
-            // Aba 3: Opções do Windows
-            _btnTabOptions = CreateTabHeaderButton("Opções do Windows", 2, scale);
+            // Aba 3: Opções
+            _btnTabOptions = CreateTabHeaderButton("Opções", 2, scale);
             tabHeader.Controls.Add(_btnTabOptions, 2, 0);
 
             // Aba 4: Funcionalidades
@@ -724,7 +779,8 @@ namespace InstallerGUI.Forms
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
                 Cursor = Cursors.Hand,
-                Font = new Font("Segoe UI", 10f, FontStyle.Regular),
+                Font = new Font("Segoe UI", 9.0f, FontStyle.Regular),
+                AutoEllipsis = true,
                 ForeColor = Color.FromArgb(170, 170, 170),
                 BackColor = Color.FromArgb(32, 32, 32),
                 TextAlign = ContentAlignment.MiddleCenter,
@@ -820,13 +876,13 @@ namespace InstallerGUI.Forms
             if (isActive)
             {
                 btn.ForeColor = CorDestaque;
-                btn.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
+                btn.Font = new Font("Segoe UI", 9.0f, FontStyle.Bold);
                 btn.BackColor = CorPainel;
             }
             else
             {
                 btn.ForeColor = Color.FromArgb(170, 170, 170);
-                btn.Font = new Font("Segoe UI", 10f, FontStyle.Regular);
+                btn.Font = new Font("Segoe UI", 9.0f, FontStyle.Regular);
                 btn.BackColor = Color.FromArgb(32, 32, 32);
             }
         }
@@ -907,7 +963,8 @@ namespace InstallerGUI.Forms
             {
                 Text = "DADOS DA MÁQUINA E CONTAS",
                 ForeColor = CorDestaqueLaranja,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.0f, FontStyle.Bold),
+                AutoEllipsis = true,
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Margin = new Padding(0, 0, 0, (int)(4 * scale)),
@@ -1050,7 +1107,8 @@ namespace InstallerGUI.Forms
             {
                 Text = "DIAGNÓSTICO DO SISTEMA",
                 ForeColor = CorDestaqueAzul,
-                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 9.0f, FontStyle.Bold),
+                AutoEllipsis = true,
                 Dock = DockStyle.Top,
                 Height = (int)(24 * scale),
                 TextAlign = ContentAlignment.MiddleLeft,

@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.89] - 2026-11-20
+
+### Corrigido / Aprimorado
+- **Correção da Redução Abaixo de 700px (Compensação DWM Frame)**:
+  - Identificada a causa da largura visível chegar a 685px: o DWM do Windows 10/11 desconta 16px de bordas invisíveis da janela ao aplicar `ptMinTrackSize`.
+  - Implementada compensação dinâmica de margens DWM via `DwmGetWindowAttribute(DWMWA_EXTENDED_FRAME_BOUNDS)` e `GetWindowRect` para travar `700 + dwmExtraW` e `550 + dwmExtraH` em `MinimumSize`, `WM_GETMINMAXINFO`, `WM_SIZING`, `OnResize` e `OnResizeEnd`.
+  - A janela visível renderizada na tela e capturada em screenshots nunca mais mede menos de 700 x 550 px.
+- **Tipografia e Cabeçalho de Abas Responsivos**:
+  - Títulos de abas otimizados ("Configurações", "Atalhos", "Opções", "Funcionalidades") com fontes ajustadas para não truncar na largura mínima.
+
 ## [2.0.0.88] - 2026-11-20
 
 ### Corrigido / Aprimorado
