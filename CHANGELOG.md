@@ -7,7 +7,24 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
-## [2.0.0.81] - 2026-11-20
+## [2.0.0.82] - 2026-11-20
+
+### Adicionado
+- **Painel de Diagnóstico do Sistema com Modos Compacto e Expandido**:
+  - **Modo Compacto (Aba 1 - Configurações do Sistema)**:
+    - Seção superior reestruturada em dois cards lado a lado conforme especificado:
+      - **Card Esquerdo ("DADOS DA MÁQUINA E CONTAS")**: Campos de *Nome do computador*, *Senha do Admin*, *Usuário padrão* e *Senha do usuário*, com borda sutil e título em destaque laranja.
+      - **Card Direito ("DIAGNÓSTICO DO SISTEMA")**: Resumo em tempo real contendo *Computador*, *Usuário*, *Sistema*, *Disco C: (NVMe)* com mini barra horizontal colorida de uso, *Conexão / Ping* com botão interativo de atualização imediata (`↻`), *IP Local* com funcionalidade de cópia rápida para a área de transferência (`[+]`), e botão em formato pílula com borda ciano `▼ Mais detalhes (+6)`.
+  - **Modo Expandido ("DIAGNÓSTICO DO SISTEMA (COMPLETO)")**:
+    - Ao clicar em `▼ Mais detalhes (+6)`, a visualização é expandida preenchendo a tela inteira em uma grade de 6 cards (2 colunas x 3 linhas) mantendo a barra de abas e botões de ação:
+      - **Identificacion & OS**: Nome da máquina e grupo de trabalho/domínio, usuário em execução com indicação de privilégios de Administrador, edição comercial do Windows e número da build.
+      - **Connection & Network**: Status de conexão online com latência de ping, IP local ativo e interfaces físicas e virtuais detectadas (Ethernet, Wi-Fi, VPNs corporativas/Radmin).
+      - **Storage & Partition**: Suporte completo para detecção e listagem de **todos os discos fixos presentes na máquina** (C:, D:, etc.), exibindo rótulo do volume, tipo de mídia (NVMe / SSD / HDD), espaço livre, espaço total, percentual e barra de progresso visual com cores dinâmicas (verde para bom, amarelo para atenção, vermelho para crítico).
+      - **Hardware Resources**: Processador com nome comercial limpo, contagem real de núcleos físicos e threads, e memória RAM total, tipo (DDR4 / DDR5) e barra horizontal de uso em tempo real.
+      - **Device & Warranty**: Fabricante do equipamento, modelo comercial e número de série da BIOS / Service Tag.
+      - **Security & Status**: Status do Windows Defender (Ativo/Desativado), BitLocker (Ativo/Desativado), flag de reinicialização pendente do sistema e fonte de alimentação (Na tomada / Bateria com percentual).
+    - Botão `← Voltar para Painel Principal` com borda e texto laranja permitindo retornar instantaneamente à visão normal de abas e console de log, com alternância automática ao alternar abas ou iniciar a instalação.
+  - Implementada coleta de hardware em segundo plano via `System.Management` (WMI) e Win32 APIs de alto desempenho (`GlobalMemoryStatusEx`, `GetSystemPowerStatus`), garantindo execução sem travamentos na interface.
 
 ### Aprimorado
 - **Remoção de Jogos e Xbox em Todos os Perfis Existentes e Futuros**:

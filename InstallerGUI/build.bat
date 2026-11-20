@@ -35,6 +35,7 @@ REM Compila todos os arquivos .cs
       /reference:System.Windows.Forms.dll ^
       /reference:Microsoft.CSharp.dll ^
       /reference:System.ServiceProcess.dll ^
+      /reference:System.Management.dll ^
       /reference:System.IO.Compression.dll ^
       /reference:System.IO.Compression.FileSystem.dll ^
       /resource:Image\logo_exabit.png,InstallerGUI.logo_exabit.png ^

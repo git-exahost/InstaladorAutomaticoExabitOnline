@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Linq;
 using System.Media;
 using System.Net;
 using System.Net.NetworkInformation;
@@ -32,6 +33,8 @@ namespace InstallerGUI.Forms
         private static readonly Color CorFundo = Color.FromArgb(30, 30, 30);
         private static readonly Color CorPainel = Color.FromArgb(40, 40, 40);
         private static readonly Color CorDestaque = Color.FromArgb(243, 146, 0);
+        private static readonly Color CorDestaqueLaranja = Color.FromArgb(243, 146, 0);
+        private static readonly Color CorDestaqueAzul = Color.FromArgb(0, 180, 255);
         private static readonly Color CorSucesso = Color.FromArgb(0, 200, 80);
         private static readonly Color CorTexto = Color.White;
         private static readonly Color CorInputBg = Color.FromArgb(60, 60, 60);
@@ -96,6 +99,38 @@ namespace InstallerGUI.Forms
         private Panel _pnlTabOptions;
         private Panel _pnlTabFeatures;
         private int _currentTabIndex;
+
+        // ─── Controles de Diagnóstico do Sistema ───
+        private TableLayoutPanel _pnlNormalLeftView;
+        private Panel _pnlExpandedDiagnostics;
+        private FullSystemDiagnosticInfo _lastDiag;
+
+        // Card Compacto (Aba 1)
+        private Label _lblDiagComputer;
+        private Label _lblDiagUser;
+        private Label _lblDiagOs;
+        private Label _lblDiagDisk;
+        private MiniUsageBar _barDiagDisk;
+        private Label _lblDiagNet;
+        private Label _lblDiagIp;
+        private Button _btnMoreDetails;
+
+        // Card Expandido (Painel Completo)
+        private Button _btnBackToMain;
+        private Label _lblExpComputer;
+        private Label _lblExpUser;
+        private Label _lblExpOs;
+        private Label _lblExpNetStatus;
+        private Label _lblExpLocalIp;
+        private Label _lblExpInterfaces;
+        private Panel _pnlStorageDrivesContainer;
+        private Label _lblExpCpu;
+        private Label _lblExpRam;
+        private MiniUsageBar _barExpRam;
+        private Label _lblExpDevice;
+        private Label _lblExpSerial;
+        private Label _lblExpSecurity;
+        private Label _lblExpSystemState;
 
         // ──────────────────────────────────────────────
         // Construtor
@@ -316,12 +351,47 @@ namespace InstallerGUI.Forms
                 RowCount = 3,
                 BackColor = CorFundo,
             };
-            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(250 * scale)));
+            leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(44 * scale)));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             leftSide.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(25 * scale)));
 
-            leftSide.Controls.Add(BuildTabsPanel(scale), 0, 0);
-            leftSide.Controls.Add(BuildLogPanel(scale), 0, 1);
+            // Row 0: Barra de Abas (Bootstrap with tabs)
+            leftSide.Controls.Add(BuildTabsHeader(scale), 0, 0);
+
+            // Row 1: Painel do meio (alterna entre Visão Normal e Diagnóstico Completo)
+            var pnlLeftMiddle = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorFundo,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            // Visão normal: Aba ativa + Log console
+            _pnlNormalLeftView = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = CorFundo,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(216 * scale)));
+            _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            _pnlNormalLeftView.Controls.Add(BuildTabContentContainer(scale), 0, 0);
+            _pnlNormalLeftView.Controls.Add(BuildLogPanel(scale), 0, 1);
+            pnlLeftMiddle.Controls.Add(_pnlNormalLeftView);
+
+            // Visão expandida: Diagnóstico completo do sistema (Image 1)
+            _pnlExpandedDiagnostics = BuildExpandedDiagnosticsPanel(scale);
+            _pnlExpandedDiagnostics.Visible = false;
+            pnlLeftMiddle.Controls.Add(_pnlExpandedDiagnostics);
+
+            leftSide.Controls.Add(pnlLeftMiddle, 0, 1);
+
+            // Row 2: Barra de Download
             leftSide.Controls.Add(BuildDownloadProgressPanel(scale), 0, 2);
 
             content.Controls.Add(leftSide, 0, 0);
@@ -420,39 +490,17 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria o container de abas com visual moderno estilo Bootstrap "With Tabs".
-        /// Permite alternar entre "Configurações do Sistema", "Atalhos" e "Opções do Windows".
+        /// Cria a barra de cabeçalho das abas com visual moderno estilo Bootstrap "With Tabs".
         /// </summary>
-        private Panel BuildTabsPanel(float scale)
+        private TableLayoutPanel BuildTabsHeader(float scale)
         {
-            var container = new Panel
-            {
-                Dock = DockStyle.Fill,
-                BackColor = CorPainel,
-                Margin = new Padding(0, (int)(2 * scale), 0, (int)(2 * scale)),
-                Padding = new Padding((int)(6 * scale), (int)(4 * scale), (int)(6 * scale), (int)(4 * scale)),
-            };
-
-            var mainLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 2,
-                BackColor = CorPainel,
-                Margin = Padding.Empty,
-                Padding = Padding.Empty,
-            };
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(44 * scale))); // Barra de abas com altura generosa (44px)
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Conteúdo da aba ativa
-
-            // ─── Barra de Abas (Estilo Bootstrap With Tabs) ───
             var tabHeader = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 4,
                 RowCount = 1,
                 BackColor = Color.FromArgb(32, 32, 32),
-                Margin = new Padding(0, 0, 0, (int)(4 * scale)),
+                Margin = new Padding(0, 0, 0, (int)(2 * scale)),
                 Padding = Padding.Empty,
             };
             tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32f));
@@ -477,9 +525,14 @@ namespace InstallerGUI.Forms
             _btnTabFeatures = CreateTabHeaderButton("Funcionalidades", 3, scale);
             tabHeader.Controls.Add(_btnTabFeatures, 3, 0);
 
-            mainLayout.Controls.Add(tabHeader, 0, 0);
+            return tabHeader;
+        }
 
-            // ─── Container de Conteúdo das Abas ───
+        /// <summary>
+        /// Cria o container onde o conteúdo de cada aba é alternado.
+        /// </summary>
+        private Panel BuildTabContentContainer(float scale)
+        {
             _pnlTabContent = new Panel
             {
                 Dock = DockStyle.Fill,
@@ -498,13 +551,10 @@ namespace InstallerGUI.Forms
             _pnlTabContent.Controls.Add(_pnlTabOptions);
             _pnlTabContent.Controls.Add(_pnlTabFeatures);
 
-            mainLayout.Controls.Add(_pnlTabContent, 0, 1);
-            container.Controls.Add(mainLayout);
-
             // Abre a primeira aba ("Configurações do Sistema") por padrão
             SwitchTab(0);
 
-            return container;
+            return _pnlTabContent;
         }
 
         /// <summary>
@@ -567,6 +617,11 @@ namespace InstallerGUI.Forms
         /// </summary>
         private void SwitchTab(int index)
         {
+            if (_pnlExpandedDiagnostics != null && _pnlExpandedDiagnostics.Visible)
+            {
+                ShowExpandedDiagnostics(false);
+            }
+
             _currentTabIndex = index;
 
             if (_pnlTabConfig != null)
@@ -623,7 +678,8 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Conteúdo da Aba 1: Configurações do Sistema (Nome do computador, senhas e usuário).
+        /// Conteúdo da Aba 1: Configurações do Sistema.
+        /// Exibe lado a lado o card "DADOS DA MÁQUINA E CONTAS" e o card "DIAGNÓSTICO DO SISTEMA".
         /// </summary>
         private Panel BuildTabConfigContent(float scale)
         {
@@ -631,44 +687,311 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
-                Padding = new Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(6 * scale)),
+                Padding = new Padding((int)(6 * scale), (int)(4 * scale), (int)(6 * scale), (int)(4 * scale)),
             };
 
             var tbl = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 4,
+                RowCount = 1,
                 BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
-            for (int i = 0; i < 4; i++)
-                tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
+            // Card Esquerdo: DADOS DA MÁQUINA E CONTAS
+            tbl.Controls.Add(BuildMachineAccountsCard(scale), 0, 0);
 
-            tbl.Controls.Add(CreateLabel("Nome do computador:"), 0, 0);
-            _txtComputerName = CreateTextBox("Em branco = não renomear");
-            _txtComputerName.Text = "";
-            tbl.Controls.Add(_txtComputerName, 1, 0);
-
-            tbl.Controls.Add(CreateLabel("Senha do Admin:"), 0, 1);
-            _txtAdminPass = CreateTextBox("Senha do admin");
-            _txtAdminPass.Text = "";
-            tbl.Controls.Add(_txtAdminPass, 1, 1);
-
-            tbl.Controls.Add(CreateLabel("Usuário padrão:"), 0, 2);
-            _txtStandardUserName = CreateTextBox("Nome do usuário");
-            _txtStandardUserName.Text = "";
-            tbl.Controls.Add(_txtStandardUserName, 1, 2);
-
-            tbl.Controls.Add(CreateLabel("Senha do usuário:"), 0, 3);
-            _txtStandardUserPass = CreateTextBox("Senha (opcional)");
-            _txtStandardUserPass.Text = "";
-            tbl.Controls.Add(_txtStandardUserPass, 1, 3);
+            // Card Direito: DIAGNÓSTICO DO SISTEMA
+            tbl.Controls.Add(BuildCompactDiagnosticsCard(scale), 1, 0);
 
             pnl.Controls.Add(tbl);
             return pnl;
+        }
+
+        /// <summary>
+        /// Constrói o card esquerdo da Aba 1 com campos de nome da máquina, senha de admin e usuário padrão.
+        /// </summary>
+        private Panel BuildMachineAccountsCard(float scale)
+        {
+            var pnlCard = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Margin = new Padding((int)(2 * scale), (int)(2 * scale), (int)(4 * scale), (int)(2 * scale)),
+                Padding = new Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale)),
+            };
+            pnlCard.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(70, 52, 38), 1))
+                {
+                    e.Graphics.DrawRectangle(pen, 0, 0, pnlCard.Width - 1, pnlCard.Height - 1);
+                }
+            };
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = Color.Transparent,
+            };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale))); // Título
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f));              // Nome do computador
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f));              // Senha do Admin
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.4f));              // Usuário padrão e Senha
+
+            var lblTitle = new Label
+            {
+                Text = "DADOS DA MÁQUINA E CONTAS",
+                ForeColor = CorDestaqueLaranja,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            layout.Controls.Add(lblTitle, 0, 0);
+
+            // 1. Nome do computador
+            var pnlComp = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            var lblComp = new Label
+            {
+                Text = "Nome do computador:",
+                ForeColor = Color.FromArgb(200, 200, 200),
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Top,
+                Height = (int)(16 * scale),
+            };
+            _txtComputerName = CreateTextBox("Em branco = não renomear");
+            _txtComputerName.Text = "";
+            _txtComputerName.Dock = DockStyle.Bottom;
+            pnlComp.Controls.Add(_txtComputerName);
+            pnlComp.Controls.Add(lblComp);
+            layout.Controls.Add(pnlComp, 0, 1);
+
+            // 2. Senha do Admin
+            var pnlAdmin = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            var lblAdmin = new Label
+            {
+                Text = "Senha do Admin:",
+                ForeColor = Color.FromArgb(200, 200, 200),
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Top,
+                Height = (int)(16 * scale),
+            };
+            _txtAdminPass = CreateTextBox("Senha do admin");
+            _txtAdminPass.Text = "";
+            _txtAdminPass.Dock = DockStyle.Bottom;
+            pnlAdmin.Controls.Add(_txtAdminPass);
+            pnlAdmin.Controls.Add(lblAdmin);
+            layout.Controls.Add(pnlAdmin, 0, 2);
+
+            // 3. Usuário padrão e Senha lado a lado
+            var tblUsers = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            tblUsers.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            tblUsers.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            tblUsers.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            var pnlStdUser = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(0, 0, (int)(4 * scale), 0) };
+            var lblStdUser = new Label
+            {
+                Text = "Usuário padrão:",
+                ForeColor = Color.FromArgb(200, 200, 200),
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Top,
+                Height = (int)(16 * scale),
+            };
+            _txtStandardUserName = CreateTextBox("Nome do usuário");
+            _txtStandardUserName.Text = "";
+            _txtStandardUserName.Dock = DockStyle.Bottom;
+            pnlStdUser.Controls.Add(_txtStandardUserName);
+            pnlStdUser.Controls.Add(lblStdUser);
+            tblUsers.Controls.Add(pnlStdUser, 0, 0);
+
+            var pnlStdPass = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding((int)(4 * scale), 0, 0, 0) };
+            var lblStdPass = new Label
+            {
+                Text = "Senha do usuário:",
+                ForeColor = Color.FromArgb(200, 200, 200),
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Top,
+                Height = (int)(16 * scale),
+            };
+            _txtStandardUserPass = CreateTextBox("Senha (opcional)");
+            _txtStandardUserPass.Text = "";
+            _txtStandardUserPass.Dock = DockStyle.Bottom;
+            pnlStdPass.Controls.Add(_txtStandardUserPass);
+            pnlStdPass.Controls.Add(lblStdPass);
+            tblUsers.Controls.Add(pnlStdPass, 1, 0);
+
+            layout.Controls.Add(tblUsers, 0, 3);
+
+            pnlCard.Controls.Add(layout);
+            return pnlCard;
+        }
+
+        /// <summary>
+        /// Constrói o card direito da Aba 1 com o resumo do diagnóstico do sistema e botão para detalhes.
+        /// </summary>
+        private Panel BuildCompactDiagnosticsCard(float scale)
+        {
+            var pnlCard = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Margin = new Padding((int)(4 * scale), (int)(2 * scale), (int)(2 * scale), (int)(2 * scale)),
+                Padding = new Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale)),
+            };
+            pnlCard.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(0, 119, 182), 1))
+                {
+                    e.Graphics.DrawRectangle(pen, 0, 0, pnlCard.Width - 1, pnlCard.Height - 1);
+                }
+            };
+
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = Color.Transparent,
+            };
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale))); // Título
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // 6 linhas de dados
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(26 * scale))); // Botão Mais Detalhes
+
+            // Título
+            var lblTitle = new Label
+            {
+                Text = "DIAGNÓSTICO DO SISTEMA",
+                ForeColor = CorDestaqueAzul,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                UseMnemonic = false,
+            };
+            mainLayout.Controls.Add(lblTitle, 0, 0);
+
+            // Tabela com os 6 campos
+            var tblData = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 6,
+                BackColor = Color.Transparent,
+            };
+            tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(105 * scale)));
+            tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            for (int i = 0; i < 6; i++)
+                tblData.RowStyles.Add(new RowStyle(SizeType.Percent, 16.66f));
+
+            // 1. Computador
+            tblData.Controls.Add(CreateDiagHeaderLabel("Computador:"), 0, 0);
+            _lblDiagComputer = CreateDiagValueLabel("Identificando...");
+            tblData.Controls.Add(_lblDiagComputer, 1, 0);
+
+            // 2. Usuário
+            tblData.Controls.Add(CreateDiagHeaderLabel("Usuário:"), 0, 1);
+            _lblDiagUser = CreateDiagValueLabel("Identificando...");
+            tblData.Controls.Add(_lblDiagUser, 1, 1);
+
+            // 3. Sistema
+            tblData.Controls.Add(CreateDiagHeaderLabel("Sistema:"), 0, 2);
+            _lblDiagOs = CreateDiagValueLabel("Identificando...");
+            tblData.Controls.Add(_lblDiagOs, 1, 2);
+
+            // 4. Disco C: (com mini barra)
+            tblData.Controls.Add(CreateDiagHeaderLabel("Disco C: (NVMe):"), 0, 3);
+            var pnlDiskContainer = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            _lblDiagDisk = new Label
+            {
+                Text = "Calculando...",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f),
+                AutoSize = true,
+                Margin = new Padding(0, (int)(2 * scale), 0, 0),
+            };
+            _barDiagDisk = new MiniUsageBar
+            {
+                Size = new Size((int)(50 * scale), (int)(8 * scale)),
+                Margin = new Padding((int)(8 * scale), (int)(5 * scale), 0, 0),
+                Percent = 30,
+                FillColor = CorSucesso,
+            };
+            pnlDiskContainer.Controls.Add(_lblDiagDisk);
+            pnlDiskContainer.Controls.Add(_barDiagDisk);
+            tblData.Controls.Add(pnlDiskContainer, 1, 3);
+
+            // 5. Conexão / Ping
+            tblData.Controls.Add(CreateDiagHeaderLabel("Conexão / Ping:"), 0, 4);
+            _lblDiagNet = CreateDiagValueLabel("Verificando conexão...");
+            _lblDiagNet.ForeColor = CorSucesso;
+            _lblDiagNet.Cursor = Cursors.Hand;
+            _lblDiagNet.Click += async (s, e) =>
+            {
+                _lblDiagNet.Text = "Atualizando teste de ping...";
+                await CheckAndRefreshConnectionStatusAsync(true);
+            };
+            tblData.Controls.Add(_lblDiagNet, 1, 4);
+
+            // 6. IP Local
+            tblData.Controls.Add(CreateDiagHeaderLabel("IP Local:"), 0, 5);
+            _lblDiagIp = CreateDiagValueLabel("Detectando IP...");
+            _lblDiagIp.ForeColor = CorDestaque;
+            _lblDiagIp.Cursor = Cursors.Hand;
+            _lblDiagIp.Click += (s, e) =>
+            {
+                CopyLocalIpToClipboard();
+            };
+            tblData.Controls.Add(_lblDiagIp, 1, 5);
+
+            mainLayout.Controls.Add(tblData, 0, 1);
+
+            // Botão Mais detalhes (+6)
+            var pnlBtnContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            _btnMoreDetails = new Button
+            {
+                Text = "▼ Mais detalhes (+6)",
+                ForeColor = CorDestaqueAzul,
+                BackColor = Color.FromArgb(24, 24, 24),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Height = (int)(24 * scale),
+                Width = (int)(135 * scale),
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Right,
+            };
+            _btnMoreDetails.FlatAppearance.BorderColor = CorDestaqueAzul;
+            _btnMoreDetails.FlatAppearance.BorderSize = 1;
+            _btnMoreDetails.Click += (s, e) =>
+            {
+                ShowExpandedDiagnostics(true);
+            };
+            pnlBtnContainer.Controls.Add(_btnMoreDetails);
+            mainLayout.Controls.Add(pnlBtnContainer, 0, 2);
+
+            pnlCard.Controls.Add(mainLayout);
+            return pnlCard;
         }
 
         /// <summary>
@@ -847,6 +1170,628 @@ namespace InstallerGUI.Forms
 
             pnl.Controls.Add(tbl);
             return pnl;
+        }
+
+        /// <summary>
+        /// Constrói o painel expandido de Diagnóstico do Sistema (Completo) exibido ao clicar em "Mais detalhes (+6)".
+        /// </summary>
+        private Panel BuildExpandedDiagnosticsPanel(float scale)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorFundo,
+                Margin = Padding.Empty,
+                Padding = new Padding((int)(6 * scale), (int)(4 * scale), (int)(6 * scale), (int)(4 * scale)),
+            };
+
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                BackColor = CorFundo,
+            };
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(36 * scale))); // Cabeçalho com botão voltar
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Grid de 6 cards
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale))); // Rodapé
+
+            // ─── Header: Título + Botão Voltar ───
+            var pnlHeader = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            var lblTitle = new Label
+            {
+                Text = "DIAGNÓSTICO DO SISTEMA (COMPLETO)",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 11.5f, FontStyle.Bold),
+                Dock = DockStyle.Left,
+                AutoSize = true,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            _btnBackToMain = new Button
+            {
+                Text = "← Voltar para Painel Principal",
+                ForeColor = CorDestaqueLaranja,
+                BackColor = Color.FromArgb(28, 28, 28),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Height = (int)(28 * scale),
+                Width = (int)(210 * scale),
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Right,
+            };
+            _btnBackToMain.FlatAppearance.BorderColor = CorDestaqueLaranja;
+            _btnBackToMain.FlatAppearance.BorderSize = 1;
+            _btnBackToMain.Click += (s, e) =>
+            {
+                ShowExpandedDiagnostics(false);
+            };
+            pnlHeader.Controls.Add(lblTitle);
+            pnlHeader.Controls.Add(_btnBackToMain);
+            mainLayout.Controls.Add(pnlHeader, 0, 0);
+
+            // ─── Grid de 6 Cards (2x3) ───
+            var tblCards = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 3,
+                BackColor = CorFundo,
+            };
+            tblCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            tblCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            tblCards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
+            tblCards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
+            tblCards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34f));
+
+            // Card 1: Identificacion & OS
+            tblCards.Controls.Add(BuildCardIdentAndOs(scale), 0, 0);
+
+            // Card 2: Connection & Network
+            tblCards.Controls.Add(BuildCardNetwork(scale), 1, 0);
+
+            // Card 3: Storage & Partition (Lista todos os discos fixos da máquina)
+            tblCards.Controls.Add(BuildCardStorage(scale), 0, 1);
+
+            // Card 4: Hardware Resources
+            tblCards.Controls.Add(BuildCardHardware(scale), 1, 1);
+
+            // Card 5: Device & Warranty
+            tblCards.Controls.Add(BuildCardDevice(scale), 0, 2);
+
+            // Card 6: Security & Status
+            tblCards.Controls.Add(BuildCardSecurity(scale), 1, 2);
+
+            mainLayout.Controls.Add(tblCards, 0, 1);
+
+            // ─── Rodapé informativo ───
+            var lblFooter = new Label
+            {
+                Text = "As configurações de contas e o console de progresso estão ocultos. Clique em \"Voltar\" para gerenciar ou iniciar a instalação.",
+                ForeColor = Color.FromArgb(140, 140, 140),
+                Font = new Font("Segoe UI", 8.0f),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleCenter,
+            };
+            mainLayout.Controls.Add(lblFooter, 0, 2);
+
+            pnl.Controls.Add(mainLayout);
+            return pnl;
+        }
+
+        private Panel BuildCardIdentAndOs(float scale)
+        {
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 3,
+                BackColor = Color.Transparent,
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(100 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 30f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 30f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 40f));
+
+            content.Controls.Add(CreateDiagHeaderLabel("Computador:"), 0, 0);
+            _lblExpComputer = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpComputer, 1, 0);
+
+            content.Controls.Add(CreateDiagHeaderLabel("Usuário:"), 0, 1);
+            _lblExpUser = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpUser, 1, 1);
+
+            content.Controls.Add(CreateDiagHeaderLabel("Sistema:"), 0, 2);
+            _lblExpOs = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpOs, 1, 2);
+
+            return CreateCardContainer("Identificacion & OS", content, scale);
+        }
+
+        private Panel BuildCardNetwork(float scale)
+        {
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 3,
+                BackColor = Color.Transparent,
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34f));
+
+            content.Controls.Add(CreateDiagHeaderLabel("Status de conexão:"), 0, 0);
+            _lblExpNetStatus = CreateDiagValueLabel("Verificando...");
+            _lblExpNetStatus.ForeColor = CorSucesso;
+            _lblExpNetStatus.Cursor = Cursors.Hand;
+            _lblExpNetStatus.Click += async (s, e) =>
+            {
+                _lblExpNetStatus.Text = "Atualizando teste...";
+                await CheckAndRefreshConnectionStatusAsync(true);
+            };
+            content.Controls.Add(_lblExpNetStatus, 1, 0);
+
+            content.Controls.Add(CreateDiagHeaderLabel("IP Local:"), 0, 1);
+            _lblExpLocalIp = CreateDiagValueLabel("Detectando...");
+            _lblExpLocalIp.ForeColor = CorDestaque;
+            _lblExpLocalIp.Cursor = Cursors.Hand;
+            _lblExpLocalIp.Click += (s, e) =>
+            {
+                CopyLocalIpToClipboard();
+            };
+            content.Controls.Add(_lblExpLocalIp, 1, 1);
+
+            content.Controls.Add(CreateDiagHeaderLabel("Interfaces:"), 0, 2);
+            _lblExpInterfaces = CreateDiagValueLabel("Detectando...");
+            content.Controls.Add(_lblExpInterfaces, 1, 2);
+
+            return CreateCardContainer("Connection & Network", content, scale);
+        }
+
+        private Panel BuildCardStorage(float scale)
+        {
+            _pnlStorageDrivesContainer = new Panel
+            {
+                Dock = DockStyle.Fill,
+                AutoScroll = true,
+                BackColor = Color.Transparent,
+            };
+
+            return CreateCardContainer("Storage & Partition", _pnlStorageDrivesContainer, scale);
+        }
+
+        private Panel BuildCardHardware(float scale)
+        {
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(105 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 55f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 45f));
+
+            content.Controls.Add(CreateDiagHeaderLabel("Processador:"), 0, 0);
+            _lblExpCpu = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpCpu, 1, 0);
+
+            content.Controls.Add(CreateDiagHeaderLabel("Memória RAM:"), 0, 1);
+            var pnlRam = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            _lblExpRam = new Label
+            {
+                Text = "Calculando...",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Top,
+                Height = (int)(18 * scale),
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            _barExpRam = new MiniUsageBar
+            {
+                Dock = DockStyle.Bottom,
+                Height = (int)(8 * scale),
+                Percent = 50,
+                FillColor = Color.FromArgb(70, 140, 200),
+            };
+            pnlRam.Controls.Add(_barExpRam);
+            pnlRam.Controls.Add(_lblExpRam);
+            content.Controls.Add(pnlRam, 1, 1);
+
+            return CreateCardContainer("Hardware Resources", content, scale);
+        }
+
+        private Panel BuildCardDevice(float scale)
+        {
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(130 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+
+            content.Controls.Add(CreateDiagHeaderLabel("Fabricante / Modelo:"), 0, 0);
+            _lblExpDevice = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpDevice, 1, 0);
+
+            content.Controls.Add(CreateDiagHeaderLabel("Número de Série:"), 0, 1);
+            _lblExpSerial = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpSerial, 1, 1);
+
+            return CreateCardContainer("Device & Warranty", content, scale);
+        }
+
+        private Panel BuildCardSecurity(float scale)
+        {
+            var content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = Color.Transparent,
+            };
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+
+            var lblSecTitle = new Label
+            {
+                Text = "Segurança:",
+                ForeColor = Color.FromArgb(170, 170, 170),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.BottomLeft,
+            };
+            _lblExpSecurity = new Label
+            {
+                Text = "Windows Defender: Ativo | BitLocker: Desativado",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+
+            var lblStateTitle = new Label
+            {
+                Text = "Estado do Sistema:",
+                ForeColor = Color.FromArgb(170, 170, 170),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.BottomLeft,
+            };
+            _lblExpSystemState = new Label
+            {
+                Text = "Reboot Pendente: Não | Fonte: Na tomada",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+
+            content.Controls.Add(lblSecTitle, 0, 0);
+            content.Controls.Add(_lblExpSecurity, 0, 1);
+            content.Controls.Add(lblStateTitle, 0, 2);
+            content.Controls.Add(_lblExpSystemState, 0, 3);
+
+            return CreateCardContainer("Security & Status", content, scale);
+        }
+
+        private Panel CreateCardContainer(string title, Control content, float scale, Color? titleColor = null)
+        {
+            var pnlCard = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Margin = new Padding((int)(4 * scale)),
+                Padding = new Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale)),
+            };
+            pnlCard.Paint += (s, e) =>
+            {
+                using (var pen = new Pen(Color.FromArgb(50, 50, 50), 1))
+                {
+                    e.Graphics.DrawRectangle(pen, 0, 0, pnlCard.Width - 1, pnlCard.Height - 1);
+                }
+            };
+
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+            };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            var lblTitle = new Label
+            {
+                Text = title,
+                ForeColor = titleColor ?? CorDestaqueLaranja,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                UseMnemonic = false,
+            };
+            layout.Controls.Add(lblTitle, 0, 0);
+
+            content.Dock = DockStyle.Fill;
+            layout.Controls.Add(content, 0, 1);
+
+            pnlCard.Controls.Add(layout);
+            return pnlCard;
+        }
+
+        private static Label CreateDiagHeaderLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                ForeColor = Color.FromArgb(170, 170, 170),
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                AutoSize = false,
+                UseMnemonic = false,
+            };
+        }
+
+        private static Label CreateDiagValueLabel(string text)
+        {
+            return new Label
+            {
+                Text = text,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                AutoSize = false,
+                UseMnemonic = false,
+            };
+        }
+
+        /// <summary>
+        /// Alterna entre a visualização padrão de abas/log e o painel de diagnóstico completo.
+        /// </summary>
+        private void ShowExpandedDiagnostics(bool show)
+        {
+            if (_pnlNormalLeftView == null || _pnlExpandedDiagnostics == null) return;
+            if (show)
+            {
+                _pnlNormalLeftView.Visible = false;
+                _pnlExpandedDiagnostics.Visible = true;
+                _pnlExpandedDiagnostics.BringToFront();
+                if (_lastDiag != null)
+                {
+                    RefreshExpandedDiagnosticsUI(_lastDiag);
+                }
+            }
+            else
+            {
+                _pnlExpandedDiagnostics.Visible = false;
+                _pnlNormalLeftView.Visible = true;
+                _pnlNormalLeftView.BringToFront();
+            }
+        }
+
+        /// <summary>
+        /// Copia o endereço IP local ativo para a área de transferência do Windows.
+        /// </summary>
+        private void CopyLocalIpToClipboard()
+        {
+            try
+            {
+                if (_lastDiag != null && !string.IsNullOrEmpty(_lastDiag.LocalIp) && _lastDiag.LocalIp != "Indisponível")
+                {
+                    Clipboard.SetText(_lastDiag.LocalIp);
+                    if (_lastDiag.AllLocalIps != null && _lastDiag.AllLocalIps.Count > 1)
+                    {
+                        MessageBox.Show(
+                            string.Format("IP principal ({0}) copiado para a área de transferência!\n\nTodos os IPs IPv4 detectados:\n• {1}",
+                                _lastDiag.LocalIp, string.Join("\n• ", _lastDiag.AllLocalIps.ToArray())),
+                            "Endereços IP da Máquina",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        MessageBox.Show(
+                            string.Format("IP {0} copiado para a área de transferência com sucesso!", _lastDiag.LocalIp),
+                            "IP Copiado",
+                            MessageBoxButtons.OK,
+                            MessageBoxIcon.Information);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Atualiza os cards compacto e expandido de diagnóstico na interface.
+        /// </summary>
+        private void RefreshDiagnosticViews(FullSystemDiagnosticInfo diag)
+        {
+            if (diag == null || IsDisposed) return;
+            _lastDiag = diag;
+
+            if (InvokeRequired)
+            {
+                Invoke(new Action<FullSystemDiagnosticInfo>(RefreshDiagnosticViews), diag);
+                return;
+            }
+
+            // 1. Atualiza Card Compacto (Aba 1)
+            if (_lblDiagComputer != null)
+                _lblDiagComputer.Text = string.Format("{0} ({1})", diag.ComputerName, diag.DomainOrWorkgroup);
+
+            if (_lblDiagUser != null)
+                _lblDiagUser.Text = string.Format("{0}{1}", diag.UserName, diag.IsAdmin ? " (Admin)" : "");
+
+            if (_lblDiagOs != null)
+                _lblDiagOs.Text = diag.WindowsEdition;
+
+            if (_lblDiagDisk != null && _barDiagDisk != null)
+            {
+                DiskDriveDiagnosis cDrive = null;
+                if (diag.Drives != null)
+                {
+                    cDrive = diag.Drives.FirstOrDefault(d => d.DriveLetter.Equals("C:", StringComparison.OrdinalIgnoreCase)) ?? diag.Drives.FirstOrDefault();
+                }
+                if (cDrive != null)
+                {
+                    _lblDiagDisk.Text = cDrive.StatusText;
+                    _barDiagDisk.Percent = cDrive.PercentUsed;
+                    _barDiagDisk.FillColor = (cDrive.StatusColor == ConsoleColor.Red) 
+                        ? Color.FromArgb(230, 50, 50) 
+                        : ((cDrive.StatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : CorSucesso);
+                }
+            }
+
+            if (_lblDiagNet != null)
+            {
+                _lblDiagNet.Text = diag.ConnectionStatusText + " ↻";
+                _lblDiagNet.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) ? CorSucesso : Color.FromArgb(240, 180, 0);
+            }
+
+            if (_lblDiagIp != null)
+            {
+                _lblDiagIp.Text = diag.LocalIp + " [+]";
+            }
+
+            // 2. Atualiza Visão Expandida
+            RefreshExpandedDiagnosticsUI(diag);
+        }
+
+        /// <summary>
+        /// Atualiza todos os 6 cards da visão expandida de diagnóstico do sistema.
+        /// </summary>
+        private void RefreshExpandedDiagnosticsUI(FullSystemDiagnosticInfo diag)
+        {
+            if (diag == null || _pnlExpandedDiagnostics == null) return;
+
+            // Card 1: Identificacion & OS
+            if (_lblExpComputer != null) _lblExpComputer.Text = string.Format("{0} ({1})", diag.ComputerName, diag.DomainOrWorkgroup);
+            if (_lblExpUser != null) _lblExpUser.Text = string.Format("{0}{1}", diag.UserName, diag.IsAdmin ? " (Admin)" : "");
+            if (_lblExpOs != null) _lblExpOs.Text = string.Format("{0}\n{1}", diag.WindowsEdition, diag.WindowsBuild);
+
+            // Card 2: Connection & Network
+            if (_lblExpNetStatus != null)
+            {
+                _lblExpNetStatus.Text = diag.ConnectionStatusText + " ↻";
+                _lblExpNetStatus.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) ? CorSucesso : Color.FromArgb(240, 180, 0);
+            }
+            if (_lblExpLocalIp != null) _lblExpLocalIp.Text = diag.LocalIp + " [+]";
+            if (_lblExpInterfaces != null) _lblExpInterfaces.Text = diag.NetworkInterfacesSummary;
+
+            // Card 3: Storage & Partition (Lista todos os discos fixos da máquina)
+            if (_pnlStorageDrivesContainer != null)
+            {
+                _pnlStorageDrivesContainer.SuspendLayout();
+                _pnlStorageDrivesContainer.Controls.Clear();
+
+                float scale = GetDpiScale();
+                if (diag.Drives != null && diag.Drives.Count > 0)
+                {
+                    // Itera em ordem reversa para que o primeiro apareça no topo com Dock = Top
+                    for (int i = diag.Drives.Count - 1; i >= 0; i--)
+                    {
+                        var drive = diag.Drives[i];
+                        var driveItemPanel = new Panel
+                        {
+                            Dock = DockStyle.Top,
+                            Height = (int)(42 * scale),
+                            BackColor = Color.Transparent,
+                            Padding = new Padding(0, 0, 0, (int)(8 * scale)),
+                        };
+
+                        var lblDriveText = new Label
+                        {
+                            Text = string.Format("Disco {0} ({1}): {2}", drive.DriveLetter, drive.MediaType, drive.StatusText),
+                            ForeColor = Color.White,
+                            Font = new Font("Segoe UI", 8.5f),
+                            Dock = DockStyle.Top,
+                            Height = (int)(18 * scale),
+                            TextAlign = ContentAlignment.MiddleLeft,
+                            UseMnemonic = false,
+                        };
+
+                        var barDrive = new MiniUsageBar
+                        {
+                            Dock = DockStyle.Bottom,
+                            Height = (int)(8 * scale),
+                            Percent = drive.PercentUsed,
+                            FillColor = (drive.StatusColor == ConsoleColor.Red) 
+                                ? Color.FromArgb(230, 50, 50) 
+                                : ((drive.StatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : CorSucesso),
+                        };
+
+                        driveItemPanel.Controls.Add(barDrive);
+                        driveItemPanel.Controls.Add(lblDriveText);
+                        _pnlStorageDrivesContainer.Controls.Add(driveItemPanel);
+                    }
+                }
+                else
+                {
+                    var lblNone = new Label
+                    {
+                        Text = "Nenhuma unidade fixa detectada.",
+                        ForeColor = Color.Gray,
+                        Dock = DockStyle.Fill,
+                    };
+                    _pnlStorageDrivesContainer.Controls.Add(lblNone);
+                }
+                _pnlStorageDrivesContainer.ResumeLayout();
+            }
+
+            // Card 4: Hardware Resources
+            if (_lblExpCpu != null)
+            {
+                _lblExpCpu.Text = string.Format("{0}\n{1}", diag.CpuName, diag.CpuSummary);
+            }
+            if (_lblExpRam != null)
+            {
+                _lblExpRam.Text = string.Format("{0} ({1:N1} GB em uso - {2:N0}%)", diag.RamSummary, diag.UsedRamGb, diag.RamUsagePercent);
+            }
+            if (_barExpRam != null)
+            {
+                _barExpRam.Percent = diag.RamUsagePercent;
+            }
+
+            // Card 5: Device & Warranty
+            if (_lblExpDevice != null)
+            {
+                string devText = diag.Model;
+                if (!string.IsNullOrEmpty(diag.Manufacturer) && diag.Model.IndexOf(diag.Manufacturer, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    devText = string.Format("{0} {1}", diag.Manufacturer, diag.Model);
+                }
+                _lblExpDevice.Text = devText;
+            }
+            if (_lblExpSerial != null)
+            {
+                _lblExpSerial.Text = diag.SerialNumber;
+            }
+
+            // Card 6: Security & Status
+            if (_lblExpSecurity != null)
+            {
+                _lblExpSecurity.Text = string.Format("Windows Defender: {0} | BitLocker: {1}", diag.DefenderStatusText, diag.BitLockerStatusText);
+            }
+            if (_lblExpSystemState != null)
+            {
+                _lblExpSystemState.Text = string.Format("Reboot Pendente: {0} | Fonte: {1}", diag.PendingRebootText, diag.PowerSourceText);
+            }
         }
 
         /// <summary>
@@ -1373,6 +2318,7 @@ namespace InstallerGUI.Forms
         {
             // Evita cliques duplos durante a instalação
             if (_installing) return;
+            ShowExpandedDiagnostics(false);
 
             var selectedPrograms = new List<ProgramInfo>();
             foreach (Control c in _pnlPrograms.Controls)
@@ -1682,15 +2628,12 @@ namespace InstallerGUI.Forms
                     _lastDetectedInternet = currentInternet;
                     _lastDetectedIp = currentIp;
 
-                    PingDiagnosis pingDiag = null;
-                    if (currentInternet)
-                    {
-                        pingDiag = await _service.MeasureInternetPingAsync();
-                    }
+                    var diag = await _service.GetFullSystemDiagnosisAsync();
+                    RefreshDiagnosticViews(diag);
 
                     if (!_installing && !_installationStarted && !IsDisposed)
                     {
-                        RenderInitialSystemInfo(currentInternet, currentIp, pingDiag);
+                        RenderInitialSystemInfo();
                     }
                 }
             }
@@ -1702,9 +2645,9 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Renderiza as informações de diagnóstico do sistema no painel de log sem cintilação (flicker-free).
+        /// Exibe a mensagem inicial de prontidão no log quando o sistema é iniciado.
         /// </summary>
-        private void RenderInitialSystemInfo(bool hasInternet, string ip, PingDiagnosis pingDiag)
+        private void RenderInitialSystemInfo()
         {
             if (_installing || _installationStarted || IsDisposed) return;
 
@@ -1712,40 +2655,6 @@ namespace InstallerGUI.Forms
             try
             {
                 _txtLog.Clear();
-                AppendLog("======================================================================", ConsoleColor.Cyan);
-                AppendLog(" INFORMAÇÕES DO SISTEMA", ConsoleColor.Cyan);
-                AppendLog("======================================================================", ConsoleColor.Cyan);
-                AppendLog(string.Format("Nome do computador : {0}", Environment.MachineName), ConsoleColor.Gray);
-
-                string userRole = "";
-                try
-                {
-                    var principal = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());
-                    if (principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator))
-                        userRole = " (Administrador)";
-                }
-                catch { }
-                AppendLog(string.Format("Nome do usuário    : {0}{1}", Environment.UserName, userRole), ConsoleColor.Gray);
-
-                AppendLog(string.Format("Endereço IP        : {0}", ip), ConsoleColor.Gray);
-
-                if (hasInternet)
-                {
-                    AppendLog("Status de conexão  : Conectado à Internet", ConsoleColor.Green);
-                    if (pingDiag != null)
-                        AppendLog(string.Format("Teste de Ping      : {0}", pingDiag.Text), pingDiag.Color);
-                }
-                else
-                {
-                    AppendLog("Status de conexão  : Desconectado da Internet", ConsoleColor.Yellow);
-                }
-
-                var diskDiag = GetSystemDriveFreeSpaceDiagnosis();
-                AppendLog(string.Format("Espaço livre em C: : {0}", diskDiag.Text), diskDiag.Color);
-
-                string winVer = GetWindowsVersionInfo();
-                AppendLog(string.Format("Versão do Windows  : {0}", winVer), ConsoleColor.Gray);
-                AppendLog("======================================================================\n", ConsoleColor.Cyan);
                 AppendLog("Pronto para iniciar. Configure as opções e selecione os programas desejados.\n", ConsoleColor.Gray);
             }
             finally
@@ -2753,6 +3662,57 @@ namespace InstallerGUI.Forms
             else if (e.Delta < 0)
             {
                 Value = Math.Min(_maximum, _value + step);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Barra minimalista de uso e percentual para memória RAM e unidades de disco.
+    /// </summary>
+    public class MiniUsageBar : Control
+    {
+        private double _percent = 0;
+        private Color _fillColor = Color.FromArgb(0, 200, 80);
+
+        public MiniUsageBar()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer, true);
+            BackColor = Color.FromArgb(48, 48, 48);
+            Height = 8;
+        }
+
+        public double Percent
+        {
+            get { return _percent; }
+            set
+            {
+                _percent = Math.Max(0, Math.Min(100, value));
+                Invalidate();
+            }
+        }
+
+        public Color FillColor
+        {
+            get { return _fillColor; }
+            set
+            {
+                _fillColor = value;
+                Invalidate();
+            }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            var g = e.Graphics;
+            g.Clear(BackColor);
+            int fillWidth = (int)((Width * _percent) / 100.0);
+            if (fillWidth > 0)
+            {
+                using (var brush = new SolidBrush(_fillColor))
+                {
+                    g.FillRectangle(brush, 0, 0, fillWidth, Height);
+                }
             }
         }
     }

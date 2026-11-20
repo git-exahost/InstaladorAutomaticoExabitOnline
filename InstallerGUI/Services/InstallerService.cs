@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Management;
 using System.Net;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -767,79 +770,566 @@ namespace InstallerGUI.Services
             return await Task.Run(new Func<bool>(() => CheckInternetConnectivity()));
         }
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private class MEMORYSTATUSEX
+        {
+            public uint dwLength;
+            public uint dwMemoryLoad;
+            public ulong ullTotalPhys;
+            public ulong ullAvailPhys;
+            public ulong ullTotalPageFile;
+            public ulong ullAvailPageFile;
+            public ulong ullTotalVirtual;
+            public ulong ullAvailVirtual;
+            public ulong ullAvailExtendedVirtual;
+
+            public MEMORYSTATUSEX()
+            {
+                this.dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+            }
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GlobalMemoryStatusEx([In, Out] MEMORYSTATUSEX lpBuffer);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SYSTEM_POWER_STATUS
+        {
+            public byte ACLineStatus;
+            public byte BatteryFlag;
+            public byte BatteryLifePercent;
+            public byte SystemStatusFlag;
+            public uint BatteryLifeTime;
+            public uint BatteryFullLifeTime;
+        }
+
+        [DllImport("kernel32.dll")]
+        private static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS sps);
+
         /// <summary>
         /// Realiza teste de latência (ping) da conexão com a internet contra servidores DNS rápidos e confiáveis.
         /// </summary>
         /// <returns>Diagnóstico formatado com latência, provedor DNS e cor representativa de qualidade.</returns>
         public async Task<PingDiagnosis> MeasureInternetPingAsync()
         {
-            return await Task.Run(new Func<PingDiagnosis>(() =>
+            return await Task.Run(new Func<PingDiagnosis>(() => MeasureInternetPingInternal()));
+        }
+
+        private static PingDiagnosis MeasureInternetPingInternal()
+        {
+            string[] targets = new string[] { "1.1.1.1", "8.8.8.8" };
+            using (var ping = new System.Net.NetworkInformation.Ping())
             {
-                string[] targets = new string[] { "1.1.1.1", "8.8.8.8" };
-                using (var ping = new System.Net.NetworkInformation.Ping())
+                foreach (var target in targets)
                 {
-                    foreach (var target in targets)
+                    try
                     {
-                        try
+                        var reply = ping.Send(target, 1200);
+                        if (reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success)
                         {
-                            var reply = ping.Send(target, 1200);
-                            if (reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                            string hostLabel = (target == "1.1.1.1") ? "Cloudflare DNS" : "Google DNS";
+                            long ms = reply.RoundtripTime;
+                            if (ms < 50)
                             {
-                                string hostLabel = (target == "1.1.1.1") ? "Cloudflare DNS" : "Google DNS";
-                                long ms = reply.RoundtripTime;
-                                if (ms < 50)
+                                return new PingDiagnosis
                                 {
-                                    return new PingDiagnosis
-                                    {
-                                        Success = true,
-                                        LatencyMs = ms,
-                                        Text = string.Format("{0} ms ({1} - Excelente)", ms, hostLabel),
-                                        Color = ConsoleColor.Green
-                                    };
-                                }
-                                else if (ms < 100)
+                                    Success = true,
+                                    LatencyMs = ms,
+                                    Text = string.Format("{0} ms ({1} - Excelente)", ms, hostLabel),
+                                    Color = ConsoleColor.Green
+                                };
+                            }
+                            else if (ms < 100)
+                            {
+                                return new PingDiagnosis
                                 {
-                                    return new PingDiagnosis
-                                    {
-                                        Success = true,
-                                        LatencyMs = ms,
-                                        Text = string.Format("{0} ms ({1} - Bom)", ms, hostLabel),
-                                        Color = ConsoleColor.Green
-                                    };
-                                }
-                                else if (ms < 200)
+                                    Success = true,
+                                    LatencyMs = ms,
+                                    Text = string.Format("{0} ms ({1} - Bom)", ms, hostLabel),
+                                    Color = ConsoleColor.Green
+                                };
+                            }
+                            else if (ms < 200)
+                            {
+                                return new PingDiagnosis
                                 {
-                                    return new PingDiagnosis
-                                    {
-                                        Success = true,
-                                        LatencyMs = ms,
-                                        Text = string.Format("{0} ms ({1} - Moderado)", ms, hostLabel),
-                                        Color = ConsoleColor.Yellow
-                                    };
-                                }
-                                else
+                                    Success = true,
+                                    LatencyMs = ms,
+                                    Text = string.Format("{0} ms ({1} - Moderado)", ms, hostLabel),
+                                    Color = ConsoleColor.Yellow
+                                };
+                            }
+                            else
+                            {
+                                return new PingDiagnosis
                                 {
-                                    return new PingDiagnosis
-                                    {
-                                        Success = true,
-                                        LatencyMs = ms,
-                                        Text = string.Format("{0} ms ({1} - Alto / Instável)", ms, hostLabel),
-                                        Color = ConsoleColor.Red
-                                    };
+                                    Success = true,
+                                    LatencyMs = ms,
+                                    Text = string.Format("{0} ms ({1} - Alto / Instável)", ms, hostLabel),
+                                    Color = ConsoleColor.Red
+                                };
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            return new PingDiagnosis
+            {
+                Success = false,
+                LatencyMs = -1,
+                Text = "Tempo limite esgotado / Inacessível",
+                Color = ConsoleColor.Red
+            };
+        }
+
+        /// <summary>
+        /// Obtém o diagnóstico completo do sistema: identificação, SO, conexões, discos, hardware, garantia e segurança.
+        /// </summary>
+        public async Task<FullSystemDiagnosticInfo> GetFullSystemDiagnosisAsync()
+        {
+            return await Task.Run(new Func<FullSystemDiagnosticInfo>(() =>
+            {
+                var diag = new FullSystemDiagnosticInfo();
+
+                // 1. Identificação da Máquina e Usuário
+                try
+                {
+                    diag.ComputerName = Environment.MachineName;
+                    diag.UserName = Environment.UserName;
+
+                    try
+                    {
+                        var principal = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());
+                        diag.IsAdmin = principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+                    }
+                    catch { diag.IsAdmin = false; }
+                }
+                catch { }
+
+                // 2. Sistema Operacional (Edição comercial e build)
+                try
+                {
+                    string prodName = "";
+                    string displayVer = "";
+                    string build = "";
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                    {
+                        if (key != null)
+                        {
+                            prodName = (key.GetValue("ProductName") as string) ?? "";
+                            displayVer = (key.GetValue("DisplayVersion") as string) ?? (key.GetValue("ReleaseId") as string) ?? "";
+                            build = (key.GetValue("CurrentBuild") as string) ?? (key.GetValue("CurrentBuildNumber") as string) ?? "";
+                            string ubr = key.GetValue("UBR") != null ? key.GetValue("UBR").ToString() : "";
+                            if (!string.IsNullOrEmpty(ubr) && !string.IsNullOrEmpty(build))
+                            {
+                                build = build + "." + ubr;
+                            }
+                        }
+                    }
+
+                    int buildNum = 0;
+                    if (!string.IsNullOrEmpty(build))
+                    {
+                        string firstPart = build.Split('.')[0];
+                        int.TryParse(firstPart, out buildNum);
+                    }
+                    if (buildNum >= 22000 && prodName.IndexOf("Windows 10", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        prodName = prodName.Replace("Windows 10", "Windows 11");
+                    }
+
+                    diag.WindowsEdition = !string.IsNullOrEmpty(displayVer)
+                        ? string.Format("{0} {1}", prodName, displayVer)
+                        : prodName;
+                    diag.WindowsBuild = !string.IsNullOrEmpty(build)
+                        ? string.Format("(Build {0})", build)
+                        : "";
+                }
+                catch { }
+
+                // 3. Fabricante, Modelo e Domínio/Workgroup (Win32_ComputerSystem)
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Manufacturer, Model, Domain FROM Win32_ComputerSystem"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            diag.Manufacturer = (obj["Manufacturer"] ?? "").ToString().Trim();
+                            diag.Model = (obj["Model"] ?? "").ToString().Trim();
+                            diag.DomainOrWorkgroup = (obj["Domain"] ?? "WORKGROUP").ToString().Trim();
+                            break;
+                        }
+                    }
+                }
+                catch { }
+
+                if (string.IsNullOrEmpty(diag.Manufacturer) || diag.Manufacturer.IndexOf("System manufacturer", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS"))
+                        {
+                            if (key != null)
+                            {
+                                diag.Manufacturer = (key.GetValue("SystemManufacturer") as string) ?? diag.Manufacturer;
+                                diag.Model = (key.GetValue("SystemProductName") as string) ?? diag.Model;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                // 4. Número de Série / Service Tag (Win32_BIOS)
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BIOS"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            diag.SerialNumber = (obj["SerialNumber"] ?? "").ToString().Trim();
+                            break;
+                        }
+                    }
+                }
+                catch { }
+
+                if (string.IsNullOrEmpty(diag.SerialNumber) || diag.SerialNumber.IndexOf("Default", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS"))
+                        {
+                            if (key != null)
+                            {
+                                string sn = (key.GetValue("BaseBoardSerialNumber") as string) ?? (key.GetValue("SystemSerialNumber") as string);
+                                if (!string.IsNullOrEmpty(sn)) diag.SerialNumber = sn.Trim();
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                if (string.IsNullOrEmpty(diag.SerialNumber)) diag.SerialNumber = "Não informado";
+
+                // 5. Processador (Win32_Processor)
+                try
+                {
+                    using (var searcher = new ManagementObjectSearcher("SELECT Name, NumberOfCores, NumberOfLogicalProcessors FROM Win32_Processor"))
+                    {
+                        foreach (ManagementObject obj in searcher.Get())
+                        {
+                            string rawName = (obj["Name"] ?? "").ToString().Trim();
+                            rawName = Regex.Replace(rawName, @"\((R|TM)\)", "", RegexOptions.IgnoreCase);
+                            rawName = Regex.Replace(rawName, @"@.*$", "").Trim();
+                            rawName = Regex.Replace(rawName, @"\s+", " ");
+                            diag.CpuName = rawName;
+
+                            int cores = 0;
+                            int threads = 0;
+                            if (obj["NumberOfCores"] != null) int.TryParse(obj["NumberOfCores"].ToString(), out cores);
+                            if (obj["NumberOfLogicalProcessors"] != null) int.TryParse(obj["NumberOfLogicalProcessors"].ToString(), out threads);
+                            diag.CpuCores = cores;
+                            diag.CpuThreads = threads;
+                            break;
+                        }
+                    }
+                }
+                catch { }
+
+                if (string.IsNullOrEmpty(diag.CpuName) || diag.CpuName == "Processador")
+                {
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
+                        {
+                            if (key != null)
+                            {
+                                string rawName = (key.GetValue("ProcessorNameString") as string) ?? Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "Processador";
+                                rawName = Regex.Replace(rawName, @"\((R|TM)\)", "", RegexOptions.IgnoreCase);
+                                rawName = Regex.Replace(rawName, @"@.*$", "").Trim();
+                                rawName = Regex.Replace(rawName, @"\s+", " ");
+                                diag.CpuName = rawName;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                if (diag.CpuCores <= 0) diag.CpuCores = Environment.ProcessorCount > 1 ? Environment.ProcessorCount / 2 : 1;
+                if (diag.CpuThreads <= 0) diag.CpuThreads = Environment.ProcessorCount;
+                diag.CpuSummary = string.Format("({0} Cores / {1} Threads)", diag.CpuCores, diag.CpuThreads);
+
+                // 6. Memória RAM e Tipo (GlobalMemoryStatusEx + Win32_PhysicalMemory)
+                try
+                {
+                    var memStatus = new MEMORYSTATUSEX();
+                    if (GlobalMemoryStatusEx(memStatus))
+                    {
+                        diag.TotalRamGb = memStatus.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
+                        diag.FreeRamGb = memStatus.ullAvailPhys / (1024.0 * 1024.0 * 1024.0);
+                        diag.UsedRamGb = Math.Max(0, diag.TotalRamGb - diag.FreeRamGb);
+                        diag.RamUsagePercent = (double)memStatus.dwMemoryLoad;
+                    }
+
+                    string ramType = "";
+                    try
+                    {
+                        using (var searcher = new ManagementObjectSearcher("SELECT SMBIOSMemoryType FROM Win32_PhysicalMemory"))
+                        {
+                            foreach (ManagementObject obj in searcher.Get())
+                            {
+                                int smbiosType = 0;
+                                if (obj["SMBIOSMemoryType"] != null) int.TryParse(obj["SMBIOSMemoryType"].ToString(), out smbiosType);
+                                if (smbiosType == 24) ramType = "DDR3";
+                                else if (smbiosType == 26) ramType = "DDR4";
+                                else if (smbiosType == 30 || smbiosType == 34 || smbiosType == 35) ramType = "DDR5";
+                                if (!string.IsNullOrEmpty(ramType)) break;
+                            }
+                        }
+                    }
+                    catch { }
+                    if (string.IsNullOrEmpty(ramType)) ramType = "DDR4";
+                    diag.RamType = ramType;
+                    diag.RamSummary = string.Format("{0:N0} GB {1}", Math.Round(diag.TotalRamGb), ramType);
+                }
+                catch { }
+
+                // 7. Discos e Partições (Todos os discos fixos da máquina)
+                try
+                {
+                    var driveMediaMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    try
+                    {
+                        using (var searcher = new ManagementObjectSearcher(@"root\Microsoft\Windows\Storage", "SELECT FriendlyName, BusType, MediaType FROM MSFT_PhysicalDisk"))
+                        {
+                            foreach (ManagementObject disk in searcher.Get())
+                            {
+                                string fname = (disk["FriendlyName"] ?? "").ToString();
+                                int busType = 0;
+                                if (disk["BusType"] != null) int.TryParse(disk["BusType"].ToString(), out busType);
+                                int mType = 0;
+                                if (disk["MediaType"] != null) int.TryParse(disk["MediaType"].ToString(), out mType);
+
+                                string type = "SSD";
+                                if (busType == 17 || fname.IndexOf("NVMe", StringComparison.OrdinalIgnoreCase) >= 0) type = "NVMe";
+                                else if (mType == 4 || fname.IndexOf("SSD", StringComparison.OrdinalIgnoreCase) >= 0) type = "SSD";
+                                else if (mType == 3 || fname.IndexOf("HDD", StringComparison.OrdinalIgnoreCase) >= 0) type = "HDD";
+
+                                if (!driveMediaMap.ContainsKey("C:")) driveMediaMap["C:"] = type;
+                            }
+                        }
+                    }
+                    catch { }
+
+                    var allDrives = DriveInfo.GetDrives();
+                    foreach (var drive in allDrives)
+                    {
+                        if (drive.DriveType != DriveType.Fixed || !drive.IsReady) continue;
+
+                        string letter = drive.Name.TrimEnd('\\');
+                        string volLabel = "";
+                        try { volLabel = drive.VolumeLabel; } catch { }
+
+                        double totalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
+                        double freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                        double usedGb = Math.Max(0, totalGb - freeGb);
+                        double pctFree = totalGb > 0 ? (freeGb / totalGb * 100.0) : 0.0;
+                        double pctUsed = totalGb > 0 ? (usedGb / totalGb * 100.0) : 0.0;
+
+                        string mediaType = "NVMe";
+                        if (driveMediaMap.ContainsKey(letter)) mediaType = driveMediaMap[letter];
+
+                        ConsoleColor color = ConsoleColor.Green;
+                        if (pctFree < 10.0 || freeGb < 15.0) color = ConsoleColor.Red;
+                        else if (pctFree < 20.0 || freeGb < 30.0) color = ConsoleColor.Yellow;
+
+                        diag.Drives.Add(new DiskDriveDiagnosis
+                        {
+                            DriveLetter = letter,
+                            VolumeLabel = volLabel,
+                            MediaType = mediaType,
+                            FreeGb = freeGb,
+                            TotalGb = totalGb,
+                            UsedGb = usedGb,
+                            PercentFree = pctFree,
+                            PercentUsed = pctUsed,
+                            StatusText = string.Format("{0:N1} / {1:N1} GB ({2:N0}% livre)", freeGb, totalGb, pctFree),
+                            StatusColor = color
+                        });
+                    }
+                }
+                catch { }
+
+                // 8. Segurança (Defender e BitLocker)
+                try
+                {
+                    bool defender = true;
+                    try
+                    {
+                        using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender"))
+                        {
+                            if (key != null)
+                            {
+                                var dis = key.GetValue("DisableAntiSpyware");
+                                if (dis != null && (int)dis == 1) defender = false;
+                            }
+                        }
+                    }
+                    catch { }
+                    diag.DefenderActive = defender;
+                    diag.DefenderStatusText = defender ? "Ativo" : "Desativado";
+
+                    bool bitlocker = false;
+                    try
+                    {
+                        using (var searcher = new ManagementObjectSearcher(@"root\CIMV2\Security\MicrosoftVolumeEncryption", "SELECT ProtectionStatus FROM Win32_EncryptableVolume"))
+                        {
+                            foreach (ManagementObject vol in searcher.Get())
+                            {
+                                int status = 0;
+                                if (vol["ProtectionStatus"] != null) int.TryParse(vol["ProtectionStatus"].ToString(), out status);
+                                if (status == 1) { bitlocker = true; break; }
+                            }
+                        }
+                    }
+                    catch { }
+                    diag.BitLockerActive = bitlocker;
+                    diag.BitLockerStatusText = bitlocker ? "Ativo" : "Desativado";
+                }
+                catch { }
+
+                // 9. Estado do Sistema (Reboot Pendente e Fonte de Energia)
+                try
+                {
+                    bool rebootPending = false;
+                    try
+                    {
+                        using (var k1 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"))
+                            if (k1 != null) rebootPending = true;
+                        if (!rebootPending)
+                        {
+                            using (var k2 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"))
+                                if (k2 != null) rebootPending = true;
+                        }
+                        if (!rebootPending)
+                        {
+                            using (var k3 = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager"))
+                            {
+                                if (k3 != null && k3.GetValue("PendingFileRenameOperations") != null) rebootPending = true;
+                            }
+                        }
+                    }
+                    catch { }
+                    diag.PendingReboot = rebootPending;
+                    diag.PendingRebootText = rebootPending ? "Sim" : "Não";
+
+                    SYSTEM_POWER_STATUS power;
+                    if (GetSystemPowerStatus(out power))
+                    {
+                        if (power.ACLineStatus == 1)
+                            diag.PowerSourceText = "Na tomada";
+                        else if (power.ACLineStatus == 0)
+                            diag.PowerSourceText = string.Format("Bateria ({0}%)", power.BatteryLifePercent);
+                        else
+                            diag.PowerSourceText = "Na tomada";
+                    }
+                    else
+                    {
+                        diag.PowerSourceText = "Na tomada";
+                    }
+                }
+                catch { }
+
+                // 10. Conexão de Rede, IPs e Interfaces
+                try
+                {
+                    var ips = new List<string>();
+                    var activeNics = new List<string>();
+                    bool hasVpn = false;
+
+                    foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                    {
+                        if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up)
+                            continue;
+                        if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+                            continue;
+
+                        string desc = nic.Description;
+                        string name = nic.Name;
+                        if (desc.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            desc.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            desc.IndexOf("TAP", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            desc.IndexOf("WireGuard", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            name.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            name.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            hasVpn = true;
+                        }
+                        else
+                        {
+                            if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211)
+                                activeNics.Add("Wi-Fi");
+                            else if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Ethernet)
+                                activeNics.Add("Ethernet");
+                        }
+
+                        var ipProps = nic.GetIPProperties();
+                        foreach (var addr in ipProps.UnicastAddresses)
+                        {
+                            if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                            {
+                                string ipStr = addr.Address.ToString();
+                                if (!ipStr.StartsWith("127.") && !ipStr.StartsWith("169.254.") && !ips.Contains(ipStr))
+                                {
+                                    ips.Add(ipStr);
                                 }
                             }
                         }
-                        catch { }
+                    }
+
+                    diag.AllLocalIps = ips;
+                    diag.LocalIp = ips.Count > 0 ? ips[0] : "Indisponível";
+
+                    if (hasVpn)
+                        diag.NetworkInterfacesSummary = "Radmin / VPN detectadas";
+                    else if (activeNics.Count > 0)
+                        diag.NetworkInterfacesSummary = string.Format("{0} ativo(s)", string.Join(", ", activeNics.Distinct().ToArray()));
+                    else
+                        diag.NetworkInterfacesSummary = "Rede local ativa";
+                }
+                catch { }
+
+                // 11. Status de Internet e Ping
+                try
+                {
+                    bool online = CheckInternetConnectivity();
+                    diag.HasInternet = online;
+                    if (online)
+                    {
+                        var ping = MeasureInternetPingInternal();
+                        if (ping != null && ping.Success)
+                        {
+                            string provider = ping.Text.IndexOf("Cloudflare", StringComparison.OrdinalIgnoreCase) >= 0 ? "Cloudflare" : "Google";
+                            diag.ConnectionStatusText = string.Format("Online ({0} ms - {1})", ping.LatencyMs, provider);
+                            diag.PingLatencyText = string.Format("{0} ms", ping.LatencyMs);
+                            diag.ConnectionStatusColor = ConsoleColor.Green;
+                        }
+                        else
+                        {
+                            diag.ConnectionStatusText = "Online (Sem latência)";
+                            diag.ConnectionStatusColor = ConsoleColor.Green;
+                        }
+                    }
+                    else
+                    {
+                        diag.ConnectionStatusText = "Desconectado";
+                        diag.ConnectionStatusColor = ConsoleColor.Yellow;
                     }
                 }
+                catch { }
 
-                return new PingDiagnosis
-                {
-                    Success = false,
-                    LatencyMs = -1,
-                    Text = "Tempo limite esgotado / Inacessível",
-                    Color = ConsoleColor.Red
-                };
+                return diag;
             }));
         }
 
@@ -6362,5 +6852,107 @@ namespace InstallerGUI.Services
         public long LatencyMs { get; set; }
         public string Text { get; set; }
         public ConsoleColor Color { get; set; }
+    }
+
+    /// <summary>
+    /// Diagnóstico detalhado de uma unidade de disco fixo.
+    /// </summary>
+    public class DiskDriveDiagnosis
+    {
+        public string DriveLetter { get; set; }
+        public string VolumeLabel { get; set; }
+        public string MediaType { get; set; }
+        public double FreeGb { get; set; }
+        public double TotalGb { get; set; }
+        public double UsedGb { get; set; }
+        public double PercentFree { get; set; }
+        public double PercentUsed { get; set; }
+        public string StatusText { get; set; }
+        public ConsoleColor StatusColor { get; set; }
+
+        public DiskDriveDiagnosis()
+        {
+            DriveLetter = "C:";
+            VolumeLabel = "";
+            MediaType = "SSD";
+            StatusText = "";
+            StatusColor = ConsoleColor.Green;
+        }
+    }
+
+    /// <summary>
+    /// Informações completas de diagnóstico de hardware, sistema, rede e segurança.
+    /// </summary>
+    public class FullSystemDiagnosticInfo
+    {
+        // Identificação & SO
+        public string ComputerName { get; set; }
+        public string DomainOrWorkgroup { get; set; }
+        public string UserName { get; set; }
+        public bool IsAdmin { get; set; }
+        public string WindowsEdition { get; set; }
+        public string WindowsBuild { get; set; }
+
+        // Conexão & Rede
+        public bool HasInternet { get; set; }
+        public string ConnectionStatusText { get; set; }
+        public string PingLatencyText { get; set; }
+        public ConsoleColor ConnectionStatusColor { get; set; }
+        public string LocalIp { get; set; }
+        public List<string> AllLocalIps { get; set; }
+        public string NetworkInterfacesSummary { get; set; }
+
+        // Storage & Partition
+        public List<DiskDriveDiagnosis> Drives { get; set; }
+
+        // Recursos de Hardware
+        public string CpuName { get; set; }
+        public int CpuCores { get; set; }
+        public int CpuThreads { get; set; }
+        public string CpuSummary { get; set; }
+        public double TotalRamGb { get; set; }
+        public double UsedRamGb { get; set; }
+        public double FreeRamGb { get; set; }
+        public double RamUsagePercent { get; set; }
+        public string RamType { get; set; }
+        public string RamSummary { get; set; }
+
+        // Dispositivo & Garantia
+        public string Manufacturer { get; set; }
+        public string Model { get; set; }
+        public string SerialNumber { get; set; }
+
+        // Segurança & Estado
+        public bool DefenderActive { get; set; }
+        public string DefenderStatusText { get; set; }
+        public bool BitLockerActive { get; set; }
+        public string BitLockerStatusText { get; set; }
+        public bool PendingReboot { get; set; }
+        public string PendingRebootText { get; set; }
+        public string PowerSourceText { get; set; }
+
+        public FullSystemDiagnosticInfo()
+        {
+            Drives = new List<DiskDriveDiagnosis>();
+            AllLocalIps = new List<string>();
+            ComputerName = Environment.MachineName;
+            DomainOrWorkgroup = "WORKGROUP";
+            UserName = Environment.UserName;
+            WindowsEdition = "Windows";
+            WindowsBuild = "";
+            ConnectionStatusText = "Verificando...";
+            ConnectionStatusColor = ConsoleColor.Yellow;
+            LocalIp = "Indisponível";
+            NetworkInterfacesSummary = "Detectando interfaces...";
+            CpuName = "Processador";
+            RamSummary = "Memória";
+            Manufacturer = "Fabricante";
+            Model = "Modelo";
+            SerialNumber = "Não informado";
+            DefenderStatusText = "Ativo";
+            BitLockerStatusText = "Desativado";
+            PendingRebootText = "Não";
+            PowerSourceText = "Na tomada";
+        }
     }
 }

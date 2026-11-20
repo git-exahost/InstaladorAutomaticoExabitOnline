@@ -59,9 +59,9 @@ foreach ($dir in $candidateDirs) {
     if ([string]::IsNullOrWhiteSpace($dir)) { continue }
     if (Test-Path -LiteralPath $dir -ErrorAction SilentlyContinue) {
         $found = @(Get-ChildItem -LiteralPath $dir -File -ErrorAction SilentlyContinue | Where-Object {
-            $ext = $_.Extension.ToLower()
-            $imageExtensions -contains $ext -and -not $_.Name.Contains("-Navi")
-        })
+                $ext = $_.Extension.ToLower()
+                $imageExtensions -contains $ext -and -not $_.Name.Contains("-Navi")
+            })
         if ($found.Count -gt 0) {
             $wallpapersDir = $dir
             $imageFiles = $found
@@ -90,7 +90,8 @@ function Grant-AdminAccess {
             takeown /f "$Path" /r /d y >$null 2>&1
             icacls "$Path" /grant "*S-1-5-32-544:(OI)(CI)F" /t /c /q >$null 2>&1
         }
-    } catch {}
+    }
+    catch {}
 }
 
 function Grant-AdminFileAccess {
@@ -100,7 +101,8 @@ function Grant-AdminFileAccess {
             takeown /f "$FilePath" >$null 2>&1
             icacls "$FilePath" /grant "*S-1-5-32-544:F" /c /q >$null 2>&1
         }
-    } catch {}
+    }
+    catch {}
 }
 
 # 3. Diretorios do sistema operacional
@@ -253,13 +255,15 @@ foreach ($tName in $themeFiles) {
 
             if ($rawContent -match '(?is)\[Slideshow\].*?(?=(\r?\n\[|\Z))') {
                 $rawContent = [regex]::Replace($rawContent, '(?is)\[Slideshow\].*?(?=(\r?\n\[|\Z))', $sb.ToString().TrimEnd())
-            } else {
+            }
+            else {
                 $rawContent = $rawContent.TrimEnd() + "`r`n`r`n" + $sb.ToString().TrimEnd() + "`r`n"
             }
 
             [System.IO.File]::WriteAllText($tPath, $rawContent, [System.Text.Encoding]::Default)
             Write-Host "  [ok] $tName atualizado (Papel de parede + Slideshow de todas as imagens)" -ForegroundColor Green
-        } catch {
+        }
+        catch {
             Write-Warning "Falha ao gravar $($tName): $($_.Exception.Message)"
         }
     }
@@ -288,7 +292,8 @@ if (Test-Path $userThemeDir) {
             Remove-Item $transcoded -Force -ErrorAction SilentlyContinue
         }
         Copy-Item -Path $mainImg.FullName -Destination $transcoded -Force
-    } catch {}
+    }
+    catch {}
 
     $cachedFiles = Join-Path $userThemeDir "CachedFiles"
     if (Test-Path $cachedFiles) {
@@ -334,7 +339,8 @@ Get-ChildItem -Path "$env:SystemDrive\Users" -Directory | ForEach-Object {
             if (Test-Path $uCached) {
                 Remove-Item "$uCached\*" -Force -Recurse -ErrorAction SilentlyContinue
             }
-        } catch {}
+        }
+        catch {}
     }
 
     if ($PreventChangingWallpaper -and ($uName -notmatch '^(Default|Public|All Users|admin|Administrator|Administrador)$')) {
@@ -365,8 +371,9 @@ public class NativeWallpaper {
 "@
     [NativeWallpaper]::SystemParametersInfo(20, 0, "$wallpaperSysDir\Windows\img0.jpg", 3) | Out-Null
     Write-Host "[ok] Tela atualizada com sucesso." -ForegroundColor Green
-} catch {
-    rundll32.exe user32.dll,UpdatePerUserSystemParameters
+}
+catch {
+    rundll32.exe user32.dll, UpdatePerUserSystemParameters
 }
 
 Write-Host ""
@@ -377,8 +384,8 @@ exit
 # SIG # Begin signature block
 # MIIcjwYJKoZIhvcNAQcCoIIcgDCCHHwCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBgQo4pneiv8c9v
-# i6mJj3aQ7GMusnBhbpWbgce2lMQ85aCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBsTPMube25KlCD
+# 5X14B2iHGIDyB9TpITJBFKVPPWweDqCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
 # t0A2pZ7si0QoMA0GCSqGSIb3DQEBCwUAME0xCzAJBgNVBAYTAkJSMR4wHAYDVQQK
 # DBVFWEFCSVQgU29sdWNvZXMgZW0gVEkxHjAcBgNVBAMMFUVYQUJJVCBTb2x1Y29l
 # cyBlbSBUSTAeFw0yNjExMTYyMjMyMDVaFw0zMTExMTYyMjQyMDVaME0xCzAJBgNV
@@ -504,28 +511,28 @@ exit
 # U29sdWNvZXMgZW0gVEkCEBrdWS49sfW3QDalnuyLRCgwDQYJYIZIAWUDBAIBBQCg
 # gYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYB
 # BAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0B
-# CQQxIgQgWaNBhhXb5ygEzVCICR9qF5jHPho9SH10sfWgeu07UnQwDQYJKoZIhvcN
-# AQEBBQAEggEAD6tyFWk6K2DGXqTDUVB7q7GlBB/EfqZD4uqJuw/Z7JnAxfoQGqjq
-# v27i39P+mTWzHRrxqlLyJKpW1QOHfzgL0eiJ3H2fD+IoD/xH38rrsoPqN1RagiD4
-# VCvmGD3xKmqkT0mSWp5rJqmhsV2Zr5GV3KuZ0g8DHSb4uba/dO6yUCFrWQ/LZSsc
-# 6SJkC1zTAFnWENYXBk4xK/O3n1rvMenoItX3+xFpXCdIV45XG5+tRanbd78dhd7K
-# bnKLpBRreERMKT5wr/SNlthOHRGtnWHvFB7DRnXUOmdHaTHKM/eg+TkoQa2YrZRx
-# BPvEnMvJ0axplv/KLRCgNdkyVdwVDO/lGKGCAyYwggMiBgkqhkiG9w0BCQYxggMT
+# CQQxIgQgud8bwc6DWCldKYGIlHV1geYLt3TX3keu8Vkj6iypIAcwDQYJKoZIhvcN
+# AQEBBQAEggEAAE7lcFuXlwKFNOXhTb4Q3XjPSvvV1/hz/z4jNuvfKc5FDRWctZEi
+# S1XdK6ZPZ3TfQ2/ck8ZisZpBT1srgs9VwjQgFGUc4KJQTlT27YxYYs4jv2wkuZW+
+# AYAwYiGnBMF7sdk+qlXRE+R0M12jIpDB/lz43a231AvbhOS0FhGPYfCBGuHSQKZS
+# B7SlpXDdS02hlrYRS3vqXkI6XgoUEAiw/u4+sWSlTHeSV+62vJgMmvfrxb+EZQtF
+# uN7cQ7rQ0CHvq370NhQ4oPPUGmECwr9A4Mg3AP33w7hFhysxDg7vEMzAU2vUg+54
+# zZr3DTgUmi1JMcJWhBpomSKeHh4SmxIDPaGCAyYwggMiBgkqhkiG9w0BCQYxggMT
 # MIIDDwIBATB9MGkxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjFBMD8GA1UEAxM4RGlnaUNlcnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNB
 # NDA5NiBTSEEyNTYgMjAyNSBDQTECEAhP3DNPfkVO28MPj/mSGDUwDQYJYIZIAWUD
 # BAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEP
-# Fw0yNjExMjAxNTA2MDFaMC8GCSqGSIb3DQEJBDEiBCACwHaoYJwbqmtMy74OryXN
-# Syp9de+0JR2kX1qUruKb9TANBgkqhkiG9w0BAQEFAASCAgADsnHib6BlfPRzwwYE
-# t2QWNFApeboJONxFblp5/TAwoGp7EGw8QGf5TipfVENN34pcFa9E8SQRaNtyR2lY
-# pSq+Q3ra91kGjNaKSGnJoMVxa6JxMTbLvPsGqZ8LTG8Cp1ouOQORiPFvWbjOnaEf
-# yunzIu2QmS/Ek/Y2WVf+Wxr1sG5ewpV6sq9CfNneTmLVtIgTDZkJezQ4j6jva8Xp
-# 1taKAEZFaOUWNTCxZBlL4Dl5PcVCoOmZpXbmpB2IGuSX7rmqMRzPktIk45K7yPvE
-# NlIqWNl1hf4GlkXoAA2UI1C0V+sEBlJb9ueVcC125tB8bzSPiR+XpCqlk6Tct6b7
-# cLXtmrfUHgOhDdJynPZpw8AOSHbGjUl/WaNDuUQBoekZh6aPwLLCc1fDvIieJVrR
-# Q9EzVfW5/lRhhOpGMEWpudXQ1acLvgDPLUKYRBMoLXRVOMcT9DNaZlVoSfYSxkSN
-# DFXZAf4AsxY/CoQIitcxpCQl9+wlEcuE45Vf9UzjY1tPZ8CroLrETudD5yaLodBc
-# jWuAodcLJjBEHOQHWptC1tTf1kdlAXw31S0GDctjp2crNfo22mvu2oTuGrl7ZA+J
-# yh+4pOIUsOBp4G/ME8wdbU5BDzifmTv+zQy69EQhlbQfszs4cvDQIOo/cYoKdDLb
-# jxG5PpmP2V0aQyWjhfYMjnozYQ==
+# Fw0yNjExMjAxNjE3MzdaMC8GCSqGSIb3DQEJBDEiBCCAd51F1mYRaijabPfsumPA
+# smtLdRUhuiya0aI8c6chdzANBgkqhkiG9w0BAQEFAASCAgCKkLirNKmLtYRguUVV
+# V+NnYy/WvJu2MECIeJKZeoSR/1Lx5us6+q9vQRCfHctrTsQvufQFNVqrLO1PXmQz
+# CDjXVtoBLHN40Zg1vMDC8V8GTYvoPuzo51f857ITY9M7+fgnihEeuv4FuKndUMgs
+# H20AQCQzI8CelorFWvUUHA43pHtqwmHDRNOgbIa7silpd70hgAYexzQhExVGDRfc
+# 0BE0VjcDhGtUokaz8pR/WoCnW18RKxRu/r5LFjugDabXsNgDtU+OtAIIVOa48ZGM
+# jqqpH5Ne0Xd5+Z32IQgS21suuoIokrlyaUN3Hq/R/nzuKUAxL/SFv0wXBUUtd2mW
+# L5aaJJD9QvEKxpz+UjLib0/iwzjZlOvRk5euxL8G5/pXILQwtcMTWpAC0S+Vw++6
+# nvdxsKW7J/EFYcwjzBDAbdV9kzDeATKmBySSPqEwd+PuCv8PA7vy3wKcy6PPmagI
+# 2X04AWW7JLbSjXD+1r4m56r8m4FZN4q85Rrv0HZO+1mbQxnyMGZA++SrqoWLoGdo
+# q7YlS9VSEBn30/yloBwTivDisYNUrh0o0Td+28XFNELD+SzTSThH5n1xqfUo/+wC
+# uFPSJkbx9hrAmF9U1OeKRmtNm0sl0ay7d1xA967xNUXwFra2i/jErAJ2Sa229sB9
+# RUHvUvx51k2BtCiAR4BvnUu+5A==
 # SIG # End signature block
