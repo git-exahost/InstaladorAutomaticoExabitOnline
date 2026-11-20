@@ -762,6 +762,36 @@ namespace InstallerGUI.Services
             return await Task.Run(new Func<bool>(() => CheckInternetConnectivity()));
         }
 
+        /// <summary>
+        /// Realiza teste de latência (ping) da conexão com a internet contra servidores DNS rápidos e confiáveis.
+        /// </summary>
+        /// <returns>String formatada com tempo de resposta em milissegundos e qualidade da conexão.</returns>
+        public async Task<string> MeasureInternetPingAsync()
+        {
+            return await Task.Run(new Func<string>(() =>
+            {
+                string[] targets = new string[] { "1.1.1.1", "8.8.8.8" };
+                using (var ping = new System.Net.NetworkInformation.Ping())
+                {
+                    foreach (var target in targets)
+                    {
+                        try
+                        {
+                            var reply = ping.Send(target, 1200);
+                            if (reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                            {
+                                string hostLabel = (target == "1.1.1.1") ? "Cloudflare DNS" : "Google DNS";
+                                string quality = reply.RoundtripTime < 50 ? "Excelente" : (reply.RoundtripTime < 120 ? "Bom" : "Alto");
+                                return string.Format("{0} ms ({1} - {2})", reply.RoundtripTime, hostLabel, quality);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                return "Tempo limite esgotado / Inacessível";
+            }));
+        }
+
         private static bool CheckInternetConnectivity()
         {
             if (TryHttpGetContains("http://www.msftconnecttest.com/connecttest.txt", "Microsoft Connect Test"))
@@ -1634,6 +1664,21 @@ namespace InstallerGUI.Services
         private async Task<string> ResolveAntigravityInstallerAsync(ProgramInfo program)
         {
             string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "Antigravity-x64.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 50000000)
+            {
+                Log("  Instalador do Antigravity pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://storage.googleapis.com/antigravity-public/antigravity-hub/2.33.0-4731201358004224/windows-x64/Antigravity-x64.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "Antigravity-x64.exe", program.DisplayName, 50000000);
+        }
+
+        private async Task<string> ResolveAntigravityIDEInstallerAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
             string destFile = Path.Combine(cacheDir, "Antigravity_IDE_setup.exe");
 
             if (File.Exists(destFile) && new FileInfo(destFile).Length > 50000000)
@@ -1997,6 +2042,51 @@ namespace InstallerGUI.Services
             return null;
         }
 
+        private async Task<string> ResolveCrystalDiskInfoAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "CrystalDiskInfo9_9_5.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 3000000)
+            {
+                Log("  Instalador do CrystalDiskInfo pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://downloads.sourceforge.net/project/crystaldiskinfo/9.9.5/CrystalDiskInfo9_9_5.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "CrystalDiskInfo9_9_5.exe", program.DisplayName, 3000000, false, "chocolatey/2.2.2");
+        }
+
+        private async Task<string> ResolveCrystalDiskMarkAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "CrystalDiskMark9_0_3.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 3000000)
+            {
+                Log("  Instalador do CrystalDiskMark pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://downloads.sourceforge.net/project/crystaldiskmark/9.0.3/CrystalDiskMark9_0_3.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "CrystalDiskMark9_0_3.exe", program.DisplayName, 3000000, false, "chocolatey/2.2.2");
+        }
+
+        private async Task<string> ResolveRecuvaAsync(ProgramInfo program)
+        {
+            string cacheDir = GetDownloadCacheDirectory();
+            string destFile = Path.Combine(cacheDir, "rcsetup155.exe");
+
+            if (File.Exists(destFile) && new FileInfo(destFile).Length > 5000000)
+            {
+                Log("  Instalador do Recuva pronto no cache.", ConsoleColor.Gray);
+                return destFile;
+            }
+
+            string downloadUrl = "https://download.ccleaner.com/rcsetup155.exe";
+            return await DownloadFileOnlineAsync(downloadUrl, "rcsetup155.exe", program.DisplayName, 5000000);
+        }
+
         private static string FindWingetExecutable()
         {
             try
@@ -2130,6 +2220,11 @@ namespace InstallerGUI.Services
                 return await ResolveAntigravityInstallerAsync(program);
             }
 
+            if (program.Id == "antigravityide")
+            {
+                return await ResolveAntigravityIDEInstallerAsync(program);
+            }
+
             if (program.Id == "nodejs")
             {
                 return await ResolveNodeJsInstallerAsync(program);
@@ -2188,6 +2283,21 @@ namespace InstallerGUI.Services
             if (program.Id == "deepseek")
             {
                 return await ResolveDeepSeekDesktopAsync(program);
+            }
+
+            if (program.Id == "crystaldiskinfo")
+            {
+                return await ResolveCrystalDiskInfoAsync(program);
+            }
+
+            if (program.Id == "crystaldiskmark")
+            {
+                return await ResolveCrystalDiskMarkAsync(program);
+            }
+
+            if (program.Id == "recuva")
+            {
+                return await ResolveRecuvaAsync(program);
             }
 
             if (!string.IsNullOrEmpty(program.DownloadUrl))
@@ -2354,13 +2464,42 @@ namespace InstallerGUI.Services
 
             if (program.Id == "antigravity")
             {
+                if (IsAntigravityInstalled())
+                {
+                    Log("[ok] Antigravity já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando Antigravity via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id Google.Antigravity -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsAntigravityInstalled())
+                {
+                    Log("[ok] Antigravity instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "antigravityide")
+            {
+                if (IsAntigravityIDEInstalled())
+                {
+                    Log("[ok] Antigravity IDE já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
                 Log("Instalando Antigravity IDE via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
                     "install --id Google.AntigravityIDE -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
-                if (wingetExit == 0)
+                if (wingetExit == 0 || IsAntigravityIDEInstalled())
                 {
                     Log("[ok] Antigravity IDE instalado com sucesso via winget.", ConsoleColor.Green);
                     return true;
@@ -2599,6 +2738,75 @@ namespace InstallerGUI.Services
                 Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
             }
 
+            if (program.Id == "crystaldiskinfo")
+            {
+                if (IsCrystalDiskInfoInstalled())
+                {
+                    Log("[ok] CrystalDiskInfo já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando CrystalDiskInfo via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id CrystalDewWorld.CrystalDiskInfo -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsCrystalDiskInfoInstalled())
+                {
+                    Log("[ok] CrystalDiskInfo instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "crystaldiskmark")
+            {
+                if (IsCrystalDiskMarkInstalled())
+                {
+                    Log("[ok] CrystalDiskMark já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando CrystalDiskMark via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id CrystalDewWorld.CrystalDiskMark -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsCrystalDiskMarkInstalled())
+                {
+                    Log("[ok] CrystalDiskMark instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
+            if (program.Id == "recuva")
+            {
+                if (IsRecuvaInstalled())
+                {
+                    Log("[ok] Recuva já está instalado no sistema.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("Instalando Recuva Free via Windows Package Manager...", ConsoleColor.Cyan);
+                string wingetExe = FindWingetExecutable();
+                int wingetExit = await RunProcessAsync(wingetExe,
+                    "install --id Piriform.Recuva -e --silent --accept-source-agreements --accept-package-agreements",
+                    1200000, null, false);
+
+                if (wingetExit == 0 || IsRecuvaInstalled())
+                {
+                    Log("[ok] Recuva Free instalado com sucesso via winget.", ConsoleColor.Green);
+                    return true;
+                }
+
+                Log("  Instalação via winget não foi concluída. Baixando instalador executável...", ConsoleColor.Yellow);
+            }
+
             string fullPath = await EnsureProgramDownloadedAsync(program);
             if (string.IsNullOrEmpty(fullPath) || !File.Exists(fullPath))
             {
@@ -2797,10 +3005,27 @@ namespace InstallerGUI.Services
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                         return true;
                     }
-                    else if (program.Id == "blender" && IsBlenderInstalled())
+                    else if (program.Id == "blender")
                     {
-                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
-                        return true;
+                        if (IsBlenderInstalled())
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                            return true;
+                        }
+                        Log(string.Format("  Blender retornou código {0}. Tentando instalação alternativa sem ALLUSERS...", exitCode), ConsoleColor.Yellow);
+                        int retryExit = await RunProcessAsync("msiexec",
+                            string.Format("/i \"{0}\" /qn /norestart", fullPath),
+                            timeout, procWorkDir);
+                        if (retryExit == 0 || retryExit == 3010 || IsBlenderInstalled())
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                            return true;
+                        }
+                        else
+                        {
+                            Log(string.Format("X {0} retornou código {1}.", program.DisplayName, retryExit), ConsoleColor.Yellow);
+                            return false;
+                        }
                     }
                     else if (program.Id == "gemini" && IsGeminiDesktopInstalled())
                     {
@@ -2823,6 +3048,31 @@ namespace InstallerGUI.Services
                         return true;
                     }
                     else if (program.Id == "easeustodo" && IsEaseUSTodoBackupInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "antigravity" && IsAntigravityInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "antigravityide" && IsAntigravityIDEInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "crystaldiskinfo" && IsCrystalDiskInfoInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "crystaldiskmark" && IsCrystalDiskMarkInstalled())
+                    {
+                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                        return true;
+                    }
+                    else if (program.Id == "recuva" && IsRecuvaInstalled())
                     {
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                         return true;
@@ -4288,6 +4538,219 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Verifica se o Antigravity (standalone) está instalado na máquina.
+        /// </summary>
+        private static bool IsAntigravityInstalled()
+        {
+            try
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\Antigravity\Antigravity.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"Antigravity\Antigravity.exe")))
+                    return true;
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"Antigravity\Antigravity.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Antigravity",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Antigravity"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Antigravity IDE está instalado na máquina.
+        /// </summary>
+        private static bool IsAntigravityIDEInstalled()
+        {
+            try
+            {
+                string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                if (File.Exists(Path.Combine(localApp, @"Programs\Antigravity IDE\Antigravity.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"Programs\Antigravity IDE\Antigravity IDE.exe")) ||
+                    File.Exists(Path.Combine(localApp, @"Antigravity IDE\Antigravity.exe")))
+                    return true;
+
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                if (File.Exists(Path.Combine(progFiles, @"Antigravity IDE\Antigravity.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var baseKey = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (baseKey != null)
+                        {
+                            foreach (string subKeyName in baseKey.GetSubKeyNames())
+                            {
+                                using (var subKey = baseKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("Antigravity IDE", StringComparison.OrdinalIgnoreCase) >= 0)
+                                            return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    using (var baseKey = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (baseKey != null)
+                        {
+                            foreach (string subKeyName in baseKey.GetSubKeyNames())
+                            {
+                                using (var subKey = baseKey.OpenSubKey(subKeyName))
+                                {
+                                    if (subKey != null)
+                                    {
+                                        string displayName = subKey.GetValue("DisplayName") as string;
+                                        if (!string.IsNullOrEmpty(displayName) && displayName.IndexOf("Antigravity IDE", StringComparison.OrdinalIgnoreCase) >= 0)
+                                            return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o CrystalDiskInfo está instalado na máquina.
+        /// </summary>
+        private static bool IsCrystalDiskInfoInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+                if (File.Exists(Path.Combine(progFiles, @"CrystalDiskInfo\DiskInfo64.exe")) ||
+                    File.Exists(Path.Combine(progFiles, @"CrystalDiskInfo\DiskInfo32.exe")) ||
+                    File.Exists(Path.Combine(progFilesX86, @"CrystalDiskInfo\DiskInfo32.exe")) ||
+                    File.Exists(Path.Combine(progFilesX86, @"CrystalDiskInfo\DiskInfo64.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CrystalDiskInfo_is1",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\CrystalDiskInfo_is1"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o CrystalDiskMark está instalado na máquina.
+        /// </summary>
+        private static bool IsCrystalDiskMarkInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+                if (File.Exists(Path.Combine(progFiles, @"CrystalDiskMark\DiskMark64.exe")) ||
+                    File.Exists(Path.Combine(progFiles, @"CrystalDiskMark\DiskMark32.exe")) ||
+                    File.Exists(Path.Combine(progFilesX86, @"CrystalDiskMark\DiskMark32.exe")) ||
+                    File.Exists(Path.Combine(progFilesX86, @"CrystalDiskMark\DiskMark64.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CrystalDiskMark_is1",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\CrystalDiskMark_is1"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Verifica se o Recuva está instalado na máquina.
+        /// </summary>
+        private static bool IsRecuvaInstalled()
+        {
+            try
+            {
+                string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string progFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+                if (File.Exists(Path.Combine(progFiles, @"Recuva\recuva64.exe")) ||
+                    File.Exists(Path.Combine(progFiles, @"Recuva\recuva.exe")) ||
+                    File.Exists(Path.Combine(progFilesX86, @"Recuva\recuva.exe")))
+                    return true;
+
+                string[] regKeys = new string[]
+                {
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Recuva",
+                    @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Recuva"
+                };
+                foreach (string keyPath in regKeys)
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                    using (var key = Registry.CurrentUser.OpenSubKey(keyPath))
+                    {
+                        if (key != null) return true;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
         /// Configura o RustDesk com o servidor próprio da EXABIT (rustdesk.exabit.com.br),
         /// chave pública, modos de permissão (senha temporária, aprovação do usuário e senha definitiva)
         /// e define a senha definitiva igual à senha informada para o usuário Admin.
@@ -4463,6 +4926,155 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Desinstala silenciosamente todos os jogos do computador (Xbox, Solitaire, jogos casuais da Microsoft e OEM),
+        /// removendo os pacotes AppX dos usuários e pacotes provisionados da imagem do sistema.
+        /// </summary>
+        public async Task UninstallAllGamesAsync()
+        {
+            Log("Desinstalando silenciosamente jogos e pacotes de jogos do Windows...", ConsoleColor.Yellow);
+
+            string psScript =
+                "$gamePatterns = @('*Solitaire*', '*Xbox*', '*GamingOverlay*', '*CandyCrush*', '*King.com*', '*BubbleWitch*', '*MarchofEmpires*', '*DisneyMagicKingdoms*', '*HiddenCity*', '*Roblox*', '*Minecraft*'); " +
+                "foreach ($pat in $gamePatterns) { " +
+                "    try { " +
+                "        $pkgs = Get-AppxPackage -AllUsers $pat -ErrorAction SilentlyContinue; " +
+                "        foreach ($p in $pkgs) { " +
+                "            Write-Host ('  Removendo pacote: ' + $p.Name); " +
+                "            Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction SilentlyContinue | Out-Null; " +
+                "        } " +
+                "        $prov = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $pat }; " +
+                "        foreach ($pr in $prov) { " +
+                "            Write-Host ('  Removendo provisionamento: ' + $pr.DisplayName); " +
+                "            Remove-AppxProvisionedPackage -Online -PackageName $pr.PackageName -ErrorAction SilentlyContinue | Out-Null; " +
+                "        } " +
+                "    } catch {} " +
+                "}";
+
+            int exitCode = await RunProcessAsync("powershell",
+                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"{0}\"", psScript),
+                180000, null, false);
+
+            if (exitCode == 0)
+            {
+                Log("[ok] Jogos e pacotes recreativos removidos com sucesso.", ConsoleColor.Green);
+            }
+            else
+            {
+                Log("Aviso: Remoção de jogos finalizada com código " + exitCode, ConsoleColor.Yellow);
+            }
+
+            await Task.Delay(300);
+        }
+
+        /// <summary>
+        /// Remove e apaga com segurança todos os perfis de usuário do Windows,
+        /// preservando perfis de sistema (Default, Public, SYSTEM), a conta atual em execução
+        /// e os novos perfis configurados para criação (Admin e usuário padrão).
+        /// </summary>
+        public async Task RemoveOtherUserProfilesAsync(string keepUser1 = null, string keepUser2 = null)
+        {
+            Log("Removendo e limpando perfis antigos do Windows...", ConsoleColor.Yellow);
+
+            string currentLoggedUser = Environment.UserName;
+            string k1 = string.IsNullOrEmpty(keepUser1) ? "" : keepUser1;
+            string k2 = string.IsNullOrEmpty(keepUser2) ? "" : keepUser2;
+
+            string psScript = string.Format(
+                "$keepList = @('{0}', '{1}', '{2}', 'Administrator', 'Administrador', 'DefaultAccount', 'Guest', 'Convidado', 'WDAGUtilityAccount'); " +
+                "$systemSids = @('S-1-5-18', 'S-1-5-19', 'S-1-5-20'); " +
+                "Get-CimInstance Win32_UserProfile | ForEach-Object {{ " +
+                "    $sid = $_.SID; " +
+                "    $path = $_.LocalPath; " +
+                "    $leaf = Split-Path -Leaf $path; " +
+                "    if ($_.Special -or ($systemSids -contains $sid) -or ($path -match '(?i)Default|Public|All Users')) {{ return; }} " +
+                "    $matched = $false; " +
+                "    foreach ($k in $keepList) {{ if ($k -and ($leaf -like $k)) {{ $matched = $true; break; }} }} " +
+                "    if (-not $matched) {{ " +
+                "        try {{ " +
+                "            Write-Host ('  Removendo perfil antigo: ' + $path); " +
+                "            Remove-CimInstance -InputObject $_ -ErrorAction Stop; " +
+                "        }} catch {{ " +
+                "            Write-Host ('  Falha ao remover perfil ' + $path + ': ' + $_.Exception.Message); " +
+                "        }} " +
+                "    }} " +
+                "}}",
+                currentLoggedUser, k1, k2);
+
+            int exitCode = await RunProcessAsync("powershell",
+                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"{0}\"", psScript),
+                180000, null, false);
+
+            if (exitCode == 0)
+            {
+                Log("[ok] Limpeza de perfis de usuário do Windows concluída.", ConsoleColor.Green);
+            }
+            else
+            {
+                Log("Aviso: Limpeza de perfis finalizada com código " + exitCode, ConsoleColor.Yellow);
+            }
+
+            await Task.Delay(300);
+        }
+
+        /// <summary>
+        /// Desinstala silenciosamente antivírus de terceiros instalados (McAfee, Avast, AVG, Norton, etc.)
+        /// e assegura que o Microsoft Defender permaneça ativo e operacional.
+        /// </summary>
+        public async Task UninstallThirdPartyAntivirusAsync()
+        {
+            Log("Verificando e desinstalando silenciosamente antivírus de terceiros...", ConsoleColor.Yellow);
+
+            string psScript =
+                "$avKeywords = @('McAfee', 'Avast', 'AVG', 'Norton', 'Kaspersky', 'Bitdefender', 'ESET', 'TotalAV', 'Avira', 'Malwarebytes', 'Webroot', 'Trend Micro', 'Sophos', 'Baidu'); " +
+                "$regPaths = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'); " +
+                "foreach ($p in $regPaths) { " +
+                "    if (Test-Path $p) { " +
+                "        Get-ChildItem -Path $p -ErrorAction SilentlyContinue | ForEach-Object { " +
+                "            $dn = $_.GetValue('DisplayName'); " +
+                "            $quiet = $_.GetValue('QuietUninstallString'); " +
+                "            $uninst = $_.GetValue('UninstallString'); " +
+                "            if ($dn) { " +
+                "                foreach ($kw in $avKeywords) { " +
+                "                    if ($dn -match ('(?i)' + [regex]::Escape($kw))) { " +
+                "                        Write-Host ('  Localizado antivirus de terceiro: ' + $dn); " +
+                "                        try { " +
+                "                            if ($quiet) { " +
+                "                                Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $quiet) -Wait -WindowStyle Hidden; " +
+                "                            } elseif ($uninst) { " +
+                "                                if ($uninst -match 'msiexec') { " +
+                "                                    $msiArgs = $uninst -replace '(?i)/I', '/X' + ' /qn /norestart'; " +
+                "                                    Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $msiArgs) -Wait -WindowStyle Hidden; " +
+                "                                } else { " +
+                "                                    Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $uninst + ' /SILENT /VERYSILENT /SUPPRESSMSGBOXES /NORESTART') -Wait -WindowStyle Hidden; " +
+                "                                } " +
+                "                            } " +
+                "                        } catch {} " +
+                "                    } " +
+                "                } " +
+                "            } " +
+                "        } " +
+                "    } " +
+                "} " +
+                "try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; } catch {}; " +
+                "try { Start-Service WinDefend -ErrorAction SilentlyContinue; } catch {}";
+
+            int exitCode = await RunProcessAsync("powershell",
+                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"{0}\"", psScript),
+                300000, null, false);
+
+            if (exitCode == 0)
+            {
+                Log("[ok] Antivírus de terceiros desinstalados e Microsoft Defender verificado.", ConsoleColor.Green);
+            }
+            else
+            {
+                Log("Aviso: Rotina de desinstalação de antivírus finalizada com código " + exitCode, ConsoleColor.Yellow);
+            }
+
+            await Task.Delay(300);
+        }
+
+        /// <summary>
         /// Executa a instalação completa em sequência: renomear PC, criar usuários,
         /// wallpaper e instalar todos os programas selecionados.
         /// </summary>
@@ -4471,6 +5083,9 @@ namespace InstallerGUI.Services
         {
             // Calcula o total de etapas para a barra de progresso
             int totalSteps = 0;
+            if (options.UninstallGames) totalSteps++;
+            if (options.UninstallThirdPartyAntivirus) totalSteps++;
+            if (options.RemoveOtherUserProfiles) totalSteps++;
             if (options.RenameComputer) totalSteps++;
             if (options.CreateAdmin) totalSteps++;
             if (options.CreateStandardUser) totalSteps++;
@@ -4487,6 +5102,51 @@ namespace InstallerGUI.Services
             try
             {
                 await EnsureGlobalPasswordNeverExpiresPolicyAsync();
+
+                // ─── FASE 0: Funcionalidades Preliminares de Limpeza e Preparação do Sistema ───
+
+                // 0.1 Desinstalar silenciosamente todos os jogos (Xbox, Solitaire, casuais)
+                if (!cancelled && options.UninstallGames)
+                {
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        cancelled = true;
+
+                    if (!cancelled)
+                    {
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        await UninstallAllGamesAsync();
+                    }
+                }
+
+                // 0.2 Desinstalar silenciosamente antivírus de terceiros
+                if (!cancelled && options.UninstallThirdPartyAntivirus)
+                {
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        cancelled = true;
+
+                    if (!cancelled)
+                    {
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        await UninstallThirdPartyAntivirusAsync();
+                    }
+                }
+
+                // 0.3 Remover e apagar perfis antigos do Windows
+                if (!cancelled && options.RemoveOtherUserProfiles)
+                {
+                    if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
+                        cancelled = true;
+
+                    if (!cancelled)
+                    {
+                        currentStep++;
+                        ReportProgress(currentStep, totalSteps);
+                        string newStdUser = options.CreateStandardUser ? options.StandardUserName : null;
+                        await RemoveOtherUserProfilesAsync(newStdUser, "Admin");
+                    }
+                }
 
                 // 1. Renomear computador
                 if (!cancelled && options.RenameComputer && !string.IsNullOrWhiteSpace(options.ComputerName))
@@ -5049,6 +5709,21 @@ namespace InstallerGUI.Services
         public bool SetWallpaper { get; set; }
         public bool SetWallpaperNortel { get; set; }
         public bool EnableLocationServices { get; set; }
+
+        /// <summary>
+        /// Se true, desinstala silenciosamente todos os jogos do computador (Xbox, Solitaire, etc.) antes das instalações.
+        /// </summary>
+        public bool UninstallGames { get; set; }
+
+        /// <summary>
+        /// Se true, remove e apaga perfis antigos do Windows preservando apenas contas de sistema e as criadas aqui.
+        /// </summary>
+        public bool RemoveOtherUserProfiles { get; set; }
+
+        /// <summary>
+        /// Se true, desinstala silenciosamente qualquer antivírus de terceiros (McAfee, Avast, AVG, etc.) antes das instalações.
+        /// </summary>
+        public bool UninstallThirdPartyAntivirus { get; set; }
 
         /// <summary>
         /// Se true, limpa todos os atalhos das áreas de trabalho no final de todas as instalações.

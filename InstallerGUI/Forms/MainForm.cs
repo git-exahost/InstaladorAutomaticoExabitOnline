@@ -55,6 +55,9 @@ namespace InstallerGUI.Forms
         private CheckBox _chkCleanDesktop;
         private CheckBox _chkWallpaper;
         private CheckBox _chkWallpaperNortel;
+        private CheckBox _chkUninstallGames;
+        private CheckBox _chkRemoveOtherProfiles;
+        private CheckBox _chkUninstallThirdPartyAntivirus;
         private CheckBox _chkShortcutSuporteExabit;
         private CheckBox _chkShortcutExabit;
         private CheckBox _chkShortcutExahost;
@@ -78,10 +81,12 @@ namespace InstallerGUI.Forms
         private Button _btnTabConfig;
         private Button _btnTabShortcuts;
         private Button _btnTabOptions;
+        private Button _btnTabFeatures;
         private Panel _pnlTabContent;
         private Panel _pnlTabConfig;
         private Panel _pnlTabShortcuts;
         private Panel _pnlTabOptions;
+        private Panel _pnlTabFeatures;
         private int _currentTabIndex;
 
         // ──────────────────────────────────────────────
@@ -413,15 +418,16 @@ namespace InstallerGUI.Forms
             var tabHeader = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
-                ColumnCount = 3,
+                ColumnCount = 4,
                 RowCount = 1,
                 BackColor = Color.FromArgb(32, 32, 32),
                 Margin = new Padding(0, 0, 0, (int)(4 * scale)),
                 Padding = Padding.Empty,
             };
-            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18f));
             tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24f));
-            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36f));
+            tabHeader.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 26f));
             tabHeader.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             // Aba 1: Configurações do Sistema
@@ -435,6 +441,10 @@ namespace InstallerGUI.Forms
             // Aba 3: Opções do Windows
             _btnTabOptions = CreateTabHeaderButton("Opções do Windows", 2, scale);
             tabHeader.Controls.Add(_btnTabOptions, 2, 0);
+
+            // Aba 4: Funcionalidades
+            _btnTabFeatures = CreateTabHeaderButton("Funcionalidades", 3, scale);
+            tabHeader.Controls.Add(_btnTabFeatures, 3, 0);
 
             mainLayout.Controls.Add(tabHeader, 0, 0);
 
@@ -450,10 +460,12 @@ namespace InstallerGUI.Forms
             _pnlTabConfig = BuildTabConfigContent(scale);
             _pnlTabShortcuts = BuildTabShortcutsContent(scale);
             _pnlTabOptions = BuildTabOptionsContent(scale);
+            _pnlTabFeatures = BuildTabFeaturesContent(scale);
 
             _pnlTabContent.Controls.Add(_pnlTabConfig);
             _pnlTabContent.Controls.Add(_pnlTabShortcuts);
             _pnlTabContent.Controls.Add(_pnlTabOptions);
+            _pnlTabContent.Controls.Add(_pnlTabFeatures);
 
             mainLayout.Controls.Add(_pnlTabContent, 0, 1);
             container.Controls.Add(mainLayout);
@@ -541,14 +553,21 @@ namespace InstallerGUI.Forms
                 _pnlTabOptions.Visible = (index == 2);
                 if (index == 2) _pnlTabOptions.BringToFront();
             }
+            if (_pnlTabFeatures != null)
+            {
+                _pnlTabFeatures.Visible = (index == 3);
+                if (index == 3) _pnlTabFeatures.BringToFront();
+            }
 
             UpdateTabButtonStyle(_btnTabConfig, index == 0);
             UpdateTabButtonStyle(_btnTabShortcuts, index == 1);
             UpdateTabButtonStyle(_btnTabOptions, index == 2);
+            UpdateTabButtonStyle(_btnTabFeatures, index == 3);
 
             if (_btnTabConfig != null) _btnTabConfig.Invalidate();
             if (_btnTabShortcuts != null) _btnTabShortcuts.Invalidate();
             if (_btnTabOptions != null) _btnTabOptions.Invalidate();
+            if (_btnTabFeatures != null) _btnTabFeatures.Invalidate();
         }
 
         /// <summary>
@@ -736,6 +755,53 @@ namespace InstallerGUI.Forms
                 TextAlign = ContentAlignment.MiddleLeft,
             };
             tbl.Controls.Add(lblHint, 0, 4);
+
+            pnl.Controls.Add(tbl);
+            return pnl;
+        }
+
+        /// <summary>
+        /// Conteúdo da Aba 4: Funcionalidades (Remoção de jogos, limpeza de perfis e remoção de antivírus).
+        /// </summary>
+        private Panel BuildTabFeaturesContent(float scale)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+                Padding = new Padding((int)(16 * scale), (int)(12 * scale), (int)(16 * scale), (int)(8 * scale)),
+            };
+
+            var tbl = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = CorPainel,
+            };
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 16f));
+
+            _chkUninstallGames = CreateCheckBox("Desinstalar silenciosamente todos os jogos do computador", false);
+            _chkRemoveOtherProfiles = CreateCheckBox("Remover e apagar todos os perfis do Windows (exceto novos)", false);
+            _chkUninstallThirdPartyAntivirus = CreateCheckBox("Desinstalar silenciosamente todo e qualquer antivírus de terceiros", false);
+
+            tbl.Controls.Add(_chkUninstallGames, 0, 0);
+            tbl.Controls.Add(_chkRemoveOtherProfiles, 0, 1);
+            tbl.Controls.Add(_chkUninstallThirdPartyAntivirus, 0, 2);
+
+            var lblHint = new Label
+            {
+                Text = "Estas ações preliminares serão executadas primeiro, antes de qualquer instalação.",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                ForeColor = Color.FromArgb(160, 160, 160),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            tbl.Controls.Add(lblHint, 0, 3);
 
             pnl.Controls.Add(tbl);
             return pnl;
@@ -1344,6 +1410,9 @@ namespace InstallerGUI.Forms
                 options.CleanDesktopShortcuts = _chkCleanDesktop.Checked;
                 options.SetWallpaper = _chkWallpaper.Checked;
                 options.SetWallpaperNortel = _chkWallpaperNortel.Checked;
+                options.UninstallGames = _chkUninstallGames != null && _chkUninstallGames.Checked;
+                options.RemoveOtherUserProfiles = _chkRemoveOtherProfiles != null && _chkRemoveOtherProfiles.Checked;
+                options.UninstallThirdPartyAntivirus = _chkUninstallThirdPartyAntivirus != null && _chkUninstallThirdPartyAntivirus.Checked;
 
                 // ─── Atalhos corporativos ───
                 options.CreateDesktopShortcutSuporteExabit = _chkShortcutSuporteExabit.Checked;
@@ -1522,16 +1591,43 @@ namespace InstallerGUI.Forms
             if (hasInternet)
             {
                 AppendLog("Status de conexão  : Conectado à Internet", ConsoleColor.Green);
+                string pingInfo = await _service.MeasureInternetPingAsync();
+                AppendLog(string.Format("Teste de Ping      : {0}", pingInfo), ConsoleColor.Cyan);
             }
             else
             {
                 AppendLog("Status de conexão  : Desconectado da Internet", ConsoleColor.Yellow);
             }
 
+            string diskSpace = GetSystemDriveFreeSpaceInfo();
+            AppendLog(string.Format("Espaço livre em C: : {0}", diskSpace), ConsoleColor.Gray);
+
             string winVer = GetWindowsVersionInfo();
             AppendLog(string.Format("Versão do Windows  : {0}", winVer), ConsoleColor.Gray);
             AppendLog("======================================================================\n", ConsoleColor.Cyan);
             AppendLog("Pronto para iniciar. Configure as opções e selecione os programas desejados.\n", ConsoleColor.Gray);
+        }
+
+        /// <summary>
+        /// Obtém o espaço total e livre da unidade de sistema (C:).
+        /// </summary>
+        private static string GetSystemDriveFreeSpaceInfo()
+        {
+            try
+            {
+                string sysDrive = Path.GetPathRoot(Environment.SystemDirectory);
+                if (string.IsNullOrEmpty(sysDrive)) sysDrive = "C:\\";
+                var drive = new DriveInfo(sysDrive);
+                if (drive.IsReady)
+                {
+                    double freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                    double totalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
+                    double percentFree = (totalGb > 0) ? (freeGb / totalGb * 100.0) : 0.0;
+                    return string.Format("{0:N1} GB livres de {1:N1} GB ({2:N0}% livre)", freeGb, totalGb, percentFree);
+                }
+            }
+            catch { }
+            return "Não disponível";
         }
 
         /// <summary>
@@ -1935,10 +2031,11 @@ namespace InstallerGUI.Forms
         /// <summary>
         /// Retorna a lista de programas padrão disponíveis para instalação organizados em categorias:
         /// 1. Programas corporativos padrão (Geral)
-        /// 2. Suíte Criativa ArtCraft (Storytold)
-        /// 3. Vetorização Automática (TraceDraw)
-        /// 4. Ferramentas para Desenvolvimento (VSCode, Antigravity, Node.js, FileZilla, DBeaver)
-        /// 5. Criação 3D, Design e Edição Multimídia (Blender, Affinity)
+        /// 2. Manutenção e Recuperação (CrystalDisk, EaseUS, Recuva)
+        /// 3. Inteligência Artificial (ChatGPT, Claude, DeepSeek, Gemini)
+        /// 4. Suíte Criativa ArtCraft (Storytold)
+        /// 5. Ferramentas para Desenvolvimento (Antigravity, Antigravity IDE, VSCode, Node.js, FileZilla, DBeaver)
+        /// 6. Criação 3D, Design e Edição Multimídia (Affinity, Blender, TraceDraw)
         /// </summary>
         private static List<ProgramInfo> GetDefaultProgramList()
         {
@@ -1950,7 +2047,6 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("dwgtrueview", "Autodesk DWG TrueView",          "Setup.exe",                            "-q --noeula", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true },
                 new ProgramInfo("brave",       "Brave Browser",                  "BraveBrowserSetup.exe",                "/silent /install", "", "Geral"),
                 new ProgramInfo("citrix",      "Citrix Workspace",               "CitrixWorkspaceFullInstaller_x64.exe", "/silent /noreboot", "", "Geral"),
-                new ProgramInfo("easeustodo",  "EaseUS Todo Backup Free",        "tb_free.exe",                          "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES", "", "Geral") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("chrome",      "Google Chrome",                  "googlechromestandaloneenterprise64.msi", "/qn /norestart", "", "Geral"),
                 new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1", "", "Geral"),
                 new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s", "", "Geral"),
@@ -1962,6 +2058,15 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("winrar",      "WinRAR",                         "winrar.exe",                           "/S", "", "Geral"),
             };
             standardList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
+
+            var manutencaoList = new List<ProgramInfo>
+            {
+                new ProgramInfo("crystaldiskinfo", "CrystalDiskInfo",         "CrystalDiskInfo9_9_5.exe", "/VERYSILENT /NORESTART /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("crystaldiskmark", "CrystalDiskMark",         "CrystalDiskMark9_0_3.exe", "/VERYSILENT /NORESTART /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("easeustodo",      "EaseUS Todo Backup Free", "tb_free.exe",              "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",  "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("recuva",          "Recuva Free",             "rcsetup155.exe",           "/S",                                        "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+            };
+            manutencaoList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
             var craftList = new List<ProgramInfo>
             {
@@ -1981,24 +2086,21 @@ namespace InstallerGUI.Forms
             };
             craftList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
-            var traceDrawList = new List<ProgramInfo>
-            {
-                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup-x64.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-", "", "TraceDraw") { RequiresInternet = true, DefaultChecked = false },
-            };
-
             var devList = new List<ProgramInfo>
             {
-                new ProgramInfo("vscode",      "Visual Studio Code", "VSCodeSetup_x64.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("antigravity", "Antigravity IDE",    "Antigravity_IDE.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("nodejs",      "Node.js LTS",        "node_lts_x64.msi",    "/qn /norestart",                                  "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("filezilla",   "FileZilla Client",   "FileZilla_setup.exe", "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("dbeaver",     "DBeaver Community",  "dbeaver_setup.exe",   "/S /allusers",                                    "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("antigravity",    "Antigravity",         "Antigravity-x64.exe", "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("antigravityide", "Antigravity IDE",     "Antigravity_IDE.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("vscode",         "Visual Studio Code",  "VSCodeSetup_x64.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("nodejs",         "Node.js LTS",         "node_lts_x64.msi",    "/qn /norestart",                                  "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("filezilla",      "FileZilla Client",    "FileZilla_setup.exe", "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("dbeaver",        "DBeaver Community",   "dbeaver_setup.exe",   "/S /allusers",                                    "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var mediaList = new List<ProgramInfo>
             {
-                new ProgramInfo("blender",  "Blender (3D e Criação)",      "blender.msi",   "/qn /norestart ALLUSERS=1", "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("affinity", "Affinity Studio (Português)", "Affinity.msix", "",                          "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("affinity",  "Affinity Studio (Português)",        "Affinity.msix",            "",                                            "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("blender",   "Blender (3D e Criação)",             "blender.msi",              "/qn /norestart ALLUSERS=1",                   "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup-x64.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-", "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var aiList = new List<ProgramInfo>
@@ -2011,18 +2113,18 @@ namespace InstallerGUI.Forms
             aiList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
             var list = new List<ProgramInfo>();
-            // 1. Programas corporativos padrão
+            // 1. Programas corporativos padrão (Geral)
             list.AddRange(standardList);
-            // 2. Inteligência Artificial
+            // 2. Manutenção
+            list.AddRange(manutencaoList);
+            // 3. Inteligência Artificial
             list.AddRange(aiList);
-            // 3. ArtCraft Studio como primeiro item da seção ArtCraft, seguido pelos apps Craft em ordem alfabética
+            // 4. ArtCraft Studio e apps Craft
             list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S", "", "ArtCraft") { DefaultChecked = false });
             list.AddRange(craftList);
-            // 3. TraceDraw
-            list.AddRange(traceDrawList);
-            // 4. Desenvolvimento
+            // 5. Desenvolvimento
             list.AddRange(devList);
-            // 5. Design & Multimídia
+            // 6. Design & Multimídia
             list.AddRange(mediaList);
 
             return list;

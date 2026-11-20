@@ -6,6 +6,10 @@ InstallerGUI/obj/
 dist/build_info.txt
 dist/install.exe
 dist/install.exe.config
+dist/Instalador Automatico Exabit.exe
+dist/Instalador Automatico Exabit.exe.config
+dist/*.exe
+dist/*.exe.config
 *.old
 
 # Binary installers (distributed via release, not git)

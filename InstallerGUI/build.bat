@@ -19,9 +19,13 @@ echo.
 REM Cria diretÃ³rio de saÃ­da se nÃ£o existir
 if not exist "bin\Release" mkdir "bin\Release"
 
+REM Limpa executavel antigo de nome legado se existir
+if exist "..\dist\install.exe" del /f /q "..\dist\install.exe" >nul 2>nul
+if exist "..\dist\install.exe.config" del /f /q "..\dist\install.exe.config" >nul 2>nul
+
 REM Compila todos os arquivos .cs
 %CSC% /target:winexe ^
-      /out:..\dist\install.exe ^
+      /out:"..\dist\Instalador Automatico Exabit.exe" ^
       /win32manifest:app.manifest ^
       /platform:anycpu ^
       /highentropyva+ ^
@@ -54,17 +58,17 @@ if %errorlevel% equ 0 (
     echo.
 
     REM Copia tambem para bin\Release
-    copy /Y "..\dist\install.exe" "bin\Release\install.exe" >nul 2>nul
+    copy /Y "..\dist\Instalador Automatico Exabit.exe" "bin\Release\Instalador Automatico Exabit.exe" >nul 2>nul
 
     REM Copia o arquivo de configuracao DPI (.config)
     if exist "app.config" (
-        copy /Y "app.config" "bin\Release\install.exe.config" >nul
-        copy /Y "app.config" "..\dist\install.exe.config" >nul
+        copy /Y "app.config" "bin\Release\Instalador Automatico Exabit.exe.config" >nul
+        copy /Y "app.config" "..\dist\Instalador Automatico Exabit.exe.config" >nul
     )
 
 
-    echo Destino: ..\dist\install.exe
-    for %%I in ("..\dist\install.exe") do echo Tamanho: %%~zI bytes
+    echo Destino: ..\dist\Instalador Automatico Exabit.exe
+    for %%I in ("..\dist\Instalador Automatico Exabit.exe") do echo Tamanho: %%~zI bytes
     echo.
     echo %DATE% %TIME% > "..\dist\build_info.txt"
 
@@ -81,6 +85,6 @@ if %errorlevel% equ 0 (
 )
 
 echo.
-echo Para executar: dist\install.exe
+echo Para executar: "dist\Instalador Automatico Exabit.exe"
 echo.
 pause

@@ -7,6 +7,30 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.71] - 2026-11-19
+
+### Adicionado
+- **Renomeação do Executável Principal**:
+  - Binário final de distribuição atualizado de `install.exe` para `Instalador Automatico Exabit.exe`.
+  - Scripts de compilação (`build.bat`) e assinatura digital Authenticode (`sign.ps1`) adaptados para o novo nome do executável e limpeza automática de binários antigos legados.
+- **Diagnóstico do Sistema Aprimorado**:
+  - Adicionado teste de latência (ping) da internet medido em milissegundos contra DNS de alta performance (Cloudflare/Google) em "Informações do Sistema".
+  - Adicionada exibição do espaço livre e total da unidade de sistema (`C:`), incluindo percentual disponível.
+  - Alinhamento de rótulos perfeitamente uniforme no log de diagnóstico inicial.
+- **Nova Aba "Funcionalidades" (Ações Preliminares Executadas Antes das Instalações)**:
+  - Checkbox para **Desinstalar silenciosamente todos os jogos do computador** (Xbox, Solitaire, jogos casuais da Microsoft e OEM via remoção de pacotes AppX e provisionamento de imagem).
+  - Checkbox para **Remover e apagar todos os perfis do Windows** (exceto contas de sistema essenciais, a conta do operador logado e as novas contas configuradas para criação).
+  - Checkbox para **Desinstalar silenciosamente todo e qualquer antivírus de terceiros** (McAfee, Avast, AVG, Norton, etc.) garantindo o Microsoft Defender ativo e operacional.
+  - As funcionalidades selecionadas rodam na **Fase 0**, antes de qualquer instalação de programa ou criação de conta.
+- **Novos Programas e Reorganização de Categorias**:
+  - **Manutenção**: Criada categoria dedicada contendo `EaseUS Todo Backup Free`, `CrystalDiskInfo`, `CrystalDiskMark` e `Recuva Free` com download online e detecção completa.
+  - **Desenvolvimento**: Adicionado o **Antigravity** (standalone - `Google.Antigravity`) diretamente acima do **Antigravity IDE** (`Google.AntigravityIDE`).
+  - **Design & Multimídia**: Integrado o **TraceDraw** à categoria de multimídia ao lado de Blender e Affinity.
+- **Resiliência do Blender**:
+  - Implementado fallback automático na instalação do instalador MSI do Blender caso ocorra o código 1603 (executando nova tentativa sem restrição de `ALLUSERS`).
+
+---
+
 ## [2.0.0.70] - 2026-11-19
 
 ### Adicionado

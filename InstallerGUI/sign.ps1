@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$DistPath = "..\dist"
 )
 
@@ -30,8 +30,8 @@ try {
 
 # 3. Assina os executaveis
 $FilesToSign = @(
-    "bin\Release\install.exe",
-    (Join-Path $DistPath "install.exe")
+    "bin\Release\Instalador Automatico Exabit.exe",
+    (Join-Path $DistPath "Instalador Automatico Exabit.exe")
 )
 
 $timestampServer = "http://timestamp.digicert.com"
