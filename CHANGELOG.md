@@ -7,6 +7,27 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.86] - 2026-11-20
+
+### Adicionado
+- **Sistema de Design Visual EXABIT e Skill de Projeto**:
+  - Criada a skill oficial `.agents/skills/exabit-ui-design-system/SKILL.md` documentando todas as regras visuais, paleta de cores corporativa, tipografia, paddings, alturas de linha e convenções para novos painéis.
+  - Atualizado `AGENTS.md` com diretrizes permanentes de UI/UX para agentes de IA.
+
+### Aprimorado
+- **Atualização Dinâmica a Cada 3 Segundos**:
+  - Implementado timer de alta performance (`_metricsRefreshTimer` com intervalo de 3000ms) atualizando em tempo real o uso de memória RAM e espaço livre em disco em ambos os modos (compacto e expandido) sem travar a interface e sem chamadas WMI lentas (`GlobalMemoryStatusEx` e `DriveInfo.GetDrives()`).
+- **Ajuste de Proximidade na Barra de Memória RAM (Imagem 1)**:
+  - Adicionada terceira linha expansível no layout do card de hardware e fixada a altura do container de RAM para 32px, posicionando a barra de uso diretamente 4px abaixo do texto descritivo (idêntico ao padrão das barras de disco).
+- **Agrupamento de Labels e Campos de Entrada (Imagem 2)**:
+  - Reformulada a estrutura do card *DADOS DA MÁQUINA E CONTAS*: os rótulos agora se situam imediatamente acima dos campos de texto correspondentes (18px de label + 28px de textbox), eliminando vazios e agrupando as informações segundo as melhores práticas de design de formulários.
+- **Padding Interno no Terminal / Console de Log (Imagem 3)**:
+  - Implementado container `pnlTextWrapper` com padding interno de 8px ao redor do `RichTextBox`, afastando o texto das bordas duras da janela para uma leitura visualmente agradável e padrão terminal corporativo.
+- **Espaçamento Uniforme nas Abas (Atalhos, Opções e Funcionalidades)**:
+  - Padronizada a altura de todas as linhas de checkbox para exatamente **30px** e padding dos containers para `Padding(16, 12, 16, 8)` nas abas *Atalhos*, *Opções do Windows* e *Funcionalidades*, eliminando disparidades verticais.
+
+---
+
 ## [2.0.0.85] - 2026-11-20
 
 ### Aprimorado

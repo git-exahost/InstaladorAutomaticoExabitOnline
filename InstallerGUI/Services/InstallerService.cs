@@ -1400,6 +1400,63 @@ namespace InstallerGUI.Services
             }));
         }
 
+        /// <summary>
+        /// Atualiza rapidamente os dados dinâmicos de memória RAM e unidades de disco (execução instantânea sem WMI lento).
+        /// Ideal para timers de alta frequência periódicos (ex: a cada 3 segundos).
+        /// </summary>
+        public void UpdateDynamicMetrics(FullSystemDiagnosticInfo diag)
+        {
+            if (diag == null) return;
+
+            // 1. Atualiza dados de memória RAM instantaneamente via GlobalMemoryStatusEx (Win32)
+            try
+            {
+                var memStatus = new MEMORYSTATUSEX();
+                if (GlobalMemoryStatusEx(memStatus))
+                {
+                    diag.TotalRamGb = memStatus.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
+                    diag.FreeRamGb = memStatus.ullAvailPhys / (1024.0 * 1024.0 * 1024.0);
+                    diag.UsedRamGb = Math.Max(0, diag.TotalRamGb - diag.FreeRamGb);
+                    diag.RamUsagePercent = (double)memStatus.dwMemoryLoad;
+                }
+            }
+            catch { }
+
+            // 2. Atualiza dados de espaço em disco de todas as unidades fixas via DriveInfo (.NET nativo)
+            try
+            {
+                var allDrives = DriveInfo.GetDrives();
+                foreach (var drive in allDrives)
+                {
+                    if (drive.DriveType != DriveType.Fixed || !drive.IsReady) continue;
+
+                    string letter = drive.Name.TrimEnd('\\');
+                    var existing = diag.Drives.FirstOrDefault(d => d.DriveLetter.Equals(letter, StringComparison.OrdinalIgnoreCase));
+                    if (existing != null)
+                    {
+                        double totalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
+                        double freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                        double usedGb = Math.Max(0, totalGb - freeGb);
+                        double pctFree = totalGb > 0 ? (freeGb / totalGb * 100.0) : 0.0;
+                        double pctUsed = totalGb > 0 ? (usedGb / totalGb * 100.0) : 0.0;
+
+                        ConsoleColor color = ConsoleColor.Green;
+                        if (pctFree < 10.0 || freeGb < 15.0) color = ConsoleColor.Red;
+                        else if (pctFree < 20.0 || freeGb < 30.0) color = ConsoleColor.Yellow;
+
+                        existing.FreeGb = freeGb;
+                        existing.TotalGb = totalGb;
+                        existing.UsedGb = usedGb;
+                        existing.PercentFree = pctFree;
+                        existing.PercentUsed = pctUsed;
+                        existing.StatusText = string.Format("{0:N1} / {1:N1} GB ({2:N0}% livre)", freeGb, totalGb, pctFree);
+                        existing.StatusColor = color;
+                    }
+                }
+            }
+            catch { }
+        }
+
         private static bool CheckInternetConnectivity()
         {
             try

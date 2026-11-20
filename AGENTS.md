@@ -140,13 +140,41 @@ BtnInstall_Click()
 ## Cores do Tema (constantes em MainForm.cs)
 
 ```csharp
-CorFundo    = Color.FromArgb(30, 30, 30)    // fundo escuro
-CorPainel   = Color.FromArgb(40, 40, 40)    // painéis internos
-CorDestaque = Color.FromArgb(0, 180, 255)   // azul (títulos, links)
-CorSucesso  = Color.FromArgb(0, 200, 80)    // verde (log OK)
-CorTexto    = Color.White                    // texto principal
-CorInputBg  = Color.FromArgb(60, 60, 60)    // campos de texto
+CorFundo          = Color.FromArgb(30, 30, 30)    // fundo escuro (#1E1E1E)
+CorPainel         = Color.FromArgb(40, 40, 40)    // painéis internos e abas (#282828)
+CorDestaque       = Color.FromArgb(0, 180, 255)   // azul ciano (diagnóstico compacto, links)
+CorDestaqueLaranja= Color.FromArgb(255, 140, 0)   // laranja corporativo (títulos de cards, abas ativas)
+CorSucesso        = Color.FromArgb(0, 200, 80)    // verde (log OK, saudável)
+CorTexto          = Color.White                    // texto principal
+CorInputBg        = Color.FromArgb(60, 60, 60)    // campos de texto
 ```
+
+## Sistema de Design Visual e Padronização de Interface (UI/UX)
+
+O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seguir padrões rigorosos de design profissional, tipografia e espaçamento. Consulte também a skill `.agents/skills/exabit-ui-design-system/SKILL.md`.
+
+### 1. Espaçamento Padronizado de Abas (Atalhos, Opções, Funcionalidades)
+- **Padding do Painel da Aba**: `new Padding((int)(16 * scale), (int)(12 * scale), (int)(16 * scale), (int)(8 * scale))`
+- **Altura de Linha de Checkbox**: Rigorosamente **`30px`** por item (`new RowStyle(SizeType.Absolute, (int)(30 * scale))`). Nunca use porcentagens desiguais (como 25% ou 28%) que afastam os itens aleatoriamente.
+- **Linha de Dica / Legenda**: Altura fixa de **`24px`** (`new RowStyle(SizeType.Absolute, (int)(24 * scale))`).
+- **Espaçador Inferior**: A última linha da tabela deve ser sempre `new RowStyle(SizeType.Percent, 100f)` para absorver o espaço residual sem deformar os itens superiores.
+
+### 2. Formulários (Agrupamento Label + Input)
+- O rótulo (*label*) deve ficar **imediatamente acima** do seu campo de texto (*TextBox*), nunca separado por grandes vazios.
+- Padrão: Label de 18px (`Dock = Fill`, `Margin = Empty`), seguido diretamente do TextBox de 28px (`Dock = Fill`, `Margin = Empty`).
+- Distância inter-campos: Linhas de 50px no `TableLayoutPanel` com respiro sutil.
+
+### 3. Console de Log e Janelas de Processo (Terminal)
+- O `RichTextBox` deve possuir **padding interno de 8px** em relação às bordas (usando `pnlTextWrapper` com `Padding(8, 8, 4, 8)`), garantindo que o texto nunca encoste nas paredes da janela.
+
+### 4. Barras de Consumo / MiniUsageBar
+- Altura de 8px. Deve estar posicionada logo abaixo do texto descritivo (distância de 4px a 6px), nunca no rodapé de um painel esticado.
+
+### 5. Atualizações Periódicas e Timers
+- Métricas dinâmicas (Memória RAM e Espaço em Disco) devem ser atualizadas dinamicamente a cada **3 segundos** via APIs de alta performance (`GlobalMemoryStatusEx` e `DriveInfo.GetDrives()`), sem chamadas WMI lentas na thread de UI.
+
+### 6. Restrição de Janela
+- Largura mínima estrita de **700px** travada via `WM_GETMINMAXINFO` no `WndProc` e no `OnResize`.
 
 ## Considerações ao Modificar
 

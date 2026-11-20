@@ -47,6 +47,7 @@ namespace InstallerGUI.Forms
         private bool _installing;
         private bool _installationStarted;
         private System.Windows.Forms.Timer _connectionMonitorTimer;
+        private System.Windows.Forms.Timer _metricsRefreshTimer;
         private bool? _lastDetectedInternet;
         private string _lastDetectedIp;
         private bool _isUpdatingSystemInfo;
@@ -239,7 +240,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.85";
+            return "2.0.0.86";
         }
 
         // ──────────────────────────────────────────────
@@ -388,6 +389,12 @@ namespace InstallerGUI.Forms
                     _connectionMonitorTimer.Stop();
                     _connectionMonitorTimer.Dispose();
                     _connectionMonitorTimer = null;
+                }
+                if (_metricsRefreshTimer != null)
+                {
+                    _metricsRefreshTimer.Stop();
+                    _metricsRefreshTimer.Dispose();
+                    _metricsRefreshTimer = null;
                 }
                 System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
             }
@@ -804,6 +811,7 @@ namespace InstallerGUI.Forms
 
         /// <summary>
         /// Constrói o card esquerdo da Aba 1 com campos de nome da máquina, senha de admin e usuário padrão.
+        /// Estruturado com labels imediatamente acima de seus campos de texto (padrão de formulário UX/UI corporativo).
         /// </summary>
         private Panel BuildMachineAccountsCard(float scale)
         {
@@ -812,7 +820,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(32, 32, 32),
                 Margin = new Padding((int)(2 * scale), (int)(2 * scale), (int)(4 * scale), (int)(2 * scale)),
-                Padding = new Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale)),
+                Padding = new Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(10 * scale)),
             };
             pnlCard.Paint += (s, e) =>
             {
@@ -826,13 +834,16 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 4,
+                RowCount = 5,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale))); // Título
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f));              // Nome do computador
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.3f));              // Senha do Admin
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.4f));              // Usuário padrão e Senha
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(26 * scale))); // Título com respiro
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Nome do computador (Label + Input)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Senha do Admin (Label + Input)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Usuário padrão e Senha (Labels + Inputs)
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Espaçador inferior flexível
 
             var lblTitle = new Label
             {
@@ -841,88 +852,114 @@ namespace InstallerGUI.Forms
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 0, 0, (int)(4 * scale)),
             };
             layout.Controls.Add(lblTitle, 0, 0);
 
-            // 1. Nome do computador
-            var pnlComp = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            // 1. Nome do computador (Label imediatamente acima do TextBox)
+            var tblComp = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            tblComp.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
+            tblComp.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale)));
             var lblComp = new Label
             {
                 Text = "Nome do computador:",
                 ForeColor = Color.FromArgb(200, 200, 200),
                 Font = new Font("Segoe UI", 8.5f),
-                Dock = DockStyle.Top,
-                Height = (int)(16 * scale),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
             };
             _txtComputerName = CreateTextBox("Em branco = não renomear");
             _txtComputerName.Text = "";
-            _txtComputerName.Dock = DockStyle.Bottom;
-            pnlComp.Controls.Add(_txtComputerName);
-            pnlComp.Controls.Add(lblComp);
-            layout.Controls.Add(pnlComp, 0, 1);
+            _txtComputerName.Dock = DockStyle.Fill;
+            _txtComputerName.Margin = Padding.Empty;
+            tblComp.Controls.Add(lblComp, 0, 0);
+            tblComp.Controls.Add(_txtComputerName, 0, 1);
+            layout.Controls.Add(tblComp, 0, 1);
 
-            // 2. Senha do Admin
-            var pnlAdmin = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            // 2. Senha do Admin (Label imediatamente acima do TextBox)
+            var tblAdmin = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 2,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            tblAdmin.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
+            tblAdmin.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale)));
             var lblAdmin = new Label
             {
                 Text = "Senha do Admin:",
                 ForeColor = Color.FromArgb(200, 200, 200),
                 Font = new Font("Segoe UI", 8.5f),
-                Dock = DockStyle.Top,
-                Height = (int)(16 * scale),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
             };
             _txtAdminPass = CreateTextBox("Senha do admin");
             _txtAdminPass.Text = "";
-            _txtAdminPass.Dock = DockStyle.Bottom;
-            pnlAdmin.Controls.Add(_txtAdminPass);
-            pnlAdmin.Controls.Add(lblAdmin);
-            layout.Controls.Add(pnlAdmin, 0, 2);
+            _txtAdminPass.Dock = DockStyle.Fill;
+            _txtAdminPass.Margin = Padding.Empty;
+            tblAdmin.Controls.Add(lblAdmin, 0, 0);
+            tblAdmin.Controls.Add(_txtAdminPass, 0, 1);
+            layout.Controls.Add(tblAdmin, 0, 2);
 
-            // 3. Usuário padrão e Senha lado a lado
+            // 3. Usuário padrão e Senha lado a lado (Labels imediatamente acima dos TextBoxes)
             var tblUsers = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 1,
+                RowCount = 2,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
             tblUsers.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
             tblUsers.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            tblUsers.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            tblUsers.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
+            tblUsers.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale)));
 
-            var pnlStdUser = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding(0, 0, (int)(4 * scale), 0) };
             var lblStdUser = new Label
             {
                 Text = "Usuário padrão:",
                 ForeColor = Color.FromArgb(200, 200, 200),
                 Font = new Font("Segoe UI", 8.5f),
-                Dock = DockStyle.Top,
-                Height = (int)(16 * scale),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 0, (int)(4 * scale), 0),
             };
             _txtStandardUserName = CreateTextBox("Nome do usuário");
             _txtStandardUserName.Text = "";
-            _txtStandardUserName.Dock = DockStyle.Bottom;
-            pnlStdUser.Controls.Add(_txtStandardUserName);
-            pnlStdUser.Controls.Add(lblStdUser);
-            tblUsers.Controls.Add(pnlStdUser, 0, 0);
+            _txtStandardUserName.Dock = DockStyle.Fill;
+            _txtStandardUserName.Margin = new Padding(0, 0, (int)(4 * scale), 0);
+            tblUsers.Controls.Add(lblStdUser, 0, 0);
+            tblUsers.Controls.Add(_txtStandardUserName, 0, 1);
 
-            var pnlStdPass = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, Padding = new Padding((int)(4 * scale), 0, 0, 0) };
             var lblStdPass = new Label
             {
                 Text = "Senha do usuário:",
                 ForeColor = Color.FromArgb(200, 200, 200),
                 Font = new Font("Segoe UI", 8.5f),
-                Dock = DockStyle.Top,
-                Height = (int)(16 * scale),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding((int)(4 * scale), 0, 0, 0),
             };
             _txtStandardUserPass = CreateTextBox("Senha (opcional)");
             _txtStandardUserPass.Text = "";
-            _txtStandardUserPass.Dock = DockStyle.Bottom;
-            pnlStdPass.Controls.Add(_txtStandardUserPass);
-            pnlStdPass.Controls.Add(lblStdPass);
-            tblUsers.Controls.Add(pnlStdPass, 1, 0);
+            _txtStandardUserPass.Dock = DockStyle.Fill;
+            _txtStandardUserPass.Margin = new Padding((int)(4 * scale), 0, 0, 0);
+            tblUsers.Controls.Add(lblStdPass, 1, 0);
+            tblUsers.Controls.Add(_txtStandardUserPass, 1, 1);
 
             layout.Controls.Add(tblUsers, 0, 3);
 
@@ -1076,6 +1113,7 @@ namespace InstallerGUI.Forms
 
         /// <summary>
         /// Conteúdo da Aba 2: Atalhos corporativos da Área de Trabalho.
+        /// Espaçamento rigorosamente padronizado em 30px por linha de checkbox.
         /// </summary>
         private Panel BuildTabShortcutsContent(float scale)
         {
@@ -1083,21 +1121,26 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
-                Padding = new Padding((int)(12 * scale), (int)(8 * scale), (int)(12 * scale), (int)(6 * scale)),
+                Padding = new Padding((int)(16 * scale), (int)(12 * scale), (int)(16 * scale), (int)(8 * scale)),
             };
 
             var tbl = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 4,
+                RowCount = 5,
                 BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
 
-            for (int i = 0; i < 4; i++)
-                tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Espaçador inferior flexível
 
             // Coluna 0
             _chkShortcutSuporteExabit = CreateCheckBox("Atalho Suporte Exabit", false);
@@ -1128,6 +1171,7 @@ namespace InstallerGUI.Forms
 
         /// <summary>
         /// Conteúdo da Aba 3: Opções do Windows (Localização, restrição de senha e papel de parede).
+        /// Espaçamento rigorosamente padronizado em 30px por linha de checkbox.
         /// </summary>
         private Panel BuildTabOptionsContent(float scale)
         {
@@ -1142,16 +1186,19 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 7,
                 BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 10f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Espaçador inferior flexível
 
             _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", true);
             tbl.Controls.Add(_chkEnableLocation, 0, 0);
@@ -1203,6 +1250,7 @@ namespace InstallerGUI.Forms
 
         /// <summary>
         /// Conteúdo da Aba 4: Funcionalidades (Remoção de jogos, limpeza de perfis e remoção de antivírus).
+        /// Espaçamento rigorosamente padronizado em 30px por linha de checkbox.
         /// </summary>
         private Panel BuildTabFeaturesContent(float scale)
         {
@@ -1217,14 +1265,17 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 4,
+                RowCount = 5,
                 BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 16f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Espaçador inferior flexível
 
             _chkUninstallGames = CreateCheckBox("Desinstalar todos os jogos deste computador", false);
             _chkRemoveOtherProfiles = CreateCheckBox("Remover e apagar todos os perfis do Windows", false);
@@ -1586,15 +1637,16 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 2,
+                RowCount = 3,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale))); // 125px garante "Memória RAM:" em uma linha só sem quebrar
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale))); // Processador (2 linhas)
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(32 * scale))); // Memória RAM (texto + barra próxima, padrão idêntico ao disco)
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Espaçador inferior flexível
 
             var lblCpu = CreateDiagHeaderLabel("Processador:");
             lblCpu.TextAlign = ContentAlignment.TopLeft;
@@ -1630,7 +1682,7 @@ namespace InstallerGUI.Forms
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8.5f),
                 Dock = DockStyle.Top,
-                Height = (int)(20 * scale),
+                Height = (int)(18 * scale),
                 TextAlign = ContentAlignment.MiddleLeft,
                 UseMnemonic = false,
                 Margin = Padding.Empty,
@@ -2498,6 +2550,14 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
             };
 
+            var pnlTextWrapper = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(20, 20, 20),
+                Padding = new Padding((int)(8 * scale), (int)(8 * scale), (int)(4 * scale), (int)(8 * scale)),
+                Margin = Padding.Empty,
+            };
+
             _txtLog = new RichTextBox
             {
                 Dock = DockStyle.Fill,
@@ -2548,7 +2608,8 @@ namespace InstallerGUI.Forms
             _txtLog.Resize += (s, e) => SyncLogScrollBar();
             _txtLog.TextChanged += (s, e) => SyncLogScrollBar();
 
-            panel.Controls.Add(_txtLog);
+            pnlTextWrapper.Controls.Add(_txtLog);
+            panel.Controls.Add(pnlTextWrapper);
             panel.Controls.Add(_scrollBarLog);
             _scrollBarLog.BringToFront();
 
@@ -2668,6 +2729,10 @@ namespace InstallerGUI.Forms
             if (_connectionMonitorTimer != null)
             {
                 _connectionMonitorTimer.Stop();
+            }
+            if (_metricsRefreshTimer != null)
+            {
+                _metricsRefreshTimer.Stop();
             }
             _btnInstall.Enabled = false;
             _btnInstall.BackColor = Color.FromArgb(0, 75, 25);
@@ -2895,11 +2960,96 @@ namespace InstallerGUI.Forms
             _connectionMonitorTimer.Tick += ConnectionMonitorTimer_Tick;
             _connectionMonitorTimer.Start();
 
+            _metricsRefreshTimer = new System.Windows.Forms.Timer();
+            _metricsRefreshTimer.Interval = 3000;
+            _metricsRefreshTimer.Tick += MetricsRefreshTimer_Tick;
+            _metricsRefreshTimer.Start();
+
             try
             {
                 System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += OnNetworkAvailabilityChanged;
             }
             catch { }
+        }
+
+        private void MetricsRefreshTimer_Tick(object sender, EventArgs e)
+        {
+            if (_installing || _installationStarted || IsDisposed || _lastDiag == null) return;
+            try
+            {
+                _service.UpdateDynamicMetrics(_lastDiag);
+                RefreshDynamicMetricsViews(_lastDiag);
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Atualiza periodicamente a cada 3 segundos as métricas de uso de memória RAM e espaço em disco
+        /// na tela inicial e no painel expandido de diagnóstico sem congelar a interface.
+        /// </summary>
+        private void RefreshDynamicMetricsViews(FullSystemDiagnosticInfo diag)
+        {
+            if (diag == null || IsDisposed) return;
+
+            // 1. Atualiza Mini Bar de Disco C: no card compacto
+            if (_barDiagDisk != null && diag.Drives != null)
+            {
+                var cDrive = diag.Drives.FirstOrDefault(d => d.DriveLetter.Equals("C:", StringComparison.OrdinalIgnoreCase)) ?? diag.Drives.FirstOrDefault();
+                if (cDrive != null)
+                {
+                    _barDiagDisk.Percent = cDrive.PercentUsed;
+                    if (cDrive.PercentFree < 10.0 || cDrive.FreeGb < 15.0)
+                        _barDiagDisk.FillColor = Color.FromArgb(230, 50, 50);
+                    else if (cDrive.PercentFree < 20.0 || cDrive.FreeGb < 30.0)
+                        _barDiagDisk.FillColor = Color.FromArgb(240, 180, 0);
+                    else
+                        _barDiagDisk.FillColor = CorSucesso;
+                    _barDiagDisk.Invalidate();
+                }
+            }
+
+            // 2. Atualiza RAM na visão expandida
+            if (_lblExpRam != null)
+            {
+                _lblExpRam.Text = string.Format("{0} ({1:N1} GB em uso - {2:N0}%)", diag.RamSummary, diag.UsedRamGb, diag.RamUsagePercent);
+            }
+            if (_barExpRam != null)
+            {
+                _barExpRam.Percent = diag.RamUsagePercent;
+                _barExpRam.Invalidate();
+            }
+
+            // 3. Atualiza Discos na visão expandida se o painel estiver visível
+            if (_pnlExpandedDiagnostics != null && _pnlExpandedDiagnostics.Visible && _pnlStorageContent != null && diag.Drives != null)
+            {
+                int driveIndex = 0;
+                foreach (Control c in _pnlStorageContent.Controls)
+                {
+                    var panel = c as Panel;
+                    if (panel != null && driveIndex < diag.Drives.Count)
+                    {
+                        var drive = diag.Drives[driveIndex];
+                        foreach (Control inner in panel.Controls)
+                        {
+                            var lbl = inner as Label;
+                            if (lbl != null)
+                            {
+                                lbl.Text = string.Format("Disco {0} ({1}): {2}", drive.DriveLetter, drive.MediaType, drive.StatusText);
+                            }
+                            var bar = inner as MiniUsageBar;
+                            if (bar != null)
+                            {
+                                bar.Percent = drive.PercentUsed;
+                                bar.FillColor = (drive.StatusColor == ConsoleColor.Red)
+                                    ? Color.FromArgb(230, 50, 50)
+                                    : ((drive.StatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : CorSucesso);
+                                bar.Invalidate();
+                            }
+                        }
+                        driveIndex++;
+                    }
+                }
+            }
         }
 
         private void OnNetworkAvailabilityChanged(object sender, System.Net.NetworkInformation.NetworkAvailabilityEventArgs e)
