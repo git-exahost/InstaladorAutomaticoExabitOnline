@@ -703,9 +703,9 @@ namespace InstallerGUI.Services
         /// <summary>
         /// Configura os papéis de parede copiando todos os arquivos da pasta Wallpapers
         /// em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
-        /// e configurando para novos usuários e usuário atual.
+        /// e configurando para novos usuários e usuário atual, com opção de bloquear alteração por colaboradores.
         /// </summary>
-        public async Task SetWallpaperAsync(string client = null)
+        public async Task SetWallpaperAsync(string client = null, bool preventChangingWallpaper = false)
         {
             if (string.IsNullOrEmpty(client))
             {
@@ -730,15 +730,20 @@ namespace InstallerGUI.Services
                 string quotedPsScript = QuoteProcessArgument(psScript);
                 string quotedBasePath = QuoteProcessArgument(cleanBasePath);
                 string clientArg = !string.IsNullOrEmpty(client) ? string.Format(" -Client {0}", QuoteProcessArgument(client)) : "";
+                string preventArg = preventChangingWallpaper ? " -PreventChangingWallpaper" : "";
 
                 int exitCode = await RunProcessAsync("powershell",
-                    string.Format("-NoProfile -ExecutionPolicy Bypass -File {0} -BasePath {1}{2}", quotedPsScript, quotedBasePath, clientArg),
+                    string.Format("-NoProfile -ExecutionPolicy Bypass -File {0} -BasePath {1}{2}{3}", quotedPsScript, quotedBasePath, clientArg, preventArg),
                     120000, null, false);
 
                 if (exitCode == 0)
                 {
                     Log(string.Format("[ok] Papéis de parede {0}configurados em todos os temas do Windows.",
                         !string.IsNullOrEmpty(client) ? "(" + client + ") " : ""), ConsoleColor.Green);
+                    if (preventChangingWallpaper)
+                    {
+                        Log("[ok] Restrição de papel de parede ativada: colaboradores impedidos de alterar a tela de fundo.", ConsoleColor.Green);
+                    }
                 }
                 else
                 {
@@ -5204,6 +5209,59 @@ namespace InstallerGUI.Services
             sb.AppendLine("    Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR' -Name 'AppCaptureEnabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
             sb.AppendLine("} catch {}");
 
+            // 8. Configura o perfil Default (C:\Users\Default\NTUSER.DAT) para bloquear jogos e Xbox em todos os novos perfis
+            sb.AppendLine("try {");
+            sb.AppendLine("    $defaultNtUser = \"$env:SystemDrive\\Users\\Default\\NTUSER.DAT\"");
+            sb.AppendLine("    if (Test-Path $defaultNtUser) {");
+            sb.AppendLine("        reg load \"HKU\\DefaultUser\" \"$defaultNtUser\" >$null 2>&1");
+            sb.AppendLine("        if ($LASTEXITCODE -eq 0) {");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Policies\\Microsoft\\Windows\\CloudContent\" /v DisableWindowsConsumerFeatures /t REG_DWORD /d 1 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Policies\\Microsoft\\Windows\\GameDVR\" /v AllowGameDVR /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\System\\GameConfigStore\" /v GameDVR_Enabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v ContentDeliveryAllowed /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v SilentInstalledAppsEnabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v OemPreInstalledAppsEnabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v PreInstalledAppsEnabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v PreInstalledAppsEverEnabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v SystemPaneSuggestionsEnabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v SubscribedContent-314563Enabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v SubscribedContent-338387Enabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v SubscribedContent-338388Enabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager\" /v SubscribedContent-338389Enabled /t REG_DWORD /d 0 /f >$null 2>&1");
+            sb.AppendLine("            $cleanCmd = 'powershell.exe -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -Command \"Get-AppxPackage *Xbox*, *GamingApp*, *TCUI*, *GamingServices*, *Solitaire* -ErrorAction SilentlyContinue | Remove-AppxPackage -ErrorAction SilentlyContinue\"'");
+            sb.AppendLine("            reg add \"HKU\\DefaultUser\\Software\\Microsoft\\Windows\\CurrentVersion\\RunOnce\" /v \"PurgeXboxAndGames\" /t REG_SZ /d $cleanCmd /f >$null 2>&1");
+            sb.AppendLine("            reg unload \"HKU\\DefaultUser\" >$null 2>&1");
+            sb.AppendLine("            Write-Host '[ok] Perfil Default configurado: novos usuarios nunca receberao jogos ou Xbox.'");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+
+            // 9. Politicas globais de maquina para barrar download de jogos de consumidor em qualquer usuario
+            sb.AppendLine("try {");
+            sb.AppendLine("    if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent')) {");
+            sb.AppendLine("        New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent' -Force -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("    }");
+            sb.AppendLine("    Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent' -Name 'DisableWindowsConsumerFeatures' -Value 1 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("    Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent' -Name 'DisableCloudOptimizedContent' -Value 1 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("    if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsStore')) {");
+            sb.AppendLine("        New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsStore' -Force -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("    }");
+            sb.AppendLine("    Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\WindowsStore' -Name 'AutoDownload' -Value 2 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("} catch {}");
+
+            // 10. Limpeza de atalhos residuais de jogos no Menu Iniciar Default e Public
+            sb.AppendLine("try {");
+            sb.AppendLine("    $startMenuPaths = @(");
+            sb.AppendLine("        \"$env:SystemDrive\\Users\\Default\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\",");
+            sb.AppendLine("        \"$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\"");
+            sb.AppendLine("    )");
+            sb.AppendLine("    foreach ($sm in $startMenuPaths) {");
+            sb.AppendLine("        if (Test-Path $sm) {");
+            sb.AppendLine("            Get-ChildItem -Path $sm -Recurse -Include *Xbox*, *Gaming*, *Solitaire* -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+
             sb.AppendLine("if ($removedCount -gt 0) {");
             sb.AppendLine("    Write-Host ('[ok] Varredura concluida: ' + $removedCount + ' jogos e componentes removidos com sucesso.')");
             sb.AppendLine("} else {");
@@ -5499,7 +5557,7 @@ namespace InstallerGUI.Services
             if (options.RenameComputer) totalSteps++;
             if (options.CreateAdmin) totalSteps++;
             if (options.CreateStandardUser) totalSteps++;
-            if (options.SetWallpaper || options.SetWallpaperNortel) totalSteps++;
+            if (options.SetWallpaper || options.SetWallpaperNortel || options.PreventWallpaperChange) totalSteps++;
             totalSteps += options.SelectedPrograms.Count;
 
             int currentStep = 0;
@@ -5607,8 +5665,8 @@ namespace InstallerGUI.Services
                     await ConfigureLocationServicesAsync();
                 }
 
-                // 4. Wallpaper
-                if (!cancelled && (options.SetWallpaper || options.SetWallpaperNortel))
+                // 4. Wallpaper e Bloqueio de Alteração
+                if (!cancelled && (options.SetWallpaper || options.SetWallpaperNortel || options.PreventWallpaperChange))
                 {
                     if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
                         cancelled = true;
@@ -5618,7 +5676,7 @@ namespace InstallerGUI.Services
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
                         string client = options.SetWallpaperNortel ? "Nortel" : null;
-                        await SetWallpaperAsync(client);
+                        await SetWallpaperAsync(client, options.PreventWallpaperChange);
                     }
                 }
 
@@ -6212,6 +6270,13 @@ namespace InstallerGUI.Services
 
         public bool SetWallpaper { get; set; }
         public bool SetWallpaperNortel { get; set; }
+
+        /// <summary>
+        /// Se true, bloqueia a alteração do papel de parede pelo usuário padrão (colaborador),
+        /// impedindo a substituição da tela de fundo corporativa da empresa.
+        /// </summary>
+        public bool PreventWallpaperChange { get; set; }
+
         public bool EnableLocationServices { get; set; }
 
         /// <summary>

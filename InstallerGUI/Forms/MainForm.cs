@@ -62,6 +62,7 @@ namespace InstallerGUI.Forms
         private CheckBox _chkCleanDesktop;
         private CheckBox _chkWallpaper;
         private CheckBox _chkWallpaperNortel;
+        private CheckBox _chkPreventWallpaperChange;
         private CheckBox _chkUninstallGames;
         private CheckBox _chkRemoveOtherProfiles;
         private CheckBox _chkUninstallThirdPartyAntivirus;
@@ -738,15 +739,16 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 5,
+                RowCount = 6,
                 BackColor = CorPainel,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 12f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 18f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 10f));
 
             _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", true);
             tbl.Controls.Add(_chkEnableLocation, 0, 0);
@@ -756,12 +758,17 @@ namespace InstallerGUI.Forms
 
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
             _chkWallpaperNortel = CreateCheckBox("Aplicar papel de parede Nortel", false);
+            _chkPreventWallpaperChange = CreateCheckBox("Bloquear alteração do papel de parede", true);
 
             _chkWallpaper.CheckedChanged += (s, e) =>
             {
                 if (_chkWallpaper.Checked && _chkWallpaperNortel.Checked)
                 {
                     _chkWallpaperNortel.Checked = false;
+                }
+                if (_chkWallpaper.Checked)
+                {
+                    _chkPreventWallpaperChange.Checked = true;
                 }
             };
 
@@ -771,10 +778,15 @@ namespace InstallerGUI.Forms
                 {
                     _chkWallpaper.Checked = false;
                 }
+                if (_chkWallpaperNortel.Checked)
+                {
+                    _chkPreventWallpaperChange.Checked = true;
+                }
             };
 
             tbl.Controls.Add(_chkWallpaper, 0, 2);
             tbl.Controls.Add(_chkWallpaperNortel, 0, 3);
+            tbl.Controls.Add(_chkPreventWallpaperChange, 0, 4);
 
             var lblHint = new Label
             {
@@ -784,7 +796,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
             };
-            tbl.Controls.Add(lblHint, 0, 4);
+            tbl.Controls.Add(lblHint, 0, 5);
 
             pnl.Controls.Add(tbl);
             return pnl;
@@ -1445,6 +1457,7 @@ namespace InstallerGUI.Forms
                 options.CleanDesktopShortcuts = _chkCleanDesktop.Checked;
                 options.SetWallpaper = _chkWallpaper.Checked;
                 options.SetWallpaperNortel = _chkWallpaperNortel.Checked;
+                options.PreventWallpaperChange = _chkPreventWallpaperChange != null && _chkPreventWallpaperChange.Checked;
                 options.UninstallGames = _chkUninstallGames != null && _chkUninstallGames.Checked;
                 options.RemoveOtherUserProfiles = _chkRemoveOtherProfiles != null && _chkRemoveOtherProfiles.Checked;
                 options.UninstallThirdPartyAntivirus = _chkUninstallThirdPartyAntivirus != null && _chkUninstallThirdPartyAntivirus.Checked;

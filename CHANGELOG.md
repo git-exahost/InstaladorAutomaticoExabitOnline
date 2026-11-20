@@ -7,6 +7,21 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.81] - 2026-11-20
+
+### Aprimorado
+- **Remoção de Jogos e Xbox em Todos os Perfis Existentes e Futuros**:
+  - Implementada injeção no modelo de perfil do Windows (`C:\Users\Default\NTUSER.DAT`) desativando o *Windows Consumer Experience* e *ContentDeliveryManager*, impedindo que o Windows baixe ou instale jogos patrocinados no primeiro logon de novas contas.
+  - Injetado comando relâmpago de limpeza silenciosa em `RunOnce` do perfil `Default` (`HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\RunOnce`), garantindo que qualquer pacote residual de jogos ou Xbox seja removido automaticamente e de forma transparente no primeiro acesso do colaborador.
+  - Aplicadas políticas globais de máquina em `HKLM` bloqueando `DisableWindowsConsumerFeatures`, `DisableCloudOptimizedContent`, `AutoDownload` e `AllowGameDVR`.
+  - Limpeza automática de atalhos de jogos nos Menus Iniciar do `Default` e `ProgramData`.
+- **Bloqueio de Alteração do Papel de Parede Corporativo pelo Colaborador**:
+  - Adicionada a opção **"Bloquear alteração do papel de parede"** na Aba 3 (Opções), posicionada logo abaixo de "Aplicar papel de parede Nortel", marcada por padrão (`true`).
+  - Aplicação corporativa via política nativa do Windows (`NoChangingWallPaper = 1` sob `ActiveDesktop` e `Policies\System\WallpaperStyle = 10`) no perfil `DefaultUser` e em contas existentes não-administradoras.
+  - Com essa política ativada, a tela de personalização de fundo no Windows fica esmaecida com a mensagem de que as configurações são gerenciadas pela organização, impedindo o colaborador de substituir o papel de parede institucional, enquanto o Administrador permanece com total liberdade de gerenciamento.
+
+---
+
 ## [2.0.0.80] - 2026-11-20
 
 ### Corrigido

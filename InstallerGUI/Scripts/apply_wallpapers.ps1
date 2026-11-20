@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # Script: apply_wallpapers.ps1
 # Empresa: EXABIT Solucoes em TI
 # Finalidade: Configura todos os arquivos da pasta Wallpapers como papel de parede
@@ -9,7 +9,8 @@
 [CmdletBinding()]
 param(
     [string]$BasePath = "",
-    [string]$Client = ""
+    [string]$Client = "",
+    [switch]$PreventChangingWallpaper
 )
 
 $ErrorActionPreference = "Continue"
@@ -308,6 +309,14 @@ if (Test-Path $defaultNtUser) {
         reg add "HKU\DefaultUser\Control Panel\Desktop" /v TileWallpaper /t REG_SZ /d 0 /f >$null 2>&1
         reg add "HKU\DefaultUser\Control Panel\Personalization\Desktop Slideshow" /v Interval /t REG_DWORD /d 1800000 /f >$null 2>&1
         reg add "HKU\DefaultUser\Control Panel\Personalization\Desktop Slideshow" /v Shuffle /t REG_DWORD /d 0 /f >$null 2>&1
+
+        if ($PreventChangingWallpaper) {
+            reg add "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" /v NoChangingWallPaper /t REG_DWORD /d 1 /f >$null 2>&1
+            reg add "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v Wallpaper /t REG_SZ /d "%SystemRoot%\web\wallpaper\Windows\img0.jpg" /f >$null 2>&1
+            reg add "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v WallpaperStyle /t REG_SZ /d 10 /f >$null 2>&1
+            Write-Host "[ok] Politica corporativa ativada no Default: colaboradores impedidos de alterar o papel de parede." -ForegroundColor Green
+        }
+
         reg unload "HKU\DefaultUser" >$null 2>&1
         Write-Host "[ok] Perfil Default configurado para novos usuarios." -ForegroundColor Green
     }
@@ -316,6 +325,7 @@ Write-Host ""
 
 # 8. Atualiza usuarios existentes em C:\Users
 Get-ChildItem -Path "$env:SystemDrive\Users" -Directory | ForEach-Object {
+    $uName = $_.Name
     $uThemes = Join-Path $_.FullName "AppData\Roaming\Microsoft\Windows\Themes"
     if (Test-Path $uThemes) {
         try {
@@ -325,6 +335,20 @@ Get-ChildItem -Path "$env:SystemDrive\Users" -Directory | ForEach-Object {
                 Remove-Item "$uCached\*" -Force -Recurse -ErrorAction SilentlyContinue
             }
         } catch {}
+    }
+
+    if ($PreventChangingWallpaper -and ($uName -notmatch '^(Default|Public|All Users|admin|Administrator|Administrador)$')) {
+        $uNt = Join-Path $_.FullName "NTUSER.DAT"
+        if (Test-Path $uNt) {
+            reg load "HKU\TempUser" "$uNt" >$null 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                reg add "HKU\TempUser\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop" /v NoChangingWallPaper /t REG_DWORD /d 1 /f >$null 2>&1
+                reg add "HKU\TempUser\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v Wallpaper /t REG_SZ /d "%SystemRoot%\web\wallpaper\Windows\img0.jpg" /f >$null 2>&1
+                reg add "HKU\TempUser\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v WallpaperStyle /t REG_SZ /d 10 /f >$null 2>&1
+                reg unload "HKU\TempUser" >$null 2>&1
+                Write-Host ('[ok] Bloqueio de papel de parede aplicado para usuario existente: ' + $uName) -ForegroundColor Green
+            }
+        }
     }
 }
 
@@ -353,8 +377,8 @@ exit
 # SIG # Begin signature block
 # MIIcjwYJKoZIhvcNAQcCoIIcgDCCHHwCAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCD7GcsEXwG/8QD+
-# y3SrMeln+4MRAh6PkHhQ7ZY2c+ql+qCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBgQo4pneiv8c9v
+# i6mJj3aQ7GMusnBhbpWbgce2lMQ85aCCFqgwggNqMIICUqADAgECAhAa3VkuPbH1
 # t0A2pZ7si0QoMA0GCSqGSIb3DQEBCwUAME0xCzAJBgNVBAYTAkJSMR4wHAYDVQQK
 # DBVFWEFCSVQgU29sdWNvZXMgZW0gVEkxHjAcBgNVBAMMFUVYQUJJVCBTb2x1Y29l
 # cyBlbSBUSTAeFw0yNjExMTYyMjMyMDVaFw0zMTExMTYyMjQyMDVaME0xCzAJBgNV
@@ -480,28 +504,28 @@ exit
 # U29sdWNvZXMgZW0gVEkCEBrdWS49sfW3QDalnuyLRCgwDQYJYIZIAWUDBAIBBQCg
 # gYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG9w0BCQMxDAYKKwYB
 # BAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIBFTAvBgkqhkiG9w0B
-# CQQxIgQgOU1BwaSAbU195yQY7IlKQcR4Z5Nltcoc4h/pg+I89sIwDQYJKoZIhvcN
-# AQEBBQAEggEAsBFQQqSaKOCkiudP4uE+yRg9EZq5hiaJ9xYpMdWxy7doL+JsSnhp
-# RG0JhpwPtNcuygU3qKQyBn0uECOrnNL5DLEYooIcAU49f0MJoeS8xHpJZf1PXhVP
-# Ra5peECTLptsFchUAam/Hp99z1PbRXpIjdifQ/tv72kOTZcmKyhnvhAm3YvAVu3e
-# +wPLpE9XyDm8B5Qc/qPEnF8pJBrIYZMCTPwt9zD6o7YGNxrjyNSH2DT5w0aUMGHN
-# 8F8Moz41Rib5qVZDyC1rso/dR2By8cis3AiA2VXn/YGGQkXtTI9ATCy2AIxgl7YL
-# JgTvat0kjCJUEO0qaAi7Gs1I3BIGe7Z4L6GCAyYwggMiBgkqhkiG9w0BCQYxggMT
+# CQQxIgQgWaNBhhXb5ygEzVCICR9qF5jHPho9SH10sfWgeu07UnQwDQYJKoZIhvcN
+# AQEBBQAEggEAD6tyFWk6K2DGXqTDUVB7q7GlBB/EfqZD4uqJuw/Z7JnAxfoQGqjq
+# v27i39P+mTWzHRrxqlLyJKpW1QOHfzgL0eiJ3H2fD+IoD/xH38rrsoPqN1RagiD4
+# VCvmGD3xKmqkT0mSWp5rJqmhsV2Zr5GV3KuZ0g8DHSb4uba/dO6yUCFrWQ/LZSsc
+# 6SJkC1zTAFnWENYXBk4xK/O3n1rvMenoItX3+xFpXCdIV45XG5+tRanbd78dhd7K
+# bnKLpBRreERMKT5wr/SNlthOHRGtnWHvFB7DRnXUOmdHaTHKM/eg+TkoQa2YrZRx
+# BPvEnMvJ0axplv/KLRCgNdkyVdwVDO/lGKGCAyYwggMiBgkqhkiG9w0BCQYxggMT
 # MIIDDwIBATB9MGkxCzAJBgNVBAYTAlVTMRcwFQYDVQQKEw5EaWdpQ2VydCwgSW5j
 # LjFBMD8GA1UEAxM4RGlnaUNlcnQgVHJ1c3RlZCBHNCBUaW1lU3RhbXBpbmcgUlNB
 # NDA5NiBTSEEyNTYgMjAyNSBDQTECEAhP3DNPfkVO28MPj/mSGDUwDQYJYIZIAWUD
 # BAIBBQCgaTAYBgkqhkiG9w0BCQMxCwYJKoZIhvcNAQcBMBwGCSqGSIb3DQEJBTEP
-# Fw0yNjExMjAwNDMyNTJaMC8GCSqGSIb3DQEJBDEiBCCCY9mnAQjd/LBXJTybMhnm
-# ZABuUylDsjhber7b8928ADANBgkqhkiG9w0BAQEFAASCAgAYsoP0jmN98yoe/mw5
-# +8KPsjh3dEedcJ+Qn6Km47OjgHeW9kmdH34beVy7qISmBSzldtZxrq5Nx+HSPtrW
-# pluQ8M0ljVUvY52Emna7y6pFfi83vDUEABT8eASqCOlrQ3K1vOb8bc+Qcmj8H3C3
-# d8yAoWfR5XsH9/gzxcSesTRwE1sqVL/Vfg8vwTwlY4zrWrqtTm5QRNdmz0fA8fXt
-# U7FbY00pDjrcjlOARzUK7gWK1g3UqxVHZ999Hfkb3QJzTnF1ZbH7jXpGPUIQQlRB
-# +AWcVG611wptnr5Ye5YNJrh7I3j79B+3DvS+L08Bd8PbAJdGeurl8GmncTed136Q
-# 0dtiHaSRH+on5uYPlLU3uKxcmCKCKOkkd/n2rgaHemppAja+SsgrW2sQrFYEP+9q
-# HjufsEwfgimOgXcobFEq6bzl3PwTEfsB98XCOMB3prJOC1d58Sj3XKf+2EW+keFn
-# /lTd1ADn/MQzeDGsIJgVmNkwppqCikcdJmSD/ogla5QRhu8g2VfayccSkuSe4wXp
-# Xu6a/6RPC+VvOlFsfB+9G+7JA8sMK+dm1YC0lZPQxZsazrAXefkJJvu/3/VFoO9n
-# EW0uxRwiRk8nyWh0T1gL2Ap9HQi5gj9JfRAvUSr4+fGKi83dxvDFMSN+hdeQ67CT
-# pt1YxaP/eenSsqX+TVESivSSBw==
+# Fw0yNjExMjAxNTA2MDFaMC8GCSqGSIb3DQEJBDEiBCACwHaoYJwbqmtMy74OryXN
+# Syp9de+0JR2kX1qUruKb9TANBgkqhkiG9w0BAQEFAASCAgADsnHib6BlfPRzwwYE
+# t2QWNFApeboJONxFblp5/TAwoGp7EGw8QGf5TipfVENN34pcFa9E8SQRaNtyR2lY
+# pSq+Q3ra91kGjNaKSGnJoMVxa6JxMTbLvPsGqZ8LTG8Cp1ouOQORiPFvWbjOnaEf
+# yunzIu2QmS/Ek/Y2WVf+Wxr1sG5ewpV6sq9CfNneTmLVtIgTDZkJezQ4j6jva8Xp
+# 1taKAEZFaOUWNTCxZBlL4Dl5PcVCoOmZpXbmpB2IGuSX7rmqMRzPktIk45K7yPvE
+# NlIqWNl1hf4GlkXoAA2UI1C0V+sEBlJb9ueVcC125tB8bzSPiR+XpCqlk6Tct6b7
+# cLXtmrfUHgOhDdJynPZpw8AOSHbGjUl/WaNDuUQBoekZh6aPwLLCc1fDvIieJVrR
+# Q9EzVfW5/lRhhOpGMEWpudXQ1acLvgDPLUKYRBMoLXRVOMcT9DNaZlVoSfYSxkSN
+# DFXZAf4AsxY/CoQIitcxpCQl9+wlEcuE45Vf9UzjY1tPZ8CroLrETudD5yaLodBc
+# jWuAodcLJjBEHOQHWptC1tTf1kdlAXw31S0GDctjp2crNfo22mvu2oTuGrl7ZA+J
+# yh+4pOIUsOBp4G/ME8wdbU5BDzifmTv+zQy69EQhlbQfszs4cvDQIOo/cYoKdDLb
+# jxG5PpmP2V0aQyWjhfYMjnozYQ==
 # SIG # End signature block
