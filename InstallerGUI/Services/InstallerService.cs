@@ -765,10 +765,10 @@ namespace InstallerGUI.Services
         /// <summary>
         /// Realiza teste de latência (ping) da conexão com a internet contra servidores DNS rápidos e confiáveis.
         /// </summary>
-        /// <returns>String formatada com tempo de resposta em milissegundos e qualidade da conexão.</returns>
-        public async Task<string> MeasureInternetPingAsync()
+        /// <returns>Diagnóstico formatado com latência, provedor DNS e cor representativa de qualidade.</returns>
+        public async Task<PingDiagnosis> MeasureInternetPingAsync()
         {
-            return await Task.Run(new Func<string>(() =>
+            return await Task.Run(new Func<PingDiagnosis>(() =>
             {
                 string[] targets = new string[] { "1.1.1.1", "8.8.8.8" };
                 using (var ping = new System.Net.NetworkInformation.Ping())
@@ -781,14 +781,60 @@ namespace InstallerGUI.Services
                             if (reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success)
                             {
                                 string hostLabel = (target == "1.1.1.1") ? "Cloudflare DNS" : "Google DNS";
-                                string quality = reply.RoundtripTime < 50 ? "Excelente" : (reply.RoundtripTime < 120 ? "Bom" : "Alto");
-                                return string.Format("{0} ms ({1} - {2})", reply.RoundtripTime, hostLabel, quality);
+                                long ms = reply.RoundtripTime;
+                                if (ms < 50)
+                                {
+                                    return new PingDiagnosis
+                                    {
+                                        Success = true,
+                                        LatencyMs = ms,
+                                        Text = string.Format("{0} ms ({1} - Excelente)", ms, hostLabel),
+                                        Color = ConsoleColor.Green
+                                    };
+                                }
+                                else if (ms < 100)
+                                {
+                                    return new PingDiagnosis
+                                    {
+                                        Success = true,
+                                        LatencyMs = ms,
+                                        Text = string.Format("{0} ms ({1} - Bom)", ms, hostLabel),
+                                        Color = ConsoleColor.Green
+                                    };
+                                }
+                                else if (ms < 200)
+                                {
+                                    return new PingDiagnosis
+                                    {
+                                        Success = true,
+                                        LatencyMs = ms,
+                                        Text = string.Format("{0} ms ({1} - Moderado)", ms, hostLabel),
+                                        Color = ConsoleColor.Yellow
+                                    };
+                                }
+                                else
+                                {
+                                    return new PingDiagnosis
+                                    {
+                                        Success = true,
+                                        LatencyMs = ms,
+                                        Text = string.Format("{0} ms ({1} - Alto / Instável)", ms, hostLabel),
+                                        Color = ConsoleColor.Red
+                                    };
+                                }
                             }
                         }
                         catch { }
                     }
                 }
-                return "Tempo limite esgotado / Inacessível";
+
+                return new PingDiagnosis
+                {
+                    Success = false,
+                    LatencyMs = -1,
+                    Text = "Tempo limite esgotado / Inacessível",
+                    Color = ConsoleColor.Red
+                };
             }));
         }
 
@@ -5782,5 +5828,16 @@ namespace InstallerGUI.Services
             CleanDesktopShortcuts = true;
             SelectedPrograms = new List<ProgramInfo>();
         }
+    }
+
+    /// <summary>
+    /// Representa o resultado detalhado de diagnóstico de latência de internet.
+    /// </summary>
+    public class PingDiagnosis
+    {
+        public bool Success { get; set; }
+        public long LatencyMs { get; set; }
+        public string Text { get; set; }
+        public ConsoleColor Color { get; set; }
     }
 }

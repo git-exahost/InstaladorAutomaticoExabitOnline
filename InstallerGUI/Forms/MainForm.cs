@@ -1591,16 +1591,16 @@ namespace InstallerGUI.Forms
             if (hasInternet)
             {
                 AppendLog("Status de conexão  : Conectado à Internet", ConsoleColor.Green);
-                string pingInfo = await _service.MeasureInternetPingAsync();
-                AppendLog(string.Format("Teste de Ping      : {0}", pingInfo), ConsoleColor.Cyan);
+                var pingDiag = await _service.MeasureInternetPingAsync();
+                AppendLog(string.Format("Teste de Ping      : {0}", pingDiag.Text), pingDiag.Color);
             }
             else
             {
                 AppendLog("Status de conexão  : Desconectado da Internet", ConsoleColor.Yellow);
             }
 
-            string diskSpace = GetSystemDriveFreeSpaceInfo();
-            AppendLog(string.Format("Espaço livre em C: : {0}", diskSpace), ConsoleColor.Gray);
+            var diskDiag = GetSystemDriveFreeSpaceDiagnosis();
+            AppendLog(string.Format("Espaço livre em C: : {0}", diskDiag.Text), diskDiag.Color);
 
             string winVer = GetWindowsVersionInfo();
             AppendLog(string.Format("Versão do Windows  : {0}", winVer), ConsoleColor.Gray);
@@ -1609,9 +1609,9 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Obtém o espaço total e livre da unidade de sistema (C:).
+        /// Obtém o diagnóstico de espaço total e livre da unidade de sistema (C:) com classificação de cor para alerta visual.
         /// </summary>
-        private static string GetSystemDriveFreeSpaceInfo()
+        private static DiskSpaceDiagnosis GetSystemDriveFreeSpaceDiagnosis()
         {
             try
             {
@@ -1623,11 +1623,52 @@ namespace InstallerGUI.Forms
                     double freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
                     double totalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
                     double percentFree = (totalGb > 0) ? (freeGb / totalGb * 100.0) : 0.0;
-                    return string.Format("{0:N1} GB livres de {1:N1} GB ({2:N0}% livre)", freeGb, totalGb, percentFree);
+
+                    if (freeGb < 15.0 || percentFree < 10.0)
+                    {
+                        return new DiskSpaceDiagnosis
+                        {
+                            FreeGb = freeGb,
+                            TotalGb = totalGb,
+                            PercentFree = percentFree,
+                            Text = string.Format("{0:N1} GB livres de {1:N1} GB ({2:N0}% livre) - Pouco espaço", freeGb, totalGb, percentFree),
+                            Color = ConsoleColor.Red
+                        };
+                    }
+                    else if (freeGb < 30.0 || percentFree < 20.0)
+                    {
+                        return new DiskSpaceDiagnosis
+                        {
+                            FreeGb = freeGb,
+                            TotalGb = totalGb,
+                            PercentFree = percentFree,
+                            Text = string.Format("{0:N1} GB livres de {1:N1} GB ({2:N0}% livre) - Atenção", freeGb, totalGb, percentFree),
+                            Color = ConsoleColor.Yellow
+                        };
+                    }
+                    else
+                    {
+                        return new DiskSpaceDiagnosis
+                        {
+                            FreeGb = freeGb,
+                            TotalGb = totalGb,
+                            PercentFree = percentFree,
+                            Text = string.Format("{0:N1} GB livres de {1:N1} GB ({2:N0}% livre) - Bom", freeGb, totalGb, percentFree),
+                            Color = ConsoleColor.Green
+                        };
+                    }
                 }
             }
             catch { }
-            return "Não disponível";
+
+            return new DiskSpaceDiagnosis
+            {
+                FreeGb = 0,
+                TotalGb = 0,
+                PercentFree = 0,
+                Text = "Não disponível",
+                Color = ConsoleColor.Yellow
+            };
         }
 
         /// <summary>
@@ -2129,6 +2170,18 @@ namespace InstallerGUI.Forms
 
             return list;
         }
+    }
+
+    /// <summary>
+    /// Diagnóstico de espaço em disco da unidade de sistema com texto e classificação de cor.
+    /// </summary>
+    public class DiskSpaceDiagnosis
+    {
+        public double FreeGb { get; set; }
+        public double TotalGb { get; set; }
+        public double PercentFree { get; set; }
+        public string Text { get; set; }
+        public ConsoleColor Color { get; set; }
     }
 
     /// <summary>

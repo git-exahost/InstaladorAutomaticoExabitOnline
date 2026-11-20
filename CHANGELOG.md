@@ -7,6 +7,24 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.72] - 2026-11-19
+
+### Adicionado
+- **Novo Ícone do Executável Criado a partir de `exa.png`**:
+  - Gerado novo ícone de alta fidelidade multi-resolução (`install.ico` contendo camadas 16x16, 24x24, 32x32, 48x48, 64x64, 128x128 e 256x256) a partir da imagem oficial corporativa [`exa.png`](file:///d:/Arquivos%20de%20Trabalho/Exabit%20Soluções%20em%20TI/Instalador%20Automatico%20Exabit%20Online/InstallerGUI/Image/exa.png).
+  - O ícone do executável do Windows Explorer, da barra de tarefas e da janela do aplicativo agora exibem a identidade visual da EXABIT com máxima nitidez.
+- **Destaque Visual e Alerta por Cores em Diagnóstico**:
+  - **Espaço Livre em C:**: Classificação dinâmica por cores representando a saúde do armazenamento:
+    - **Verde**: Espaço bom/suficiente (>= 30 GB e >= 20% livres).
+    - **Amarelo**: Alerta/Atenção (entre 15 GB e 30 GB, ou 10% a 20% livres).
+    - **Vermelho**: Alerta crítico de pouco espaço (< 15 GB ou < 10% livres), alertando risco de falhas em instalações ou atualizações.
+  - **Teste de Ping da Conexão**: Classificação dinâmica por cores representando a qualidade de resposta da rede:
+    - **Verde**: Latência excelente (< 50 ms) ou boa (< 100 ms).
+    - **Amarelo**: Latência moderada (100 ms a 200 ms).
+    - **Vermelho**: Latência alta/instável (> 200 ms) ou tempo limite esgotado/inacessível.
+
+---
+
 ## [2.0.0.71] - 2026-11-19
 
 ### Adicionado
