@@ -7,6 +7,15 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.77] - 2026-11-19
+
+### Aprimorado
+- **Restauração do Fluxo do Botão "INICIAR INSTALAÇÃO" para Operações Offline**:
+  - Revertida a trava que desativava o botão principal sem conexão à rede, permitindo a execução imediata de funções que operam offline (renomear máquina, criação e configuração de contas locais, aplicação de papéis de parede, desinstalação de jogos, remoção de perfis e antivírus).
+  - Mantida a verificação e o aviso com opções de "Repetir / Cancelar" caso o usuário tenha marcado programas na lista que exigem download online da internet.
+
+---
+
 ## [2.0.0.76] - 2026-11-19
 
 ### Aprimorado
