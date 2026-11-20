@@ -108,7 +108,8 @@ Todas as abas (Configurações, Atalhos, Opções do Windows, Funcionalidades, o
 
 ---
 
-## 6. Restrições Físicas da Janela
+## 6. Restrições Físicas da Janela (FixedSingle, Sem Maximizar, Otimizada para 720p)
 
-- **Largura Mínima Rigorosa**: **`700px`** travada no nível de Win32 (`WM_GETMINMAXINFO` no `WndProc` e verificação no `OnResize`). O usuário nunca deve conseguir reduzir a janela para menos de 700px durante o redimensionamento com o mouse.
-- **Altura Mínima**: **`580px`**.
+- **Bloqueio de Redimensionamento**: `FormBorderStyle = FormBorderStyle.FixedSingle` (borda fixa única, cursor nunca vira seta de redimensionamento).
+- **Sem Botão Maximizar**: `MaximizeBox = false` e `MinimizeBox = true` (apenas botões Minimizar e Fechar na barra de título).
+- **Dimensões Travadas (Compatível com 720p 1280x720)**: Dimensão ideal calculada em `1200 x 650px` (com clamping a `workingArea - 16px` para garantir folga com barra de tarefas do Windows de até 48px), travada com `MinimumSize = MaximumSize = Size = new Size(formWidth, formHeight)`.

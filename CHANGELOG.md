@@ -7,6 +7,15 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.90] - 2026-11-20
+
+### Aprimorado / Corrigido
+- **Janela Fixa Otimizada para Resolução 720p (Sem Botão Maximizar e Sem Redimensionamento)**:
+  - Removido o botão Maximizar (`MaximizeBox = false`), mantendo exclusivamente Minimizar (`MinimizeBox = true`) e Fechar.
+  - Travado o redimensionamento da janela de forma nativa e definitiva com `FormBorderStyle = FormBorderStyle.FixedSingle`.
+  - Definidas as dimensões ideais com área de respiro de 1200 x 650 px (otimizada para telas 720p 1280x720 com barra de tarefas do Windows de até 48px), centralizada na tela (`CenterScreen`) sem cortar elementos nem encostar na barra de tarefas.
+  - Bloqueadas as dimensões com `MinimumSize = MaximumSize = Size = new Size(formWidth, formHeight)`.
+
 ## [2.0.0.89] - 2026-11-20
 
 ### Corrigido / Aprimorado

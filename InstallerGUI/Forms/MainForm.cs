@@ -152,18 +152,21 @@ namespace InstallerGUI.Forms
             // Configurações da janela responsivas ao DPI
             Text = string.Format("Auto Instalador de Programas v{0} - EXABIT Soluções em TI", GetAppVersion());
 
-            // Calcula dimensões adaptáveis ao tamanho do monitor e escala
+            // Calcula o maior tamanho confortável para caber em resolução 720p (1280x720) sem cortar
             var workingArea = Screen.PrimaryScreen.WorkingArea;
-            int desiredWidth = (int)(1220 * scale);
-            int desiredHeight = (int)(780 * scale);
+            int desiredWidth = (int)(1200 * scale);
+            int desiredHeight = (int)(650 * scale);
 
-            int formWidth = Math.Min(workingArea.Width - 20, Math.Max(1100, desiredWidth));
-            int formHeight = Math.Min(workingArea.Height - 20, Math.Max(700, desiredHeight));
+            int formWidth = Math.Min(workingArea.Width - 16, desiredWidth);
+            int formHeight = Math.Min(workingArea.Height - 16, desiredHeight);
 
-            Size = new Size(formWidth, formHeight);
-            MinimumSize = new Size(716, 558);
+            // Trava o redimensionamento e define apenas os botões Minimizar e Fechar (sem Maximizar)
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
             MinimizeBox = true;
-            MaximizeBox = true;
+            Size = new Size(formWidth, formHeight);
+            MinimumSize = new Size(formWidth, formHeight);
+            MaximumSize = new Size(formWidth, formHeight);
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = CorFundo;
             ForeColor = CorTexto;
@@ -240,7 +243,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.89";
+            return "2.0.0.90";
         }
 
         // ──────────────────────────────────────────────
@@ -249,14 +252,6 @@ namespace InstallerGUI.Forms
 
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
-
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
-
-        [DllImport("user32.dll")]
-        private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-        private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -272,183 +267,12 @@ namespace InstallerGUI.Forms
         private const int DWMWA_TEXT_COLOR = 36;
 
         /// <summary>
-        /// Obtém a largura extra de bordas invisíveis aplicadas pelo DWM do Windows 10/11 (normalmente 16px: 8px esq + 8px dir).
-        /// </summary>
-        private static int GetDwmExtraWidth(IntPtr hwnd)
-        {
-            try
-            {
-                RECT winRect;
-                RECT dwmRect;
-                if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out winRect) &&
-                    DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out dwmRect, Marshal.SizeOf(typeof(RECT))) == 0)
-                {
-                    int diff = (winRect.Right - winRect.Left) - (dwmRect.Right - dwmRect.Left);
-                    if (diff > 0) return diff;
-                }
-            }
-            catch { }
-            return 16;
-        }
-
-        /// <summary>
-        /// Obtém a altura extra de bordas invisíveis aplicadas pelo DWM do Windows 10/11 (normalmente 8px inferior).
-        /// </summary>
-        private static int GetDwmExtraHeight(IntPtr hwnd)
-        {
-            try
-            {
-                RECT winRect;
-                RECT dwmRect;
-                if (hwnd != IntPtr.Zero && GetWindowRect(hwnd, out winRect) &&
-                    DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out dwmRect, Marshal.SizeOf(typeof(RECT))) == 0)
-                {
-                    int diff = (winRect.Bottom - winRect.Top) - (dwmRect.Bottom - dwmRect.Top);
-                    if (diff > 0) return diff;
-                }
-            }
-            catch { }
-            return 8;
-        }
-
-        /// <summary>
         /// Aplica tema escuro nativo e cor personalizada à barra de título assim que a janela é criada.
         /// </summary>
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
             ApplyDarkTitleBar();
-        }
-
-        private const int WM_GETMINMAXINFO = 0x0024;
-        private const int WM_SIZING = 0x0214;
-        private const int WMSZ_LEFT = 1;
-        private const int WMSZ_RIGHT = 2;
-        private const int WMSZ_TOP = 3;
-        private const int WMSZ_TOPLEFT = 4;
-        private const int WMSZ_TOPRIGHT = 5;
-        private const int WMSZ_BOTTOM = 6;
-        private const int WMSZ_BOTTOMLEFT = 7;
-        private const int WMSZ_BOTTOMRIGHT = 8;
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
-        {
-            public int Left;
-            public int Top;
-            public int Right;
-            public int Bottom;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT
-        {
-            public int x;
-            public int y;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MINMAXINFO
-        {
-            public POINT ptReserved;
-            public POINT ptMaxSize;
-            public POINT ptMaxPosition;
-            public POINT ptMinTrackSize;
-            public POINT ptMaxTrackSize;
-        }
-
-        /// <summary>
-        /// Trava o tamanho mínimo visível do formulário em rigorosamente 700x550px no nível das mensagens do Windows
-        /// (WM_GETMINMAXINFO e WM_SIZING), compensando as margens invisíveis do DWM para que o screenshot/área visível
-        /// nunca meça menos de 700px de largura e 550px de altura.
-        /// </summary>
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == WM_GETMINMAXINFO)
-            {
-                base.WndProc(ref m);
-                try
-                {
-                    MINMAXINFO mmi = (MINMAXINFO)Marshal.PtrToStructure(m.LParam, typeof(MINMAXINFO));
-                    int minW = 700 + GetDwmExtraWidth(Handle);
-                    int minH = 550 + GetDwmExtraHeight(Handle);
-                    mmi.ptMinTrackSize.x = minW;
-                    mmi.ptMinTrackSize.y = minH;
-                    Marshal.StructureToPtr(mmi, m.LParam, false);
-                }
-                catch { }
-                return;
-            }
-            else if (m.Msg == WM_SIZING)
-            {
-                try
-                {
-                    RECT r = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
-                    int minW = 700 + GetDwmExtraWidth(Handle);
-                    int minH = 550 + GetDwmExtraHeight(Handle);
-                    int currentW = r.Right - r.Left;
-                    int currentH = r.Bottom - r.Top;
-
-                    if (currentW < minW)
-                    {
-                        int edge = m.WParam.ToInt32();
-                        if (edge == WMSZ_LEFT || edge == WMSZ_TOPLEFT || edge == WMSZ_BOTTOMLEFT)
-                        {
-                            r.Left = r.Right - minW;
-                        }
-                        else
-                        {
-                            r.Right = r.Left + minW;
-                        }
-                    }
-
-                    if (currentH < minH)
-                    {
-                        int edge = m.WParam.ToInt32();
-                        if (edge == WMSZ_TOP || edge == WMSZ_TOPLEFT || edge == WMSZ_TOPRIGHT)
-                        {
-                            r.Top = r.Bottom - minH;
-                        }
-                        else
-                        {
-                            r.Bottom = r.Top + minH;
-                        }
-                    }
-
-                    Marshal.StructureToPtr(r, m.LParam, false);
-                    m.Result = (IntPtr)1;
-                    return;
-                }
-                catch { }
-            }
-            base.WndProc(ref m);
-        }
-
-        /// <summary>
-        /// Garante que qualquer tentativa de redimensionamento respeite a dimensão mínima visível de 700x550px.
-        /// </summary>
-        protected override void OnResize(EventArgs e)
-        {
-            base.OnResize(e);
-            if (WindowState != FormWindowState.Minimized)
-            {
-                int minW = 700 + GetDwmExtraWidth(Handle);
-                int minH = 550 + GetDwmExtraHeight(Handle);
-                if (Width < minW) Width = minW;
-                if (Height < minH) Height = minH;
-            }
-        }
-
-        /// <summary>
-        /// Força o tamanho mínimo visível de 700x550px logo após o usuário soltar o botão de redimensionamento da janela.
-        /// </summary>
-        protected override void OnResizeEnd(EventArgs e)
-        {
-            base.OnResizeEnd(e);
-            int minW = 700 + GetDwmExtraWidth(Handle);
-            int minH = 550 + GetDwmExtraHeight(Handle);
-            if (Width < minW) Width = minW;
-            if (Height < minH) Height = minH;
         }
 
         /// <summary>

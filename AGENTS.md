@@ -173,8 +173,10 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 ### 5. Atualizações Periódicas e Timers
 - Métricas dinâmicas (Memória RAM e Espaço em Disco) devem ser atualizadas dinamicamente a cada **3 segundos** via APIs de alta performance (`GlobalMemoryStatusEx` e `DriveInfo.GetDrives()`), sem chamadas WMI lentas na thread de UI.
 
-### 6. Restrição de Janela
-- Dimensão mínima estrita de **700 x 550px** travada via `MinimumSize`, `WM_GETMINMAXINFO`, `WM_SIZING`, `OnResize` e `OnResizeEnd` no `Forms/MainForm.cs`.
+### 6. Restrição de Janela (FixedSingle, Sem Maximizar, Otimizada para 720p)
+- **Bloqueio de Redimensionamento**: `FormBorderStyle = FormBorderStyle.FixedSingle` (borda fixa, cursor nunca vira seta de redimensionamento).
+- **Sem Botão Maximizar**: `MaximizeBox = false` e `MinimizeBox = true` (apenas botões Minimizar e Fechar na barra de título).
+- **Dimensões Travadas (Compatível com 720p 1280x720)**: Dimensão ideal calculada em `1200 x 650px` (com clamping a `workingArea - 16px` para garantir folga com barra de tarefas do Windows de 48px), travada com `MinimumSize = MaximumSize = Size = new Size(formWidth, formHeight)`.
 
 ## Regras Críticas de Operação
 
