@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.91] - 2026-11-20
+
+### Aprimorado
+- **Atualização Periódica a Cada 5 Segundos (Espaço em Disco e Ping)**:
+  - O espaço em disco (Disco C:) e a medição de latência de rede (Ping / Conexão) na tela principal e no diagnóstico completo agora são atualizados continuamente a cada **5 segundos** (`_metricsRefreshTimer.Interval = 5000`).
+  - O cálculo de espaço em disco e classificação de cores (verde, amarelo e vermelho) utiliza chamadas de alta performance (`DriveInfo.GetDrives()`), e o ping é executado de forma assíncrona em background via ICMP contra DNS de baixa latência (1.1.1.1 / 8.8.8.8) com resposta imediata na UI (`Online (X ms) ↻`).
+  - Adicionado suporte a atualização sob demanda imediata ao clicar no texto do Ping ou na barra de disco.
+
 ## [2.0.0.90] - 2026-11-20
 
 ### Aprimorado / Corrigido

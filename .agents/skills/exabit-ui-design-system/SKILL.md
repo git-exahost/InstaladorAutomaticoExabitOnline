@@ -99,11 +99,11 @@ Todas as abas (Configurações, Atalhos, Opções do Windows, Funcionalidades, o
 
 ---
 
-## 5. Atualizações Periódicas e Timers em Background
+## 5. Atualizações Periódicas e Timers em Background (5 Segundos)
 
-- **Métricas de Hardware em Tempo Real**:
-  - Espaço livre em disco e uso de Memória RAM devem ser atualizados a cada **3 segundos** (`Interval = 3000`).
-  - Utilizar APIs rápidas do sistema (`GlobalMemoryStatusEx` e `DriveInfo.GetDrives()`), **nunca** chamadas WMI completas ou operações bloqueantes na thread da UI.
+- **Métricas e Conexão em Tempo Real**:
+  - Espaço livre em disco (Disco C: e demais unidades) e o teste de latência de rede (Ping / Conexão) devem ser atualizados a cada **5 segundos** (`Interval = 5000`).
+  - Utilizar APIs rápidas do sistema (`DriveInfo.GetDrives()`, `GlobalMemoryStatusEx` e `MeasureInternetPingAsync` assíncrono em background), **nunca** chamadas WMI completas ou operações bloqueantes na thread da UI.
   - Desativar timers no início da instalação (`_btnInstall.Click`) e na destruição da janela (`OnFormClosing`).
 
 ---

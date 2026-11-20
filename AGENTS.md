@@ -170,8 +170,8 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 ### 4. Barras de Consumo / MiniUsageBar
 - Altura de 8px. Deve estar posicionada logo abaixo do texto descritivo (distância de 4px a 6px), nunca no rodapé de um painel esticado.
 
-### 5. Atualizações Periódicas e Timers
-- Métricas dinâmicas (Memória RAM e Espaço em Disco) devem ser atualizadas dinamicamente a cada **3 segundos** via APIs de alta performance (`GlobalMemoryStatusEx` e `DriveInfo.GetDrives()`), sem chamadas WMI lentas na thread de UI.
+### 5. Atualizações Periódicas e Timers (5 Segundos)
+- O espaço em disco (Disco C:) e a latência de rede (Ping / Conexão) na tela principal e no diagnóstico completo são atualizados dinamicamente a cada **5 segundos** (`_metricsRefreshTimer.Interval = 5000`), utilizando APIs leves de alta performance (`DriveInfo.GetDrives()`, `GlobalMemoryStatusEx` e `MeasureInternetPingAsync` assíncrono em background), sem chamadas WMI lentas na thread de UI.
 
 ### 6. Restrição de Janela (FixedSingle, Sem Maximizar, Otimizada para 720p)
 - **Bloqueio de Redimensionamento**: `FormBorderStyle = FormBorderStyle.FixedSingle` (borda fixa, cursor nunca vira seta de redimensionamento).
