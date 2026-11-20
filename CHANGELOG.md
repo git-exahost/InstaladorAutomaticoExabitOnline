@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.75] - 2026-11-19
+
+### Aprimorado
+- **Atualização do Ícone Oficial do Executável**:
+  - Regenerado o arquivo de ícone corporativo [`InstallerGUI\install.ico`](file:///d:/Arquivos%20de%20Trabalho/Exabit%20Soluções%20em%20TI/Instalador%20Automatico%20Exabit%20Online/InstallerGUI/install.ico) a partir do arquivo [`InstallerGUI\Image\icon.png`](file:///d:/Arquivos%20de%20Trabalho/Exabit%20Soluções%20em%20TI/Instalador%20Automatico%20Exabit%20Online/InstallerGUI/Image/icon.png) com o novo esquema de cores.
+  - Mantidas todas as 10 resoluções padrão do Windows (`16x16`, `20x20`, `24x24`, `32x32`, `40x40`, `48x48`, `64x64`, `96x96`, `128x128` em DIB 32 bpp e `256x256` em PNG).
+  - Executável [`dist\Instalador Automatico Exabit.exe`](file:///d:/Arquivos%20de%20Trabalho/Exabit%20Soluções%20em%20TI/Instalador%20Automatico%20Exabit%20Online/dist/Instalador%20Automatico%20Exabit.exe) recompilado e assinado digitalmente via Authenticode.
+
+---
+
 ## [2.0.0.74] - 2026-11-19
 
 ### Aprimorado
