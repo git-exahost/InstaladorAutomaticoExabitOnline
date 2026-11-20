@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.88] - 2026-11-20
+
+### Corrigido / Aprimorado
+- **Trava Estrita de Dimensão Mínima da Janela (700 x 550px)**:
+  - Definido `MinimumSize = new Size(700, 550)` diretamente no construtor.
+  - Bloqueio a nível de mensagens Win32 em `WM_GETMINMAXINFO (0x0024)` e `WM_SIZING (0x0214)` recalculando as coordenadas em tempo real durante o arrasto de qualquer borda (esquerda, topo, direita, base e diagonais).
+  - Adicionado `OnResizeEnd` e reforçado `OnResize` para garantir redimensionamento mínimo incondicional.
+- **Diretriz de Controle de Versão (AGENTS.md)**:
+  - Documentada a proibição de `git push` automático (envios ao GitHub somente sob ordem expressa do usuário).
+
 ## [2.0.0.87] - 2026-11-20
 
 ### Corrigido / Aprimorado

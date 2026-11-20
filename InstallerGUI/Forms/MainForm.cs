@@ -161,9 +161,7 @@ namespace InstallerGUI.Forms
             int formHeight = Math.Min(workingArea.Height - 20, Math.Max(700, desiredHeight));
 
             Size = new Size(formWidth, formHeight);
-            int minTrackW = Math.Max(700, (int)(700 * scale));
-            int minTrackH = Math.Max(580, (int)(580 * scale));
-            MinimumSize = new Size(minTrackW, minTrackH);
+            MinimumSize = new Size(700, 550);
             MinimizeBox = true;
             MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
@@ -242,7 +240,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.87";
+            return "2.0.0.88";
         }
 
         // ──────────────────────────────────────────────
@@ -277,8 +275,13 @@ namespace InstallerGUI.Forms
         private const int WM_GETMINMAXINFO = 0x0024;
         private const int WM_SIZING = 0x0214;
         private const int WMSZ_LEFT = 1;
+        private const int WMSZ_RIGHT = 2;
+        private const int WMSZ_TOP = 3;
         private const int WMSZ_TOPLEFT = 4;
+        private const int WMSZ_TOPRIGHT = 5;
+        private const int WMSZ_BOTTOM = 6;
         private const int WMSZ_BOTTOMLEFT = 7;
+        private const int WMSZ_BOTTOMRIGHT = 8;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
@@ -307,8 +310,8 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Trava a largura mínima do formulário em 700px no nível da mensagem do Windows (WM_GETMINMAXINFO e WM_SIZING),
-        /// impedindo fisicamente que o mouse consiga redimensionar para menos de 700px de largura durante o arrasto.
+        /// Trava o tamanho mínimo do formulário em 700x550px no nível das mensagens do Windows (WM_GETMINMAXINFO e WM_SIZING),
+        /// impedindo fisicamente que o mouse consiga redimensionar para menos de 700px de largura e 550px de altura.
         /// </summary>
         protected override void WndProc(ref Message m)
         {
@@ -318,17 +321,8 @@ namespace InstallerGUI.Forms
                 try
                 {
                     MINMAXINFO mmi = (MINMAXINFO)Marshal.PtrToStructure(m.LParam, typeof(MINMAXINFO));
-                    float scale = GetDpiScale();
-                    int minW = Math.Max(700, (int)(700 * scale));
-                    int minH = Math.Max(580, (int)(580 * scale));
-                    if (mmi.ptMinTrackSize.x < minW)
-                    {
-                        mmi.ptMinTrackSize.x = minW;
-                    }
-                    if (mmi.ptMinTrackSize.y < minH)
-                    {
-                        mmi.ptMinTrackSize.y = minH;
-                    }
+                    mmi.ptMinTrackSize.x = 700;
+                    mmi.ptMinTrackSize.y = 550;
                     Marshal.StructureToPtr(mmi, m.LParam, false);
                 }
                 catch { }
@@ -339,9 +333,8 @@ namespace InstallerGUI.Forms
                 try
                 {
                     RECT r = (RECT)Marshal.PtrToStructure(m.LParam, typeof(RECT));
-                    float scale = GetDpiScale();
-                    int minW = Math.Max(700, (int)(700 * scale));
-                    int minH = Math.Max(580, (int)(580 * scale));
+                    const int minW = 700;
+                    const int minH = 550;
                     int currentW = r.Right - r.Left;
                     int currentH = r.Bottom - r.Top;
 
@@ -360,10 +353,20 @@ namespace InstallerGUI.Forms
 
                     if (currentH < minH)
                     {
-                        r.Bottom = r.Top + minH;
+                        int edge = m.WParam.ToInt32();
+                        if (edge == WMSZ_TOP || edge == WMSZ_TOPLEFT || edge == WMSZ_TOPRIGHT)
+                        {
+                            r.Top = r.Bottom - minH;
+                        }
+                        else
+                        {
+                            r.Bottom = r.Top + minH;
+                        }
                     }
 
                     Marshal.StructureToPtr(r, m.LParam, false);
+                    m.Result = (IntPtr)1;
+                    return;
                 }
                 catch { }
             }
@@ -371,19 +374,26 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Garante que qualquer tentativa de redimensionamento respeite a largura mínima de 700px.
+        /// Garante que qualquer tentativa de redimensionamento respeite a dimensão mínima de 700x550px.
         /// </summary>
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
             if (WindowState != FormWindowState.Minimized)
             {
-                float scale = GetDpiScale();
-                int minW = Math.Max(700, (int)(700 * scale));
-                int minH = Math.Max(580, (int)(580 * scale));
-                if (Width < minW) Width = minW;
-                if (Height < minH) Height = minH;
+                if (Width < 700) Width = 700;
+                if (Height < 550) Height = 550;
             }
+        }
+
+        /// <summary>
+        /// Força o tamanho mínimo de 700x550px logo após o usuário soltar o botão de redimensionamento da janela.
+        /// </summary>
+        protected override void OnResizeEnd(EventArgs e)
+        {
+            base.OnResizeEnd(e);
+            if (Width < 700) Width = 700;
+            if (Height < 550) Height = 550;
         }
 
         /// <summary>

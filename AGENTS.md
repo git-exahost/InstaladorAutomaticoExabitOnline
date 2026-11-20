@@ -174,10 +174,11 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 - Métricas dinâmicas (Memória RAM e Espaço em Disco) devem ser atualizadas dinamicamente a cada **3 segundos** via APIs de alta performance (`GlobalMemoryStatusEx` e `DriveInfo.GetDrives()`), sem chamadas WMI lentas na thread de UI.
 
 ### 6. Restrição de Janela
-- Largura mínima estrita de **700px** travada via `WM_GETMINMAXINFO` no `WndProc` e no `OnResize`.
+- Dimensão mínima estrita de **700 x 550px** travada via `MinimumSize`, `WM_GETMINMAXINFO`, `WM_SIZING`, `OnResize` e `OnResizeEnd` no `Forms/MainForm.cs`.
 
-## Considerações ao Modificar
+## Regras Críticas de Operação
 
+- **NUNCA fazer `git push` sem ordem do usuário**: Qualquer alteração, commit ou build deve permanecer estritamente local. O envio de atualizações para o repositório remoto (GitHub) **só pode ser feito quando o usuário mandar explicitamente**.
 - **Testar compilação** sempre após alterações: `build.bat`
 - **Testar execução** abrindo o .exe (verificar se a janela aparece)
 - **Layout**: usar `Dock = DockStyle.Fill` para preenchimento automático
