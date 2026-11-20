@@ -7,6 +7,22 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.85] - 2026-11-20
+
+### Aprimorado
+- **Refinamentos Visuais e Design Corporativo Rigoroso (Design Review)**:
+  - **Botão Mais Detalhes**: Layout do card compacto reformulado com container dedicado ancorado na base (`DockStyle.Bottom`) e altura do painel de abas aumentada para 265px, garantindo visibilidade 100% perfeita do botão `▼ Mais detalhes (+6)` sem qualquer corte vertical.
+  - **Largura Mínima Estrita em 700px**: Implementada interceptação nativa Win32 da mensagem `WM_GETMINMAXINFO` no `WndProc` combinada com `OnResize`, impedindo fisicamente que o mouse arraste as bordas da janela para uma largura menor que 700px em qualquer nível de DPI.
+  - **Alinhamento e Margens em Cards de Detalhes**:
+    - Padronização rigorosa da coluna de rótulos em 125px em todos os cards expandidos, eliminando qualquer truncamento de textos como `Computador:`.
+    - Zeradas margens de labels para alinhamento horizontal perfeitamente nivelado e alinhado entre `Computador:`, `Usuário:` e `Sistema:`.
+    - Margem inferior e espaçamento vertical ampliados no cabeçalho de cada card (`CreateCardContainer`), proporcionando respiro visual elegante entre os títulos laranjas e os itens informativos.
+  - **Memória RAM em Linha Única**: Rótulo `Memória RAM:` redimensionado para 125px, eliminando quebra de linha indesejada e unificando rótulo, total e barra de consumo com visual limpo.
+  - **Separação de Fabricante e Modelo**: Dividido em duas linhas distintas e bem delineadas: `Fabricante:` e `Modelo:`, melhorando a clareza e organização dos dados do equipamento.
+  - **Padronização de Espaçamentos Verticais**: Eliminado vão excessivo entre modelo e `Número de Série:`, fixando altura uniforme de 24px para cada linha de informação em todos os cards de detalhes.
+
+---
+
 ## [2.0.0.84] - 2026-11-20
 
 ### Aprimorado

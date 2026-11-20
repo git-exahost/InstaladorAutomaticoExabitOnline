@@ -130,7 +130,8 @@ namespace InstallerGUI.Forms
         private Label _lblExpCpu;
         private Label _lblExpRam;
         private MiniUsageBar _barExpRam;
-        private Label _lblExpDevice;
+        private Label _lblExpManufacturer;
+        private Label _lblExpModel;
         private Label _lblExpSerial;
         private Label _lblExpSecurity;
         private Label _lblExpSystemState;
@@ -238,7 +239,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.83";
+            return "2.0.0.85";
         }
 
         // ──────────────────────────────────────────────
@@ -268,6 +269,72 @@ namespace InstallerGUI.Forms
         {
             base.OnHandleCreated(e);
             ApplyDarkTitleBar();
+        }
+
+        private const int WM_GETMINMAXINFO = 0x0024;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int x;
+            public int y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
+
+        /// <summary>
+        /// Trava a largura mínima do formulário em 700px no nível da mensagem do Windows (WM_GETMINMAXINFO),
+        /// impedindo fisicamente que o mouse consiga redimensionar para menos de 700px de largura.
+        /// </summary>
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_GETMINMAXINFO)
+            {
+                base.WndProc(ref m);
+                try
+                {
+                    MINMAXINFO mmi = (MINMAXINFO)Marshal.PtrToStructure(m.LParam, typeof(MINMAXINFO));
+                    float scale = GetDpiScale();
+                    int minW = Math.Max(700, (int)(700 * scale));
+                    int minH = Math.Max(580, (int)(580 * scale));
+                    if (mmi.ptMinTrackSize.x < minW)
+                    {
+                        mmi.ptMinTrackSize.x = minW;
+                    }
+                    if (mmi.ptMinTrackSize.y < minH)
+                    {
+                        mmi.ptMinTrackSize.y = minH;
+                    }
+                    Marshal.StructureToPtr(mmi, m.LParam, false);
+                }
+                catch { }
+                return;
+            }
+            base.WndProc(ref m);
+        }
+
+        /// <summary>
+        /// Garante que qualquer tentativa de redimensionamento respeite a largura mínima de 700px.
+        /// </summary>
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (WindowState != FormWindowState.Minimized)
+            {
+                float scale = GetDpiScale();
+                int minW = Math.Max(700, (int)(700 * scale));
+                int minH = Math.Max(580, (int)(580 * scale));
+                if (Width < minW) Width = minW;
+                if (Height < minH) Height = minH;
+            }
         }
 
         /// <summary>
@@ -399,7 +466,7 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(245 * scale)));
+            _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(265 * scale)));
             _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             _pnlNormalLeftView.Controls.Add(BuildTabContentContainer(scale), 0, 0);
@@ -873,7 +940,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(32, 32, 32),
                 Margin = new Padding((int)(4 * scale), (int)(2 * scale), (int)(2 * scale), (int)(2 * scale)),
-                Padding = new Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale)),
+                Padding = new Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(10 * scale)),
             };
             pnlCard.Paint += (s, e) =>
             {
@@ -883,38 +950,60 @@ namespace InstallerGUI.Forms
                 }
             };
 
-            var mainLayout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 3,
-                BackColor = Color.Transparent,
-            };
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale))); // Título
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // 6 linhas de dados
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale))); // Botão Mais Detalhes
-
-            // Título
+            // 1. Título no topo
             var lblTitle = new Label
             {
                 Text = "DIAGNÓSTICO DO SISTEMA",
                 ForeColor = CorDestaqueAzul,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                Dock = DockStyle.Fill,
+                Dock = DockStyle.Top,
+                Height = (int)(24 * scale),
                 TextAlign = ContentAlignment.MiddleLeft,
                 UseMnemonic = false,
+                Margin = Padding.Empty,
             };
-            mainLayout.Controls.Add(lblTitle, 0, 0);
 
-            // Tabela com os 6 campos
+            // 2. Barra inferior com botão Mais Detalhes (ancorado na base de pnlCard, nunca cortado!)
+            var pnlBtnBottom = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = (int)(28 * scale),
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            _btnMoreDetails = new Button
+            {
+                Text = "▼ Mais detalhes (+6)",
+                ForeColor = CorDestaqueAzul,
+                BackColor = Color.FromArgb(24, 24, 24),
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Height = (int)(26 * scale),
+                Width = (int)(140 * scale),
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Right,
+            };
+            _btnMoreDetails.FlatAppearance.BorderColor = CorDestaqueAzul;
+            _btnMoreDetails.FlatAppearance.BorderSize = 1;
+            _btnMoreDetails.Click += (s, e) =>
+            {
+                ShowExpandedDiagnostics(true);
+            };
+            pnlBtnBottom.Controls.Add(_btnMoreDetails);
+
+            // 3. Tabela de 6 campos no meio preenchendo o espaço disponível
             var tblData = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
                 RowCount = 6,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = new Padding(0, (int)(4 * scale), 0, (int)(4 * scale)),
             };
-            tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(80 * scale)));
+            tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(105 * scale))); // 105px: "Computador:" nunca corta!
             tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             for (int i = 0; i < 6; i++)
                 tblData.RowStyles.Add(new RowStyle(SizeType.Percent, 16.66f));
@@ -977,32 +1066,11 @@ namespace InstallerGUI.Forms
             };
             tblData.Controls.Add(_lblDiagIp, 1, 5);
 
-            mainLayout.Controls.Add(tblData, 0, 1);
+            // Ordem de adição para garantir o Docking correto
+            pnlCard.Controls.Add(tblData);
+            pnlCard.Controls.Add(pnlBtnBottom);
+            pnlCard.Controls.Add(lblTitle);
 
-            // Botão Mais detalhes (+6)
-            var pnlBtnContainer = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
-            _btnMoreDetails = new Button
-            {
-                Text = "▼ Mais detalhes (+6)",
-                ForeColor = CorDestaqueAzul,
-                BackColor = Color.FromArgb(24, 24, 24),
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                FlatStyle = FlatStyle.Flat,
-                Height = (int)(26 * scale),
-                Width = (int)(135 * scale),
-                Cursor = Cursors.Hand,
-                Dock = DockStyle.Right,
-            };
-            _btnMoreDetails.FlatAppearance.BorderColor = CorDestaqueAzul;
-            _btnMoreDetails.FlatAppearance.BorderSize = 1;
-            _btnMoreDetails.Click += (s, e) =>
-            {
-                ShowExpandedDiagnostics(true);
-            };
-            pnlBtnContainer.Controls.Add(_btnMoreDetails);
-            mainLayout.Controls.Add(pnlBtnContainer, 0, 2);
-
-            pnlCard.Controls.Add(mainLayout);
             return pnlCard;
         }
 
@@ -1294,11 +1362,13 @@ namespace InstallerGUI.Forms
                 ColumnCount = 2,
                 RowCount = 3,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(95 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale))); // 125px garante "Computador:" sem truncamento
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             content.Controls.Add(CreateDiagHeaderLabel("Computador:"), 0, 0);
@@ -1311,7 +1381,6 @@ namespace InstallerGUI.Forms
 
             var lblSys = CreateDiagHeaderLabel("Sistema:");
             lblSys.TextAlign = ContentAlignment.TopLeft;
-            lblSys.Margin = new Padding(0, (int)(2 * scale), 0, 0);
             content.Controls.Add(lblSys, 0, 2);
 
             _lblExpOs = new Label
@@ -1323,7 +1392,7 @@ namespace InstallerGUI.Forms
                 TextAlign = ContentAlignment.TopLeft,
                 AutoSize = false,
                 UseMnemonic = false,
-                Margin = new Padding(0, (int)(2 * scale), 0, 0),
+                Margin = Padding.Empty,
             };
             content.Controls.Add(_lblExpOs, 1, 2);
 
@@ -1338,11 +1407,13 @@ namespace InstallerGUI.Forms
                 ColumnCount = 2,
                 RowCount = 3,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(115 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale)));
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(20 * scale)));
-            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(20 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             // 1. Status de conexão
@@ -1371,6 +1442,8 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             EnableDoubleBuffering(_pnlNetIpsViewport);
 
@@ -1389,6 +1462,8 @@ namespace InstallerGUI.Forms
                 Location = new Point(0, 0),
                 BackColor = Color.Transparent,
                 AutoScroll = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             EnableDoubleBuffering(_pnlNetIpsContent);
 
@@ -1440,6 +1515,8 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             EnableDoubleBuffering(_pnlStorageViewport);
 
@@ -1458,6 +1535,8 @@ namespace InstallerGUI.Forms
                 Location = new Point(0, 0),
                 BackColor = Color.Transparent,
                 AutoScroll = false,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             EnableDoubleBuffering(_pnlStorageContent);
 
@@ -1509,11 +1588,13 @@ namespace InstallerGUI.Forms
                 ColumnCount = 2,
                 RowCount = 2,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(105 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale))); // 125px garante "Memória RAM:" em uma linha só sem quebrar
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 55f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 45f));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale)));
 
             var lblCpu = CreateDiagHeaderLabel("Processador:");
             lblCpu.TextAlign = ContentAlignment.TopLeft;
@@ -1528,6 +1609,7 @@ namespace InstallerGUI.Forms
                 TextAlign = ContentAlignment.TopLeft,
                 AutoSize = false,
                 UseMnemonic = false,
+                Margin = Padding.Empty,
             };
             content.Controls.Add(_lblExpCpu, 1, 0);
 
@@ -1535,16 +1617,23 @@ namespace InstallerGUI.Forms
             lblRam.TextAlign = ContentAlignment.TopLeft;
             content.Controls.Add(lblRam, 0, 1);
 
-            var pnlRam = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            var pnlRam = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
             _lblExpRam = new Label
             {
                 Text = "Calculando...",
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8.5f),
                 Dock = DockStyle.Top,
-                Height = (int)(18 * scale),
+                Height = (int)(20 * scale),
                 TextAlign = ContentAlignment.MiddleLeft,
                 UseMnemonic = false,
+                Margin = Padding.Empty,
             };
             _barExpRam = new MiniUsageBar
             {
@@ -1552,6 +1641,7 @@ namespace InstallerGUI.Forms
                 Height = (int)(8 * scale),
                 Percent = 50,
                 FillColor = Color.FromArgb(70, 140, 200),
+                Margin = Padding.Empty,
             };
             pnlRam.Controls.Add(_barExpRam);
             pnlRam.Controls.Add(_lblExpRam);
@@ -1566,21 +1656,29 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 2,
+                RowCount = 4,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(130 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale)));
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Espaçador inferior flexível para manter 24px uniformes acima
 
-            content.Controls.Add(CreateDiagHeaderLabel("Fabricante / Modelo:"), 0, 0);
-            _lblExpDevice = CreateDiagValueLabel("Identificando...");
-            content.Controls.Add(_lblExpDevice, 1, 0);
+            content.Controls.Add(CreateDiagHeaderLabel("Fabricante:"), 0, 0);
+            _lblExpManufacturer = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpManufacturer, 1, 0);
 
-            content.Controls.Add(CreateDiagHeaderLabel("Número de Série:"), 0, 1);
+            content.Controls.Add(CreateDiagHeaderLabel("Modelo:"), 0, 1);
+            _lblExpModel = CreateDiagValueLabel("Identificando...");
+            content.Controls.Add(_lblExpModel, 1, 1);
+
+            content.Controls.Add(CreateDiagHeaderLabel("Número de Série:"), 0, 2);
             _lblExpSerial = CreateDiagValueLabel("Identificando...");
-            content.Controls.Add(_lblExpSerial, 1, 1);
+            content.Controls.Add(_lblExpSerial, 1, 2);
 
             return CreateCardContainer("Dispositivo e Garantia", content, scale);
         }
@@ -1591,14 +1689,17 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 4,
+                RowCount = 5,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 22f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 28f));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             var lblSecTitle = new Label
             {
@@ -1606,7 +1707,8 @@ namespace InstallerGUI.Forms
                 ForeColor = Color.FromArgb(170, 170, 170),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.BottomLeft,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
             };
             _lblExpSecurity = new Label
             {
@@ -1615,6 +1717,7 @@ namespace InstallerGUI.Forms
                 Font = new Font("Segoe UI", 8.5f),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
             };
 
             var lblStateTitle = new Label
@@ -1623,7 +1726,8 @@ namespace InstallerGUI.Forms
                 ForeColor = Color.FromArgb(170, 170, 170),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 Dock = DockStyle.Fill,
-                TextAlign = ContentAlignment.BottomLeft,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
             };
             _lblExpSystemState = new Label
             {
@@ -1632,6 +1736,7 @@ namespace InstallerGUI.Forms
                 Font = new Font("Segoe UI", 8.5f),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
             };
 
             content.Controls.Add(lblSecTitle, 0, 0);
@@ -1649,7 +1754,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(32, 32, 32),
                 Margin = new Padding((int)(4 * scale)),
-                Padding = new Padding((int)(10 * scale), (int)(6 * scale), (int)(10 * scale), (int)(6 * scale)),
+                Padding = new Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(10 * scale)),
             };
             pnlCard.Paint += (s, e) =>
             {
@@ -1665,9 +1770,11 @@ namespace InstallerGUI.Forms
                 ColumnCount = 1,
                 RowCount = 2,
                 BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
             };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale))); // Título com altura e respiro
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Conteúdo dos itens
 
             var lblTitle = new Label
             {
@@ -1677,10 +1784,12 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
                 UseMnemonic = false,
+                Margin = new Padding(0, 0, 0, (int)(6 * scale)), // Margem inferior separando título dos itens
             };
             layout.Controls.Add(lblTitle, 0, 0);
 
             content.Dock = DockStyle.Fill;
+            content.Margin = Padding.Empty;
             layout.Controls.Add(content, 0, 1);
 
             pnlCard.Controls.Add(layout);
@@ -1698,6 +1807,7 @@ namespace InstallerGUI.Forms
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoSize = false,
                 UseMnemonic = false,
+                Margin = Padding.Empty,
             };
         }
 
@@ -1712,6 +1822,7 @@ namespace InstallerGUI.Forms
                 TextAlign = ContentAlignment.MiddleLeft,
                 AutoSize = false,
                 UseMnemonic = false,
+                Margin = Padding.Empty,
             };
         }
 
@@ -1987,18 +2098,17 @@ namespace InstallerGUI.Forms
             }
 
             // Card 5: Dispositivo e Garantia
-            if (_lblExpDevice != null)
+            if (_lblExpManufacturer != null)
             {
-                string devText = diag.Model;
-                if (!string.IsNullOrEmpty(diag.Manufacturer) && diag.Model.IndexOf(diag.Manufacturer, StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    devText = string.Format("{0} {1}", diag.Manufacturer, diag.Model);
-                }
-                _lblExpDevice.Text = devText;
+                _lblExpManufacturer.Text = string.IsNullOrEmpty(diag.Manufacturer) ? "Genérico / Padrão" : diag.Manufacturer;
+            }
+            if (_lblExpModel != null)
+            {
+                _lblExpModel.Text = string.IsNullOrEmpty(diag.Model) ? "Placa-Mãe / Padrão" : diag.Model;
             }
             if (_lblExpSerial != null)
             {
-                _lblExpSerial.Text = diag.SerialNumber;
+                _lblExpSerial.Text = string.IsNullOrEmpty(diag.SerialNumber) ? "Não informado" : diag.SerialNumber;
             }
 
             // Card 6: Segurança e Status
