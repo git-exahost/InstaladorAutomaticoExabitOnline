@@ -7,6 +7,16 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.73] - 2026-11-19
+
+### Aprimorado
+- **Novo Ícone Oficial Completo a partir de `icon.png`**:
+  - Conversão da nova imagem [`InstallerGUI\Image\icon.png`](file:///d:/Arquivos%20de%20Trabalho/Exabit%20Soluções%20em%20TI/Instalador%20Automatico%20Exabit%20Online/InstallerGUI/Image/icon.png) (512x512 32-bit ARGB) em arquivo `.ico` corporativo com 10 resoluções completas (`16x16`, `20x20`, `24x24`, `32x32`, `40x40`, `48x48`, `64x64`, `96x96`, `128x128` e `256x256`).
+  - Implementado formato híbrido padrão oficial da arquitetura Microsoft Windows (DIB 32 bpp descompactado com máscara AND para compatibilidade total em resoluções $\le 128\times 128$, e compressão PNG para $256\times 256$).
+  - O ícone do executável [`dist\Instalador Automatico Exabit.exe`](file:///d:/Arquivos%20de%20Trabalho/Exabit%20Soluções%20em%20TI/Instalador%20Automatico%20Exabit%20Online/dist/Instalador%20Automatico%20Exabit.exe) foi recompilado e assinado com certificado digital Authenticode.
+
+---
+
 ## [2.0.0.72] - 2026-11-19
 
 ### Adicionado
