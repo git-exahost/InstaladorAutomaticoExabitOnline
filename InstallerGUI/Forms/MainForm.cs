@@ -109,7 +109,6 @@ namespace InstallerGUI.Forms
         private Label _lblDiagComputer;
         private Label _lblDiagUser;
         private Label _lblDiagOs;
-        private Label _lblDiagDisk;
         private MiniUsageBar _barDiagDisk;
         private Label _lblDiagNet;
         private Label _lblDiagIp;
@@ -121,9 +120,13 @@ namespace InstallerGUI.Forms
         private Label _lblExpUser;
         private Label _lblExpOs;
         private Label _lblExpNetStatus;
-        private Label _lblExpLocalIp;
         private Label _lblExpInterfaces;
-        private Panel _pnlStorageDrivesContainer;
+        private Panel _pnlStorageViewport;
+        private Panel _pnlStorageContent;
+        private DarkScrollBar _scrollBarStorage;
+        private Panel _pnlNetIpsViewport;
+        private Panel _pnlNetIpsContent;
+        private DarkScrollBar _scrollBarNetIps;
         private Label _lblExpCpu;
         private Label _lblExpRam;
         private MiniUsageBar _barExpRam;
@@ -156,7 +159,7 @@ namespace InstallerGUI.Forms
             int formHeight = Math.Min(workingArea.Height - 20, Math.Max(700, desiredHeight));
 
             Size = new Size(formWidth, formHeight);
-            MinimumSize = new Size(Math.Min(1050, formWidth), Math.Min(680, formHeight));
+            MinimumSize = new Size(700, 600);
             MinimizeBox = true;
             MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
@@ -396,7 +399,7 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(216 * scale)));
+            _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(245 * scale)));
             _pnlNormalLeftView.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
             _pnlNormalLeftView.Controls.Add(BuildTabContentContainer(scale), 0, 0);
@@ -456,7 +459,7 @@ namespace InstallerGUI.Forms
 
             leftPanel.Controls.Add(new Label
             {
-                Text = string.Format("Auto Instalador de Programas v{0}", GetAppVersion()),
+                Text = "Auto Instalador de Programas",
                 Font = new Font("Segoe UI", 13.5f, FontStyle.Bold),
                 ForeColor = CorDestaque,
                 AutoSize = true,
@@ -889,7 +892,7 @@ namespace InstallerGUI.Forms
             };
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale))); // Título
             mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // 6 linhas de dados
-            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(26 * scale))); // Botão Mais Detalhes
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale))); // Botão Mais Detalhes
 
             // Título
             var lblTitle = new Label
@@ -911,7 +914,7 @@ namespace InstallerGUI.Forms
                 RowCount = 6,
                 BackColor = Color.Transparent,
             };
-            tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(105 * scale)));
+            tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(80 * scale)));
             tblData.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             for (int i = 0; i < 6; i++)
                 tblData.RowStyles.Add(new RowStyle(SizeType.Percent, 16.66f));
@@ -931,38 +934,28 @@ namespace InstallerGUI.Forms
             _lblDiagOs = CreateDiagValueLabel("Identificando...");
             tblData.Controls.Add(_lblDiagOs, 1, 2);
 
-            // 4. Disco C: (com mini barra)
-            tblData.Controls.Add(CreateDiagHeaderLabel("Disco C: (NVMe):"), 0, 3);
-            var pnlDiskContainer = new FlowLayoutPanel
+            // 4. Disco C: (somente com a barra verde/amarela/vermelha)
+            tblData.Controls.Add(CreateDiagHeaderLabel("Disco C:"), 0, 3);
+            var pnlDiskContainer = new Panel
             {
                 Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            _lblDiagDisk = new Label
-            {
-                Text = "Calculando...",
-                ForeColor = Color.White,
-                Font = new Font("Segoe UI", 8.5f),
-                AutoSize = true,
-                Margin = new Padding(0, (int)(2 * scale), 0, 0),
-            };
             _barDiagDisk = new MiniUsageBar
             {
-                Size = new Size((int)(50 * scale), (int)(8 * scale)),
-                Margin = new Padding((int)(8 * scale), (int)(5 * scale), 0, 0),
+                Location = new Point(0, (int)(6 * scale)),
+                Size = new Size((int)(115 * scale), (int)(10 * scale)),
                 Percent = 30,
                 FillColor = CorSucesso,
+                Cursor = Cursors.Hand,
             };
-            pnlDiskContainer.Controls.Add(_lblDiagDisk);
             pnlDiskContainer.Controls.Add(_barDiagDisk);
             tblData.Controls.Add(pnlDiskContainer, 1, 3);
 
-            // 5. Conexão / Ping
-            tblData.Controls.Add(CreateDiagHeaderLabel("Conexão / Ping:"), 0, 4);
+            // 5. Conexão
+            tblData.Controls.Add(CreateDiagHeaderLabel("Conexão:"), 0, 4);
             _lblDiagNet = CreateDiagValueLabel("Verificando conexão...");
             _lblDiagNet.ForeColor = CorSucesso;
             _lblDiagNet.Cursor = Cursors.Hand;
@@ -995,7 +988,7 @@ namespace InstallerGUI.Forms
                 BackColor = Color.FromArgb(24, 24, 24),
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
-                Height = (int)(24 * scale),
+                Height = (int)(26 * scale),
                 Width = (int)(135 * scale),
                 Cursor = Cursors.Hand,
                 Dock = DockStyle.Right,
@@ -1100,17 +1093,13 @@ namespace InstallerGUI.Forms
 
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
             _chkWallpaperNortel = CreateCheckBox("Aplicar papel de parede Nortel", false);
-            _chkPreventWallpaperChange = CreateCheckBox("Bloquear alteração do papel de parede", true);
+            _chkPreventWallpaperChange = CreateCheckBox("Bloquear alteração do papel de parede", false);
 
             _chkWallpaper.CheckedChanged += (s, e) =>
             {
                 if (_chkWallpaper.Checked && _chkWallpaperNortel.Checked)
                 {
                     _chkWallpaperNortel.Checked = false;
-                }
-                if (_chkWallpaper.Checked)
-                {
-                    _chkPreventWallpaperChange.Checked = true;
                 }
             };
 
@@ -1306,11 +1295,11 @@ namespace InstallerGUI.Forms
                 RowCount = 3,
                 BackColor = Color.Transparent,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(100 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(95 * scale)));
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 30f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 30f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 40f));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             content.Controls.Add(CreateDiagHeaderLabel("Computador:"), 0, 0);
             _lblExpComputer = CreateDiagValueLabel("Identificando...");
@@ -1320,11 +1309,25 @@ namespace InstallerGUI.Forms
             _lblExpUser = CreateDiagValueLabel("Identificando...");
             content.Controls.Add(_lblExpUser, 1, 1);
 
-            content.Controls.Add(CreateDiagHeaderLabel("Sistema:"), 0, 2);
-            _lblExpOs = CreateDiagValueLabel("Identificando...");
+            var lblSys = CreateDiagHeaderLabel("Sistema:");
+            lblSys.TextAlign = ContentAlignment.TopLeft;
+            lblSys.Margin = new Padding(0, (int)(2 * scale), 0, 0);
+            content.Controls.Add(lblSys, 0, 2);
+
+            _lblExpOs = new Label
+            {
+                Text = "Identificando...",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.TopLeft,
+                AutoSize = false,
+                UseMnemonic = false,
+                Margin = new Padding(0, (int)(2 * scale), 0, 0),
+            };
             content.Controls.Add(_lblExpOs, 1, 2);
 
-            return CreateCardContainer("Identificacion & OS", content, scale);
+            return CreateCardContainer("Identificação e Sistema", content, scale);
         }
 
         private Panel BuildCardNetwork(float scale)
@@ -1336,12 +1339,13 @@ namespace InstallerGUI.Forms
                 RowCount = 3,
                 BackColor = Color.Transparent,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(125 * scale)));
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(115 * scale)));
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33f));
-            content.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34f));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(20 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(20 * scale)));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
+            // 1. Status de conexão
             content.Controls.Add(CreateDiagHeaderLabel("Status de conexão:"), 0, 0);
             _lblExpNetStatus = CreateDiagValueLabel("Verificando...");
             _lblExpNetStatus.ForeColor = CorSucesso;
@@ -1353,33 +1357,148 @@ namespace InstallerGUI.Forms
             };
             content.Controls.Add(_lblExpNetStatus, 1, 0);
 
-            content.Controls.Add(CreateDiagHeaderLabel("IP Local:"), 0, 1);
-            _lblExpLocalIp = CreateDiagValueLabel("Detectando...");
-            _lblExpLocalIp.ForeColor = CorDestaque;
-            _lblExpLocalIp.Cursor = Cursors.Hand;
-            _lblExpLocalIp.Click += (s, e) =>
-            {
-                CopyLocalIpToClipboard();
-            };
-            content.Controls.Add(_lblExpLocalIp, 1, 1);
-
-            content.Controls.Add(CreateDiagHeaderLabel("Interfaces:"), 0, 2);
+            // 2. Interfaces
+            content.Controls.Add(CreateDiagHeaderLabel("Interfaces:"), 0, 1);
             _lblExpInterfaces = CreateDiagValueLabel("Detectando...");
-            content.Controls.Add(_lblExpInterfaces, 1, 2);
+            content.Controls.Add(_lblExpInterfaces, 1, 1);
 
-            return CreateCardContainer("Connection & Network", content, scale);
+            // 3. IPs Locais com barra de rolagem customizada
+            var lblIps = CreateDiagHeaderLabel("IPs Locais:");
+            lblIps.TextAlign = ContentAlignment.TopLeft;
+            content.Controls.Add(lblIps, 0, 2);
+
+            _pnlNetIpsViewport = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+            };
+            EnableDoubleBuffering(_pnlNetIpsViewport);
+
+            _scrollBarNetIps = new DarkScrollBar
+            {
+                Dock = DockStyle.Right,
+                Width = (int)(8 * scale),
+                TrackColor = Color.FromArgb(28, 28, 28),
+                ThumbColor = CorDestaque,
+                SmallChange = (int)(18 * scale),
+                Visible = false,
+            };
+
+            _pnlNetIpsContent = new Panel
+            {
+                Location = new Point(0, 0),
+                BackColor = Color.Transparent,
+                AutoScroll = false,
+            };
+            EnableDoubleBuffering(_pnlNetIpsContent);
+
+            Action<MouseEventArgs> handleNetWheel = (e) =>
+            {
+                if (_scrollBarNetIps != null && _scrollBarNetIps.Visible)
+                {
+                    _scrollBarNetIps.ScrollBy(-Math.Sign(e.Delta) * (int)(18 * scale));
+                }
+            };
+            _pnlNetIpsViewport.MouseWheel += (s, e) => handleNetWheel(e);
+            _pnlNetIpsContent.MouseWheel += (s, e) => handleNetWheel(e);
+
+            _scrollBarNetIps.ValueChanged += (s, e) =>
+            {
+                _pnlNetIpsContent.Top = -_scrollBarNetIps.Value;
+            };
+
+            _pnlNetIpsViewport.Resize += (s, e) => UpdateNetIpsLayout();
+
+            _pnlNetIpsViewport.Controls.Add(_pnlNetIpsContent);
+            _pnlNetIpsViewport.Controls.Add(_scrollBarNetIps);
+
+            content.Controls.Add(_pnlNetIpsViewport, 1, 2);
+
+            return CreateCardContainer("Conexão e Rede", content, scale);
+        }
+
+        private void UpdateNetIpsLayout()
+        {
+            if (_pnlNetIpsViewport == null || _pnlNetIpsContent == null || _scrollBarNetIps == null) return;
+            int viewH = _pnlNetIpsViewport.ClientSize.Height;
+            int totalH = 0;
+            foreach (Control c in _pnlNetIpsContent.Controls)
+            {
+                if (c.Bottom > totalH) totalH = c.Bottom;
+            }
+            _pnlNetIpsContent.Height = Math.Max(totalH, viewH);
+            int maxScroll = Math.Max(0, totalH - viewH);
+            _scrollBarNetIps.Maximum = maxScroll;
+            _scrollBarNetIps.LargeChange = Math.Max(1, viewH);
+            _scrollBarNetIps.Visible = maxScroll > 0;
+            _pnlNetIpsContent.Width = Math.Max(10, _pnlNetIpsViewport.ClientSize.Width - (_scrollBarNetIps.Visible ? _scrollBarNetIps.Width : 0));
         }
 
         private Panel BuildCardStorage(float scale)
         {
-            _pnlStorageDrivesContainer = new Panel
+            _pnlStorageViewport = new Panel
             {
                 Dock = DockStyle.Fill,
-                AutoScroll = true,
                 BackColor = Color.Transparent,
             };
+            EnableDoubleBuffering(_pnlStorageViewport);
 
-            return CreateCardContainer("Storage & Partition", _pnlStorageDrivesContainer, scale);
+            _scrollBarStorage = new DarkScrollBar
+            {
+                Dock = DockStyle.Right,
+                Width = (int)(8 * scale),
+                TrackColor = Color.FromArgb(28, 28, 28),
+                ThumbColor = CorDestaque,
+                SmallChange = (int)(20 * scale),
+                Visible = false,
+            };
+
+            _pnlStorageContent = new Panel
+            {
+                Location = new Point(0, 0),
+                BackColor = Color.Transparent,
+                AutoScroll = false,
+            };
+            EnableDoubleBuffering(_pnlStorageContent);
+
+            Action<MouseEventArgs> handleStorageWheel = (e) =>
+            {
+                if (_scrollBarStorage != null && _scrollBarStorage.Visible)
+                {
+                    _scrollBarStorage.ScrollBy(-Math.Sign(e.Delta) * (int)(20 * scale));
+                }
+            };
+            _pnlStorageViewport.MouseWheel += (s, e) => handleStorageWheel(e);
+            _pnlStorageContent.MouseWheel += (s, e) => handleStorageWheel(e);
+
+            _scrollBarStorage.ValueChanged += (s, e) =>
+            {
+                _pnlStorageContent.Top = -_scrollBarStorage.Value;
+            };
+
+            _pnlStorageViewport.Resize += (s, e) => UpdateStorageDrivesLayout();
+
+            _pnlStorageViewport.Controls.Add(_pnlStorageContent);
+            _pnlStorageViewport.Controls.Add(_scrollBarStorage);
+
+            return CreateCardContainer("Armazenamento e Partições", _pnlStorageViewport, scale);
+        }
+
+        private void UpdateStorageDrivesLayout()
+        {
+            if (_pnlStorageViewport == null || _pnlStorageContent == null || _scrollBarStorage == null) return;
+            int viewH = _pnlStorageViewport.ClientSize.Height;
+            int totalH = 0;
+            foreach (Control c in _pnlStorageContent.Controls)
+            {
+                if (c.Bottom > totalH) totalH = c.Bottom;
+            }
+            _pnlStorageContent.Height = Math.Max(totalH, viewH);
+            int maxScroll = Math.Max(0, totalH - viewH);
+            _scrollBarStorage.Maximum = maxScroll;
+            _scrollBarStorage.LargeChange = Math.Max(1, viewH);
+            _scrollBarStorage.Visible = maxScroll > 0;
+            _pnlStorageContent.Width = Math.Max(10, _pnlStorageViewport.ClientSize.Width - (_scrollBarStorage.Visible ? _scrollBarStorage.Width : 0));
         }
 
         private Panel BuildCardHardware(float scale)
@@ -1396,11 +1515,26 @@ namespace InstallerGUI.Forms
             content.RowStyles.Add(new RowStyle(SizeType.Percent, 55f));
             content.RowStyles.Add(new RowStyle(SizeType.Percent, 45f));
 
-            content.Controls.Add(CreateDiagHeaderLabel("Processador:"), 0, 0);
-            _lblExpCpu = CreateDiagValueLabel("Identificando...");
+            var lblCpu = CreateDiagHeaderLabel("Processador:");
+            lblCpu.TextAlign = ContentAlignment.TopLeft;
+            content.Controls.Add(lblCpu, 0, 0);
+
+            _lblExpCpu = new Label
+            {
+                Text = "Identificando...",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 8.5f),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.TopLeft,
+                AutoSize = false,
+                UseMnemonic = false,
+            };
             content.Controls.Add(_lblExpCpu, 1, 0);
 
-            content.Controls.Add(CreateDiagHeaderLabel("Memória RAM:"), 0, 1);
+            var lblRam = CreateDiagHeaderLabel("Memória RAM:");
+            lblRam.TextAlign = ContentAlignment.TopLeft;
+            content.Controls.Add(lblRam, 0, 1);
+
             var pnlRam = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
             _lblExpRam = new Label
             {
@@ -1410,6 +1544,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Top,
                 Height = (int)(18 * scale),
                 TextAlign = ContentAlignment.MiddleLeft,
+                UseMnemonic = false,
             };
             _barExpRam = new MiniUsageBar
             {
@@ -1422,7 +1557,7 @@ namespace InstallerGUI.Forms
             pnlRam.Controls.Add(_lblExpRam);
             content.Controls.Add(pnlRam, 1, 1);
 
-            return CreateCardContainer("Hardware Resources", content, scale);
+            return CreateCardContainer("Recursos de Hardware", content, scale);
         }
 
         private Panel BuildCardDevice(float scale)
@@ -1447,7 +1582,7 @@ namespace InstallerGUI.Forms
             _lblExpSerial = CreateDiagValueLabel("Identificando...");
             content.Controls.Add(_lblExpSerial, 1, 1);
 
-            return CreateCardContainer("Device & Warranty", content, scale);
+            return CreateCardContainer("Dispositivo e Garantia", content, scale);
         }
 
         private Panel BuildCardSecurity(float scale)
@@ -1504,7 +1639,7 @@ namespace InstallerGUI.Forms
             content.Controls.Add(lblStateTitle, 0, 2);
             content.Controls.Add(_lblExpSystemState, 0, 3);
 
-            return CreateCardContainer("Security & Status", content, scale);
+            return CreateCardContainer("Segurança e Status", content, scale);
         }
 
         private Panel CreateCardContainer(string title, Control content, float scale, Color? titleColor = null)
@@ -1636,6 +1771,23 @@ namespace InstallerGUI.Forms
             catch { }
         }
 
+        private void CopyIpToClipboard(string ip)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(ip) && ip != "Indisponível")
+                {
+                    Clipboard.SetText(ip);
+                    MessageBox.Show(
+                        string.Format("IP {0} copiado para a área de transferência com sucesso!", ip),
+                        "IP Copiado",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                }
+            }
+            catch { }
+        }
+
         /// <summary>
         /// Atualiza os cards compacto e expandido de diagnóstico na interface.
         /// </summary>
@@ -1660,7 +1812,7 @@ namespace InstallerGUI.Forms
             if (_lblDiagOs != null)
                 _lblDiagOs.Text = diag.WindowsEdition;
 
-            if (_lblDiagDisk != null && _barDiagDisk != null)
+            if (_barDiagDisk != null)
             {
                 DiskDriveDiagnosis cDrive = null;
                 if (diag.Drives != null)
@@ -1669,18 +1821,22 @@ namespace InstallerGUI.Forms
                 }
                 if (cDrive != null)
                 {
-                    _lblDiagDisk.Text = cDrive.StatusText;
                     _barDiagDisk.Percent = cDrive.PercentUsed;
-                    _barDiagDisk.FillColor = (cDrive.StatusColor == ConsoleColor.Red) 
-                        ? Color.FromArgb(230, 50, 50) 
-                        : ((cDrive.StatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : CorSucesso);
+                    if (cDrive.PercentFree < 10.0 || cDrive.FreeGb < 15.0)
+                        _barDiagDisk.FillColor = Color.FromArgb(230, 50, 50); // Cheio / Crítico (Vermelho)
+                    else if (cDrive.PercentFree < 20.0 || cDrive.FreeGb < 30.0)
+                        _barDiagDisk.FillColor = Color.FromArgb(240, 180, 0); // Quase cheio / Atenção (Amarelo)
+                    else
+                        _barDiagDisk.FillColor = CorSucesso; // Normal / Bom (Verde)
                 }
             }
 
             if (_lblDiagNet != null)
             {
                 _lblDiagNet.Text = diag.ConnectionStatusText + " ↻";
-                _lblDiagNet.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) ? CorSucesso : Color.FromArgb(240, 180, 0);
+                _lblDiagNet.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) 
+                    ? CorSucesso 
+                    : ((diag.ConnectionStatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : Color.FromArgb(230, 50, 50));
             }
 
             if (_lblDiagIp != null)
@@ -1699,39 +1855,80 @@ namespace InstallerGUI.Forms
         {
             if (diag == null || _pnlExpandedDiagnostics == null) return;
 
-            // Card 1: Identificacion & OS
+            // Card 1: Identificação e Sistema
             if (_lblExpComputer != null) _lblExpComputer.Text = string.Format("{0} ({1})", diag.ComputerName, diag.DomainOrWorkgroup);
             if (_lblExpUser != null) _lblExpUser.Text = string.Format("{0}{1}", diag.UserName, diag.IsAdmin ? " (Admin)" : "");
             if (_lblExpOs != null) _lblExpOs.Text = string.Format("{0}\n{1}", diag.WindowsEdition, diag.WindowsBuild);
 
-            // Card 2: Connection & Network
+            // Card 2: Conexão e Rede
             if (_lblExpNetStatus != null)
             {
                 _lblExpNetStatus.Text = diag.ConnectionStatusText + " ↻";
-                _lblExpNetStatus.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) ? CorSucesso : Color.FromArgb(240, 180, 0);
+                _lblExpNetStatus.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) 
+                    ? CorSucesso 
+                    : ((diag.ConnectionStatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : Color.FromArgb(230, 50, 50));
             }
-            if (_lblExpLocalIp != null) _lblExpLocalIp.Text = diag.LocalIp + " [+]";
             if (_lblExpInterfaces != null) _lblExpInterfaces.Text = diag.NetworkInterfacesSummary;
 
-            // Card 3: Storage & Partition (Lista todos os discos fixos da máquina)
-            if (_pnlStorageDrivesContainer != null)
+            if (_pnlNetIpsContent != null && _pnlNetIpsViewport != null && _scrollBarNetIps != null)
             {
-                _pnlStorageDrivesContainer.SuspendLayout();
-                _pnlStorageDrivesContainer.Controls.Clear();
+                _pnlNetIpsContent.SuspendLayout();
+                _pnlNetIpsContent.Controls.Clear();
+                int ipTop = 0;
+                var ipList = (diag.AllLocalIps != null && diag.AllLocalIps.Count > 0)
+                    ? diag.AllLocalIps
+                    : new List<string> { diag.LocalIp };
+
+                float scale = GetDpiScale();
+                foreach (var ipItem in ipList)
+                {
+                    string capturedIpItem = ipItem;
+                    var lblIp = new Label
+                    {
+                        Text = capturedIpItem + " [+]",
+                        ForeColor = CorDestaque,
+                        Font = new Font("Segoe UI", 8.5f),
+                        Location = new Point(0, ipTop),
+                        Size = new Size(Math.Max(100, _pnlNetIpsViewport.ClientSize.Width - 12), (int)(18 * scale)),
+                        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                        TextAlign = ContentAlignment.MiddleLeft,
+                        Cursor = Cursors.Hand,
+                        UseMnemonic = false,
+                    };
+                    lblIp.Click += (s, e) =>
+                    {
+                        string cleanIp = capturedIpItem.Split(' ')[0].Trim();
+                        CopyIpToClipboard(cleanIp);
+                    };
+                    _pnlNetIpsContent.Controls.Add(lblIp);
+                    ipTop += (int)(18 * scale);
+                }
+
+                _pnlNetIpsContent.Height = Math.Max(ipTop, _pnlNetIpsViewport.ClientSize.Height);
+                UpdateNetIpsLayout();
+                _pnlNetIpsContent.ResumeLayout();
+            }
+
+            // Card 3: Armazenamento e Partições (Lista todos os discos fixos da máquina com DarkScrollBar)
+            if (_pnlStorageContent != null && _pnlStorageViewport != null && _scrollBarStorage != null)
+            {
+                _pnlStorageContent.SuspendLayout();
+                _pnlStorageContent.Controls.Clear();
 
                 float scale = GetDpiScale();
                 if (diag.Drives != null && diag.Drives.Count > 0)
                 {
-                    // Itera em ordem reversa para que o primeiro apareça no topo com Dock = Top
-                    for (int i = diag.Drives.Count - 1; i >= 0; i--)
+                    int driveTop = 0;
+                    for (int i = 0; i < diag.Drives.Count; i++)
                     {
                         var drive = diag.Drives[i];
+                        int itemH = (int)(38 * scale);
                         var driveItemPanel = new Panel
                         {
-                            Dock = DockStyle.Top,
-                            Height = (int)(42 * scale),
+                            Location = new Point(0, driveTop),
+                            Size = new Size(Math.Max(100, _pnlStorageViewport.ClientSize.Width - 12), itemH),
+                            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                             BackColor = Color.Transparent,
-                            Padding = new Padding(0, 0, 0, (int)(8 * scale)),
                         };
 
                         var lblDriveText = new Label
@@ -1757,7 +1954,8 @@ namespace InstallerGUI.Forms
 
                         driveItemPanel.Controls.Add(barDrive);
                         driveItemPanel.Controls.Add(lblDriveText);
-                        _pnlStorageDrivesContainer.Controls.Add(driveItemPanel);
+                        _pnlStorageContent.Controls.Add(driveItemPanel);
+                        driveTop += itemH + (int)(4 * scale);
                     }
                 }
                 else
@@ -1768,12 +1966,13 @@ namespace InstallerGUI.Forms
                         ForeColor = Color.Gray,
                         Dock = DockStyle.Fill,
                     };
-                    _pnlStorageDrivesContainer.Controls.Add(lblNone);
+                    _pnlStorageContent.Controls.Add(lblNone);
                 }
-                _pnlStorageDrivesContainer.ResumeLayout();
+                _pnlStorageContent.ResumeLayout();
+                UpdateStorageDrivesLayout();
             }
 
-            // Card 4: Hardware Resources
+            // Card 4: Recursos de Hardware
             if (_lblExpCpu != null)
             {
                 _lblExpCpu.Text = string.Format("{0}\n{1}", diag.CpuName, diag.CpuSummary);
@@ -1787,7 +1986,7 @@ namespace InstallerGUI.Forms
                 _barExpRam.Percent = diag.RamUsagePercent;
             }
 
-            // Card 5: Device & Warranty
+            // Card 5: Dispositivo e Garantia
             if (_lblExpDevice != null)
             {
                 string devText = diag.Model;
@@ -1802,7 +2001,7 @@ namespace InstallerGUI.Forms
                 _lblExpSerial.Text = diag.SerialNumber;
             }
 
-            // Card 6: Security & Status
+            // Card 6: Segurança e Status
             if (_lblExpSecurity != null)
             {
                 _lblExpSecurity.Text = string.Format("Windows Defender: {0} | BitLocker: {1}", diag.DefenderStatusText, diag.BitLockerStatusText);
@@ -3172,7 +3371,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("firefox",     "Mozilla Firefox",                "Firefox_Setup.msi",                    "/qn /norestart", "", "Geral"),
                 new ProgramInfo("radmin",      "Radmin VPN",                     "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART", "", "Geral") { DefaultChecked = false },
                 new ProgramInfo("rustdesk",    "RustDesk",                       "rustdesk_x86_64.exe",                  "--silent-install", "", "Geral") { FireAndForget = true },
-                new ProgramInfo("winrar",      "WinRAR",                         "winrar.exe",                           "/S", "", "Geral"),
+                new ProgramInfo("winrar",      "WinRAR",                         "winrar.exe",                           "/S", "", "Geral") { DefaultChecked = false },
             };
             standardList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 

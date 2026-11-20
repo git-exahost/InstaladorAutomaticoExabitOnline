@@ -1164,21 +1164,72 @@ namespace InstallerGUI.Services
                 // 8. Segurança (Defender e BitLocker)
                 try
                 {
-                    bool defender = true;
+                    string thirdPartyAv = null;
+                    bool defenderActive = false;
+                    bool foundInWmi = false;
+
                     try
                     {
-                        using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender"))
+                        using (var searcher = new ManagementObjectSearcher(@"root\SecurityCenter2", "SELECT displayName, productState FROM AntiVirusProduct"))
                         {
-                            if (key != null)
+                            foreach (ManagementObject av in searcher.Get())
                             {
-                                var dis = key.GetValue("DisableAntiSpyware");
-                                if (dis != null && (int)dis == 1) defender = false;
+                                string name = av["displayName"] != null ? av["displayName"].ToString().Trim() : "";
+                                if (string.IsNullOrEmpty(name)) continue;
+
+                                if (name.IndexOf("Windows Defender", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    name.IndexOf("Microsoft Defender", StringComparison.OrdinalIgnoreCase) >= 0)
+                                {
+                                    foundInWmi = true;
+                                    int pState = 0;
+                                    if (av["productState"] != null && int.TryParse(av["productState"].ToString(), out pState))
+                                    {
+                                        int stateByte = (pState >> 12) & 0x0F;
+                                        if (stateByte == 1) defenderActive = true;
+                                    }
+                                }
+                                else
+                                {
+                                    if (string.IsNullOrEmpty(thirdPartyAv))
+                                        thirdPartyAv = name;
+                                }
                             }
                         }
                     }
                     catch { }
-                    diag.DefenderActive = defender;
-                    diag.DefenderStatusText = defender ? "Ativo" : "Desativado";
+
+                    if (!foundInWmi)
+                    {
+                        bool defender = true;
+                        try
+                        {
+                            using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender"))
+                            {
+                                if (key != null)
+                                {
+                                    var dis = key.GetValue("DisableAntiSpyware");
+                                    if (dis != null && (int)dis == 1) defender = false;
+                                }
+                            }
+                        }
+                        catch { }
+                        defenderActive = defender;
+                    }
+
+                    diag.DefenderActive = defenderActive;
+                    diag.ThirdPartyAntivirus = thirdPartyAv;
+
+                    if (defenderActive)
+                    {
+                        diag.DefenderStatusText = "Ativo";
+                    }
+                    else
+                    {
+                        if (!string.IsNullOrEmpty(thirdPartyAv))
+                            diag.DefenderStatusText = string.Format("Desativado ({0})", thirdPartyAv);
+                        else
+                            diag.DefenderStatusText = "Desativado";
+                    }
 
                     bool bitlocker = false;
                     try
@@ -1245,6 +1296,7 @@ namespace InstallerGUI.Services
                 try
                 {
                     var ips = new List<string>();
+                    var ipsWithAdapters = new List<string>();
                     var activeNics = new List<string>();
                     bool hasVpn = false;
 
@@ -1255,8 +1307,10 @@ namespace InstallerGUI.Services
                         if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
                             continue;
 
-                        string desc = nic.Description;
-                        string name = nic.Name;
+                        string desc = nic.Description ?? "";
+                        string name = nic.Name ?? "";
+                        string nicLabel = name;
+
                         if (desc.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 ||
                             desc.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0 ||
                             desc.IndexOf("TAP", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -1265,13 +1319,20 @@ namespace InstallerGUI.Services
                             name.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
                             hasVpn = true;
+                            nicLabel = (name.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 || desc.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0) ? "Radmin VPN" : "VPN";
                         }
                         else
                         {
                             if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211)
+                            {
                                 activeNics.Add("Wi-Fi");
+                                nicLabel = "Wi-Fi";
+                            }
                             else if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Ethernet)
+                            {
                                 activeNics.Add("Ethernet");
+                                nicLabel = "Ethernet";
+                            }
                         }
 
                         var ipProps = nic.GetIPProperties();
@@ -1283,13 +1344,15 @@ namespace InstallerGUI.Services
                                 if (!ipStr.StartsWith("127.") && !ipStr.StartsWith("169.254.") && !ips.Contains(ipStr))
                                 {
                                     ips.Add(ipStr);
+                                    ipsWithAdapters.Add(string.Format("{0} ({1})", ipStr, nicLabel));
                                 }
                             }
                         }
                     }
 
-                    diag.AllLocalIps = ips;
-                    diag.LocalIp = ips.Count > 0 ? ips[0] : "Indisponível";
+                    diag.AllLocalIps = ipsWithAdapters.Count > 0 ? ipsWithAdapters : ips;
+                    string preferredIp = ips.FirstOrDefault(ip => !ip.StartsWith("26.")) ?? (ips.Count > 0 ? ips[0] : "Indisponível");
+                    diag.LocalIp = preferredIp;
 
                     if (hasVpn)
                         diag.NetworkInterfacesSummary = "Radmin / VPN detectadas";
@@ -1310,21 +1373,25 @@ namespace InstallerGUI.Services
                         var ping = MeasureInternetPingInternal();
                         if (ping != null && ping.Success)
                         {
-                            string provider = ping.Text.IndexOf("Cloudflare", StringComparison.OrdinalIgnoreCase) >= 0 ? "Cloudflare" : "Google";
-                            diag.ConnectionStatusText = string.Format("Online ({0} ms - {1})", ping.LatencyMs, provider);
+                            diag.ConnectionStatusText = string.Format("Online ({0} ms)", ping.LatencyMs);
                             diag.PingLatencyText = string.Format("{0} ms", ping.LatencyMs);
-                            diag.ConnectionStatusColor = ConsoleColor.Green;
+                            if (ping.LatencyMs < 80)
+                                diag.ConnectionStatusColor = ConsoleColor.Green;
+                            else if (ping.LatencyMs < 180)
+                                diag.ConnectionStatusColor = ConsoleColor.Yellow;
+                            else
+                                diag.ConnectionStatusColor = ConsoleColor.Red;
                         }
                         else
                         {
-                            diag.ConnectionStatusText = "Online (Sem latência)";
+                            diag.ConnectionStatusText = "Online";
                             diag.ConnectionStatusColor = ConsoleColor.Green;
                         }
                     }
                     else
                     {
-                        diag.ConnectionStatusText = "Desconectado";
-                        diag.ConnectionStatusColor = ConsoleColor.Yellow;
+                        diag.ConnectionStatusText = "Offline";
+                        diag.ConnectionStatusColor = ConsoleColor.Red;
                     }
                 }
                 catch { }
@@ -6925,6 +6992,7 @@ namespace InstallerGUI.Services
         // Segurança & Estado
         public bool DefenderActive { get; set; }
         public string DefenderStatusText { get; set; }
+        public string ThirdPartyAntivirus { get; set; }
         public bool BitLockerActive { get; set; }
         public string BitLockerStatusText { get; set; }
         public bool PendingReboot { get; set; }

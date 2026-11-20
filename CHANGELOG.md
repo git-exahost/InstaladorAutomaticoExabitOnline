@@ -7,6 +7,27 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.84] - 2026-11-20
+
+### Aprimorado
+- **Ajustes no Painel de Diagnóstico Compacto (Aba Configurações)**:
+  - **Botão Mais Detalhes**: Altura e espaçamento vertical aumentados para 245px no painel de abas, garantindo que o botão `▼ Mais detalhes (+6)` seja exibido por completo sem qualquer corte.
+  - **Título da Janela vs. Título do Programa**: Versão mantida exclusivamente na barra superior da janela com o ícone (`Auto Instalador de Programas v2.0.0.84 - EXABIT Soluções em TI`), restaurando o título visual interno para `Auto Instalador de Programas`.
+  - **Espaço em Disco Simplificado**: No resumo compacto, a unidade C: agora é informada exclusivamente através da barra horizontal colorida (`Verde` para espaço saudável, `Amarelo` para atenção/quase cheio e `Vermelho` para cheio/crítico), removendo os números extensos da linha.
+  - **Conexão e Ping**: Rótulo ajustado para `Conexão:` (sem barra `/`) com status `Online (XX ms) ↻` ou `Offline ↻`, seguindo esquema de cores para latência baixa (verde), média (amarelo) e alta/offline (vermelho).
+- **Aprimoramentos no Painel Expandido ("DIAGNÓSTICO DO SISTEMA (COMPLETO)")**:
+  - **Títulos em Português (PT-BR)**: Todos os 6 cards traduzidos para o padrão corporativo nacional: *Identificação e Sistema*, *Conexão e Rede*, *Armazenamento e Partições*, *Recursos de Hardware*, *Dispositivo e Garantia* e *Segurança e Status*.
+  - **Correção de Corte em Identificação e Sistema**: Alinhamento no topo (`TopLeft`) e alturas de linha reajustadas para que a edição comercial e a build do Windows nunca sofram corte vertical.
+  - **Barra de Rolagem Padronizada (`DarkScrollBar`)**: Implementado container viewport com a barra de rolagem corporativa em tema escuro e pílula laranja em *Armazenamento e Partições*, eliminando a barra nativa cinza do Windows Forms.
+  - **Listagem Completa de IPs Locais**: No card *Conexão e Rede*, todos os endereços IPv4 da máquina (Wi-Fi, Ethernet, VPNs, Radmin) agora são exibidos em lista com nome da interface, rolagem fluida e clique para cópia direta.
+  - **Detecção do Antivírus Ativo quando Defender Desativado**: Ao detectar que o Microsoft Defender está inativo, identifica e exibe o antivírus de terceiros em execução no sistema operacional (ex: `Windows Defender: Desativado (Kaspersky)`).
+- **Controles e Padrões de Seleção**:
+  - **Largura Mínima**: Janela configurada com trava de largura mínima de 700px (`MinimumSize = new Size(700, 600)`).
+  - **WinRAR**: Padrão de instalação alterado para desmarcado (`DefaultChecked = false`).
+  - **Bloquear Alteração do Papel de Parede**: Padrão alterado para desmarcado (`false`).
+
+---
+
 ## [2.0.0.83] - 2026-11-20
 
 ### Adicionado
