@@ -42,6 +42,7 @@ namespace InstallerGUI.Forms
 
         private readonly InstallerService _service;
         private bool _installing;
+        private bool _installationStarted;
         private System.Windows.Forms.Timer _connectionMonitorTimer;
         private bool? _lastDetectedInternet;
         private string _lastDetectedIp;
@@ -1377,6 +1378,11 @@ namespace InstallerGUI.Forms
 
             // Prepara a interface para a instalação
             _installing = true;
+            _installationStarted = true;
+            if (_connectionMonitorTimer != null)
+            {
+                _connectionMonitorTimer.Stop();
+            }
             _btnInstall.Enabled = false;
             _btnInstall.BackColor = Color.FromArgb(0, 75, 25);
             if (_downloadProgressBar != null) _downloadProgressBar.Value = 0;
@@ -1611,7 +1617,7 @@ namespace InstallerGUI.Forms
 
         private void OnNetworkAvailabilityChanged(object sender, System.Net.NetworkInformation.NetworkAvailabilityEventArgs e)
         {
-            if (_installing || IsDisposed) return;
+            if (_installing || _installationStarted || IsDisposed) return;
             try
             {
                 if (InvokeRequired)
@@ -1628,12 +1634,13 @@ namespace InstallerGUI.Forms
 
         private async void TriggerNetworkAvailabilityCheck()
         {
+            if (_installing || _installationStarted || IsDisposed) return;
             await CheckAndRefreshConnectionStatusAsync(true);
         }
 
         private async void ConnectionMonitorTimer_Tick(object sender, EventArgs e)
         {
-            if (_installing || IsDisposed) return;
+            if (_installing || _installationStarted || IsDisposed) return;
             await CheckAndRefreshConnectionStatusAsync(false);
         }
 
@@ -1642,7 +1649,7 @@ namespace InstallerGUI.Forms
         /// </summary>
         private async Task CheckAndRefreshConnectionStatusAsync(bool forceCheck)
         {
-            if (_installing || _isUpdatingSystemInfo || IsDisposed) return;
+            if (_installing || _installationStarted || _isUpdatingSystemInfo || IsDisposed) return;
 
             _isUpdatingSystemInfo = true;
             try
@@ -1668,7 +1675,7 @@ namespace InstallerGUI.Forms
                         pingDiag = await _service.MeasureInternetPingAsync();
                     }
 
-                    if (!_installing && !IsDisposed)
+                    if (!_installing && !_installationStarted && !IsDisposed)
                     {
                         RenderInitialSystemInfo(currentInternet, currentIp, pingDiag);
                     }
@@ -1686,7 +1693,7 @@ namespace InstallerGUI.Forms
         /// </summary>
         private void RenderInitialSystemInfo(bool hasInternet, string ip, PingDiagnosis pingDiag)
         {
-            if (_installing || IsDisposed) return;
+            if (_installing || _installationStarted || IsDisposed) return;
 
             SendMessage(_txtLog.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
             try

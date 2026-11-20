@@ -7,6 +7,15 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.80] - 2026-11-20
+
+### Corrigido
+- **Preservação Definitiva do Log e Histórico de Instalação na Conclusão**:
+  - Corrigido problema onde o timer de monitoramento de internet reexibia o cabeçalho `"INFORMAÇÕES DO SISTEMA"` e limpava o log assim que o processo de instalação era finalizado (`_installing = false`).
+  - Adicionada a trava `_installationStarted`, desativando o timer de diagnóstico inicial e garantindo que o log completo (etapas realizadas, programas instalados, downloads, usuários configurados e eventuais mensagens) permaneça visível na tela por tempo indeterminado após o término do processo.
+
+---
+
 ## [2.0.0.79] - 2026-11-20
 
 ### Aprimorado
