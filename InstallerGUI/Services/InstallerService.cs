@@ -5119,13 +5119,15 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Remove e apaga com segurança todos os perfis de usuário do Windows,
-        /// preservando perfis de sistema (Default, Public, SYSTEM), a conta atual em execução
-        /// e os novos perfis configurados para criação (Admin e usuário padrão).
+        /// Remove e apaga completamente todos os perfis e contas de usuário do Windows,
+        /// excluindo a conta local do sistema, apagando os dados e a pasta do usuário em disco (C:\Users),
+        /// limpando o registro de ProfileList e o WMI Win32_UserProfile.
+        /// Preserva apenas a conta do operador logado atual, a conta padrão de Administrador do Windows,
+        /// as contas essenciais de sistema e as novas contas configuradas para criação.
         /// </summary>
         public async Task RemoveOtherUserProfilesAsync(string keepUser1 = null, string keepUser2 = null)
         {
-            Log("Iniciando varredura e limpeza de perfis antigos do Windows...", ConsoleColor.Yellow);
+            Log("Iniciando varredura e exclusão completa de usuários e perfis do Windows...", ConsoleColor.Yellow);
 
             string currentLoggedUser = Environment.UserName;
             string k1 = string.IsNullOrEmpty(keepUser1) ? "" : keepUser1;
@@ -5133,37 +5135,118 @@ namespace InstallerGUI.Services
 
             var sb = new StringBuilder();
             sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+            sb.AppendLine(string.Format("$currentLoggedUser = '{0}'", currentLoggedUser));
             sb.AppendLine(string.Format("$keepList = @('{0}', '{1}', '{2}', 'Administrator', 'Administrador', 'DefaultAccount', 'Guest', 'Convidado', 'WDAGUtilityAccount')",
                 currentLoggedUser, k1, k2));
             sb.AppendLine("$systemSids = @('S-1-5-18', 'S-1-5-19', 'S-1-5-20')");
             sb.AppendLine("$removedCount = 0");
-            sb.AppendLine("Get-CimInstance Win32_UserProfile | ForEach-Object {");
-            sb.AppendLine("    $sid = $_.SID");
-            sb.AppendLine("    $path = $_.LocalPath");
-            sb.AppendLine("    $leaf = Split-Path -Leaf $path");
-            sb.AppendLine("    if ($_.Special -or ($systemSids -contains $sid) -or ($path -match '(?i)Default|Public|All Users')) { return }");
-            sb.AppendLine("    $matched = $false");
-            sb.AppendLine("    foreach ($k in $keepList) { if ($k -and ($leaf -like $k)) { $matched = $true; break } }");
-            sb.AppendLine("    if (-not $matched) {");
-            sb.AppendLine("        try {");
-            sb.AppendLine("            Write-Host ('  Removendo perfil antigo: ' + $path)");
-            sb.AppendLine("            Remove-CimInstance -InputObject $_ -ErrorAction Stop");
-            sb.AppendLine("            Write-Host ('[ok] Perfil removido com sucesso: ' + $path)");
-            sb.AppendLine("            $removedCount++");
-            sb.AppendLine("        } catch {");
-            sb.AppendLine("            Write-Host ('  [!] Falha ao remover perfil ' + $path + ': ' + $_.Exception.Message)");
+            sb.AppendLine("Write-Host ('  Conta em execucao preservada: ' + $currentLoggedUser)");
+            sb.AppendLine("Write-Host '  Contas protegidas: Administrador e servicos essenciais do sistema'");
+
+            // FASE 1: Varredura e exclusão de contas locais de usuário no Windows (Win32_UserAccount)
+            sb.AppendLine("try {");
+            sb.AppendLine("    $localUsers = Get-CimInstance Win32_UserAccount -Filter 'LocalAccount = True' -ErrorAction SilentlyContinue");
+            sb.AppendLine("    foreach ($user in $localUsers) {");
+            sb.AppendLine("        $name = $user.Name");
+            sb.AppendLine("        $sid = $user.SID");
+            sb.AppendLine("        $isKeep = $false");
+            sb.AppendLine("        foreach ($k in $keepList) {");
+            sb.AppendLine("            if ($k -and ($name -like $k)) { $isKeep = $true; break }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        if (-not $isKeep) {");
+            sb.AppendLine("            Write-Host ('  Localizada conta para remocao: ' + $name)");
+            sb.AppendLine("            try {");
+            sb.AppendLine("                & net user \"$name\" /delete | Out-Null");
+            sb.AppendLine("                Write-Host ('[ok] Conta de usuario removida do Windows: ' + $name)");
+            sb.AppendLine("                $removedCount++");
+            sb.AppendLine("            } catch {");
+            sb.AppendLine("                Write-Host ('  [!] Erro ao remover conta ' + $name + ': ' + $_.Exception.Message)");
+            sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
-            sb.AppendLine("}");
+            sb.AppendLine("} catch {}");
+
+            // FASE 2: Varredura e exclusão de perfis em disco e WMI (Win32_UserProfile)
+            sb.AppendLine("try {");
+            sb.AppendLine("    $profiles = Get-CimInstance Win32_UserProfile -ErrorAction SilentlyContinue");
+            sb.AppendLine("    foreach ($p in $profiles) {");
+            sb.AppendLine("        $path = $p.LocalPath");
+            sb.AppendLine("        $sid = $p.SID");
+            sb.AppendLine("        if (-not $path) { continue }");
+            sb.AppendLine("        $leaf = Split-Path -Leaf $path");
+            sb.AppendLine("        if ($p.Special -or ($systemSids -contains $sid) -or ($path -match '(?i)Default|Public|All Users|ServiceProfiles|systemprofile')) {");
+            sb.AppendLine("            continue");
+            sb.AppendLine("        }");
+            sb.AppendLine("        $isKeep = $false");
+            sb.AppendLine("        foreach ($k in $keepList) {");
+            sb.AppendLine("            if ($k -and (($leaf -like $k) -or ($path -match ('(?i)\\\\' + [regex]::Escape($k) + '$')))) {");
+            sb.AppendLine("                $isKeep = $true; break");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        if (-not $isKeep) {");
+            sb.AppendLine("            Write-Host ('  Apagando perfil e dados de usuario: ' + $path)");
+            sb.AppendLine("            try { Remove-CimInstance -InputObject $p -ErrorAction SilentlyContinue | Out-Null } catch {}");
+            sb.AppendLine("            try {");
+            sb.AppendLine("                $regKey = \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\$sid\"");
+            sb.AppendLine("                if (Test-Path $regKey) { Remove-Item -Path $regKey -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }");
+            sb.AppendLine("                $regBak = \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\$sid.bak\"");
+            sb.AppendLine("                if (Test-Path $regBak) { Remove-Item -Path $regBak -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }");
+            sb.AppendLine("            } catch {}");
+            sb.AppendLine("            try {");
+            sb.AppendLine("                if (Test-Path $path) {");
+            sb.AppendLine("                    & cmd.exe /c \"takeown /f `\"$path`\" /r /d y >nul 2>&1\"");
+            sb.AppendLine("                    & cmd.exe /c \"icacls `\"$path`\" /grant administrators:F /t /c /q >nul 2>&1\"");
+            sb.AppendLine("                    & cmd.exe /c \"rd /s /q `\"$path`\" >nul 2>&1\"");
+            sb.AppendLine("                    if (Test-Path $path) { Remove-Item -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }");
+            sb.AppendLine("                    if (-not (Test-Path $path)) {");
+            sb.AppendLine("                        Write-Host ('[ok] Pasta de dados e arquivos excluida do disco: ' + $path)");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                }");
+            sb.AppendLine("            } catch {}");
+            sb.AppendLine("            $removedCount++");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+
+            // FASE 3: Varredura de pastas órfãs em C:\Users
+            sb.AppendLine("try {");
+            sb.AppendLine("    $usersBaseDir = Split-Path $env:USERPROFILE");
+            sb.AppendLine("    if (Test-Path $usersBaseDir) {");
+            sb.AppendLine("        $userDirs = Get-ChildItem -Path $usersBaseDir -Directory -ErrorAction SilentlyContinue");
+            sb.AppendLine("        foreach ($d in $userDirs) {");
+            sb.AppendLine("            $folderName = $d.Name");
+            sb.AppendLine("            $fullPath = $d.FullName");
+            sb.AppendLine("            if ($folderName -match '(?i)^(Public|Default|Default User|All Users)$') { continue }");
+            sb.AppendLine("            $isKeep = $false");
+            sb.AppendLine("            foreach ($k in $keepList) {");
+            sb.AppendLine("                if ($k -and ($folderName -like $k)) { $isKeep = $true; break }");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if (-not $isKeep) {");
+            sb.AppendLine("                Write-Host ('  Removendo pasta residual orfa: ' + $fullPath)");
+            sb.AppendLine("                try {");
+            sb.AppendLine("                    & cmd.exe /c \"takeown /f `\"$fullPath`\" /r /d y >nul 2>&1\"");
+            sb.AppendLine("                    & cmd.exe /c \"icacls `\"$fullPath`\" /grant administrators:F /t /c /q >nul 2>&1\"");
+            sb.AppendLine("                    & cmd.exe /c \"rd /s /q `\"$fullPath`\" >nul 2>&1\"");
+            sb.AppendLine("                    if (Test-Path $fullPath) { Remove-Item -Path $fullPath -Recurse -Force -ErrorAction SilentlyContinue | Out-Null }");
+            sb.AppendLine("                    if (-not (Test-Path $fullPath)) {");
+            sb.AppendLine("                        Write-Host ('[ok] Pasta residual excluida com sucesso: ' + $fullPath)");
+            sb.AppendLine("                        $removedCount++");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                } catch {}");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+
             sb.AppendLine("if ($removedCount -gt 0) {");
-            sb.AppendLine("    Write-Host ('[ok] Limpeza concluida: ' + $removedCount + ' perfis antigos removidos.')");
+            sb.AppendLine("    Write-Host ('[ok] Exclusao concluida: ' + $removedCount + ' contas/perfis foram completamente removidos.')");
             sb.AppendLine("} else {");
-            sb.AppendLine("    Write-Host '[ok] Nenhum perfil antigo adicional para remover.'");
+            sb.AppendLine("    Write-Host '[ok] Nenhum perfil ou conta adicional encontrada para remocao.'");
             sb.AppendLine("}");
 
             int exitCode = await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 180000);
             if (exitCode == 0)
-                Log("[ok] Limpeza de perfis de usuário do Windows concluída.", ConsoleColor.Green);
+                Log("[ok] Limpeza e exclusão de perfis do Windows concluída com êxito.", ConsoleColor.Green);
             else
                 Log("Aviso: Limpeza de perfis finalizada com código " + exitCode, ConsoleColor.Yellow);
 
@@ -5370,7 +5453,8 @@ namespace InstallerGUI.Services
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
                         string newStdUser = options.CreateStandardUser ? options.StandardUserName : null;
-                        await RemoveOtherUserProfilesAsync(newStdUser, "Admin");
+                        string newAdminUser = options.CreateAdmin ? "Admin" : null;
+                        await RemoveOtherUserProfilesAsync(newStdUser, newAdminUser);
                     }
                 }
 

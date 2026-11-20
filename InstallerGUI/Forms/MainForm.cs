@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Media;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -88,6 +89,7 @@ namespace InstallerGUI.Forms
         private Panel _pnlTabOptions;
         private Panel _pnlTabFeatures;
         private int _currentTabIndex;
+        private Timer _internetCheckTimer;
 
         // ──────────────────────────────────────────────
         // Construtor
@@ -142,6 +144,9 @@ namespace InstallerGUI.Forms
 
             // Monta todos os controles na tela
             BuildUI();
+
+            // Monitoramento contínuo de status de internet para ativar/desativar o botão de instalação
+            InitInternetMonitor();
         }
 
         /// <summary>
@@ -1284,14 +1289,15 @@ namespace InstallerGUI.Forms
 
             _btnInstall = new Button
             {
-                Text = "INICIAR INSTALAÇÃO",
+                Text = "VERIFICANDO INTERNET...",
                 Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
                 ForeColor = CorTexto,
-                BackColor = Color.FromArgb(0, 150, 50),
+                BackColor = Color.FromArgb(70, 70, 70),
                 FlatStyle = FlatStyle.Flat,
                 FlatAppearance = { BorderSize = 0 },
-                Cursor = Cursors.Hand,
+                Cursor = Cursors.No,
                 Dock = DockStyle.Fill,
+                Enabled = false,
                 Margin = new Padding(0, 0, (int)(4 * scale), 0),
             };
             _btnInstall.FlatAppearance.MouseOverBackColor = Color.FromArgb(0, 180, 70);
@@ -1331,6 +1337,20 @@ namespace InstallerGUI.Forms
         {
             // Evita cliques duplos durante a instalação
             if (_installing) return;
+
+            // Valida conectividade antes de iniciar
+            if (!await _service.HasInternetConnectionAsync())
+            {
+                UpdateInternetConnectivityUI(false);
+                MessageBox.Show(
+                    "Não foi detectada conexão com a internet.\n\n" +
+                    "O Instalador Automático necessita de internet ativa para prosseguir com o download dos programas.\n" +
+                    "O botão permanecerá desativado até que a conexão seja restabelecida.",
+                    "Sem Conexão à Internet",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
 
             var selectedPrograms = new List<ProgramInfo>();
             foreach (Control c in _pnlPrograms.Controls)
@@ -1439,11 +1459,10 @@ namespace InstallerGUI.Forms
             finally
             {
                 _installing = false;
-                _btnInstall.Enabled = true;
-                _btnInstall.BackColor = Color.FromArgb(0, 150, 50);
-                _btnInstall.Text = "INICIAR INSTALAÇÃO";
                 SetStopButtonState(false);
             }
+
+            await CheckAndUpdateInternetStatusAsync();
         }
 
         /// <summary>
@@ -1497,6 +1516,93 @@ namespace InstallerGUI.Forms
                 _btnStop.Cursor = Cursors.Default;
                 _btnStop.FlatAppearance.MouseOverBackColor = Color.FromArgb(50, 50, 50);
             }
+        }
+
+        /// <summary>
+        /// Inicializa o monitoramento contínuo de conectividade com a internet.
+        /// Caso a máquina esteja sem conexão, desativa imediatamente o botão "INICIAR INSTALAÇÃO".
+        /// </summary>
+        private void InitInternetMonitor()
+        {
+            _internetCheckTimer = new Timer();
+            _internetCheckTimer.Interval = 3000;
+            _internetCheckTimer.Tick += InternetCheckTimer_Tick;
+            _internetCheckTimer.Start();
+
+            try
+            {
+                NetworkChange.NetworkAvailabilityChanged += (s, e) =>
+                {
+                    Task.Run(async () =>
+                    {
+                        bool connected = await _service.HasInternetConnectionAsync();
+                        UpdateInternetConnectivityUI(connected);
+                    });
+                };
+            }
+            catch { }
+        }
+
+        private async void InternetCheckTimer_Tick(object sender, EventArgs e)
+        {
+            await CheckAndUpdateInternetStatusAsync();
+        }
+
+        private async Task CheckAndUpdateInternetStatusAsync()
+        {
+            if (_installing) return;
+            bool connected = await _service.HasInternetConnectionAsync();
+            UpdateInternetConnectivityUI(connected);
+        }
+
+        /// <summary>
+        /// Atualiza visual e funcionalmente o botão INICIAR INSTALAÇÃO com base no status da internet.
+        /// Sem internet: botão desativado com cor cinza e cursor bloqueado.
+        /// Com internet: botão ativado com cor verde e pronto para uso.
+        /// </summary>
+        private void UpdateInternetConnectivityUI(bool hasInternet)
+        {
+            if (InvokeRequired)
+            {
+                Invoke(new Action(() => UpdateInternetConnectivityUI(hasInternet)));
+                return;
+            }
+
+            if (_installing) return;
+
+            if (hasInternet)
+            {
+                if (!_btnInstall.Enabled || _btnInstall.Text != "INICIAR INSTALAÇÃO")
+                {
+                    _btnInstall.Enabled = true;
+                    _btnInstall.BackColor = Color.FromArgb(0, 150, 50);
+                    _btnInstall.Text = "INICIAR INSTALAÇÃO";
+                    _btnInstall.Cursor = Cursors.Hand;
+                    _btnInstall.FlatAppearance.MouseOverBackColor = Color.FromArgb(0, 180, 70);
+                }
+            }
+            else
+            {
+                if (_btnInstall.Enabled || _btnInstall.Text != "SEM INTERNET (DESATIVADO)")
+                {
+                    _btnInstall.Enabled = false;
+                    _btnInstall.BackColor = Color.FromArgb(70, 70, 70);
+                    _btnInstall.Text = "SEM INTERNET (DESATIVADO)";
+                    _btnInstall.Cursor = Cursors.No;
+                    _btnInstall.FlatAppearance.MouseOverBackColor = Color.FromArgb(70, 70, 70);
+                }
+            }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (_internetCheckTimer != null)
+            {
+                _internetCheckTimer.Stop();
+                _internetCheckTimer.Dispose();
+                _internetCheckTimer = null;
+            }
+            base.OnFormClosing(e);
         }
 
         // ══════════════════════════════════════════════
@@ -1588,6 +1694,7 @@ namespace InstallerGUI.Forms
             AppendLog(string.Format("Endereço IP        : {0}", ip), ConsoleColor.Gray);
 
             bool hasInternet = await _service.HasInternetConnectionAsync();
+            UpdateInternetConnectivityUI(hasInternet);
             if (hasInternet)
             {
                 AppendLog("Status de conexão  : Conectado à Internet", ConsoleColor.Green);
@@ -1597,6 +1704,7 @@ namespace InstallerGUI.Forms
             else
             {
                 AppendLog("Status de conexão  : Desconectado da Internet", ConsoleColor.Yellow);
+                AppendLog("Aviso de Conexão   : O botão 'INICIAR INSTALAÇÃO' permanecerá desativado até que a conexão seja detectada.", ConsoleColor.Yellow);
             }
 
             var diskDiag = GetSystemDriveFreeSpaceDiagnosis();

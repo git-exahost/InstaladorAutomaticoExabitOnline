@@ -1,4 +1,4 @@
-﻿Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Drawing
 
 $sourcePath = "InstallerGUI\Image\icon.png"
 $outputPath = "InstallerGUI\install.ico"

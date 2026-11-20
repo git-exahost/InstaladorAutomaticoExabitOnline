@@ -7,6 +7,18 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.76] - 2026-11-19
+
+### Aprimorado
+- **Exclusão Completa e Efetiva de Usuários e Perfis do Windows**:
+  - Implementada rotina em 3 fases que remove não apenas perfis WMI, mas as próprias contas de usuário locais do Windows (`net user /delete`), a pasta física de arquivos e dados do usuário (`C:\Users\<usuario>` via `takeown / icacls / rd /s /q`), os registros de `ProfileList` do sistema (`HKLM:\...\ProfileList\$sid`) e pastas órfãs residuais.
+  - Preservação estrita da conta do operador logado atualmente no Windows e da conta padrão `Administrador` / `Administrator` do sistema (além das novas contas configuradas para criação no instalador).
+- **Desativação Automática do Botão "INICIAR INSTALAÇÃO" Sem Internet**:
+  - O botão principal agora inicia desativado enquanto verifica a rede e permanece **desativado** (`Enabled = false`, estilizado em cinza neutro com texto `"SEM INTERNET (DESATIVADO)"` e cursor de bloqueio) caso a máquina não possua conexão com a internet.
+  - Implementado monitoramento contínuo em tempo real (via timer e evento de rede do Windows `NetworkChange.NetworkAvailabilityChanged`): assim que o cabo de rede ou Wi-Fi for conectado, o botão é habilitado instantaneamente em verde (`"INICIAR INSTALAÇÃO"`).
+
+---
+
 ## [2.0.0.75] - 2026-11-19
 
 ### Aprimorado
