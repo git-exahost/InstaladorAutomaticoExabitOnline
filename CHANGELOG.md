@@ -7,6 +7,26 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.74] - 2026-11-19
+
+### Aprimorado
+- **Varredura Completa e Desinstalação Silenciosa de Jogos e Componentes Xbox**:
+  - Detecção e desinstalação exaustiva do aplicativo **Xbox** (`Microsoft.GamingApp`), **Xbox Live** (`Microsoft.Xbox.TCUI`), **Xbox Game Bar / Gaming Overlay** (`Microsoft.XboxGamingOverlay`), **Xbox Identity Provider** (`Microsoft.XboxIdentityProvider`), **Xbox Speech-to-Text** (`Microsoft.XboxSpeechToTextOverlay`), **Gaming Services** (`Microsoft.GamingServices`), **Xbox Game Callable UI** (`Microsoft.XboxGameCallableUI`) e Solitaire.
+  - Varredura de jogos casuais e OEM pré-instalados na imagem do Windows (King, Candy Crush, Bubble Witch, Disney, Roblox, Minecraft, Asphalt, etc.).
+  - Remoção em três camadas: usuário atual, todos os usuários (`-AllUsers`) e pacotes provisionados da imagem (`Remove-AppxProvisionedPackage -Online`) para evitar reinstalação em novas contas.
+  - Varredura de clientes e jogos Win32 no Registro (Steam, Epic Games, Riot Games, EA App, Battle.net, Ubisoft Connect, GOG, etc.) com desinstalação silenciosa automática.
+  - Desativação de serviços residuais do Xbox (`XblAuthManager`, `XblGameSave`, `XboxNetApiSvc`, `XboxGipSvc`) e bloqueio de GameDVR no registro.
+- **Varredura Completa e Desinstalação Silenciosa de Antivírus de Terceiros**:
+  - Consulta dinâmica na Central de Segurança do Windows via WMI (`root\SecurityCenter2:AntivirusProduct`), identificando qualquer antivírus ativo de terceiros (Kaspersky, McAfee, Avast, AVG, Norton, Bitdefender, ESET, etc.) de forma 100% dinâmica.
+  - Varredura exaustiva nos caminhos de desinstalação do registro (HKLM 64-bit, HKLM 32-bit WOW6432Node e HKCU) para mais de 30 fornecedores e ferramentas complementares de segurança.
+  - Desinstalação silenciosa automática de instaladores MSI (`/x {GUID} /qn /norestart`), comandos `QuietUninstallString` e instaladores executáveis com flags silenciosas.
+  - Interrupção e desativação de serviços residuais de antivírus de terceiros detectados.
+  - Reativação completa do **Microsoft Defender** (`WinDefend`) e da proteção em tempo real.
+- **Saída em Tempo Real Linha a Linha no Log**:
+  - Implementado `RunProcessWithLoggingAsync` e `RunPowerShellScriptWithLoggingAsync` para captura e exibição em tempo real de cada pacote, jogo e antivírus desinstalado diretamente no painel de log com codificação UTF-8 e destaque por cores.
+
+---
+
 ## [2.0.0.73] - 2026-11-19
 
 ### Aprimorado

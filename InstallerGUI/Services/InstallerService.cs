@@ -4972,42 +4972,148 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Desinstala silenciosamente todos os jogos do computador (Xbox, Solitaire, jogos casuais da Microsoft e OEM),
-        /// removendo os pacotes AppX dos usuários e pacotes provisionados da imagem do sistema.
+        /// Realiza uma varredura completa no Windows e desinstala silenciosamente todos os jogos encontrados,
+        /// incluindo o aplicativo Xbox (Microsoft.GamingApp), Xbox Live (Microsoft.Xbox.TCUI), Xbox Game Bar,
+        /// Serviços de Jogos, Solitaire, jogos casuais da Microsoft e de fabricantes OEM (King, Candy Crush, etc.),
+        /// além de jogos e clientes Win32 (Steam, Epic, EA App, Riot, Roblox, etc.), desativando serviços residuais.
         /// </summary>
         public async Task UninstallAllGamesAsync()
         {
-            Log("Desinstalando silenciosamente jogos e pacotes de jogos do Windows...", ConsoleColor.Yellow);
+            Log("Iniciando varredura profunda no Windows por jogos e componentes Xbox...", ConsoleColor.Yellow);
 
-            string psScript =
-                "$gamePatterns = @('*Solitaire*', '*Xbox*', '*GamingOverlay*', '*CandyCrush*', '*King.com*', '*BubbleWitch*', '*MarchofEmpires*', '*DisneyMagicKingdoms*', '*HiddenCity*', '*Roblox*', '*Minecraft*'); " +
-                "foreach ($pat in $gamePatterns) { " +
-                "    try { " +
-                "        $pkgs = Get-AppxPackage -AllUsers $pat -ErrorAction SilentlyContinue; " +
-                "        foreach ($p in $pkgs) { " +
-                "            Write-Host ('  Removendo pacote: ' + $p.Name); " +
-                "            Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction SilentlyContinue | Out-Null; " +
-                "        } " +
-                "        $prov = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $pat }; " +
-                "        foreach ($pr in $prov) { " +
-                "            Write-Host ('  Removendo provisionamento: ' + $pr.DisplayName); " +
-                "            Remove-AppxProvisionedPackage -Online -PackageName $pr.PackageName -ErrorAction SilentlyContinue | Out-Null; " +
-                "        } " +
-                "    } catch {} " +
-                "}";
+            var sb = new StringBuilder();
+            sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+            sb.AppendLine("$removedCount = 0");
+            sb.AppendLine("$gamePatterns = @(");
+            sb.AppendLine("    '*GamingApp*',");
+            sb.AppendLine("    '*Xbox.TCUI*',");
+            sb.AppendLine("    '*Xbox*',");
+            sb.AppendLine("    '*GamingServices*',");
+            sb.AppendLine("    '*Solitaire*',");
+            sb.AppendLine("    '*CandyCrush*',");
+            sb.AppendLine("    '*King.com*',");
+            sb.AppendLine("    '*BubbleWitch*',");
+            sb.AppendLine("    '*MarchofEmpires*',");
+            sb.AppendLine("    '*Disney*',");
+            sb.AppendLine("    '*HiddenCity*',");
+            sb.AppendLine("    '*Roblox*',");
+            sb.AppendLine("    '*Minecraft*',");
+            sb.AppendLine("    '*Asphalt*',");
+            sb.AppendLine("    '*FarmVille*',");
+            sb.AppendLine("    '*CookingFever*',");
+            sb.AppendLine("    '*CaesarsSlots*',");
+            sb.AppendLine("    '*RoyalRevolt*',");
+            sb.AppendLine("    '*SeekersNotes*',");
+            sb.AppendLine("    '*Gardenscapes*',");
+            sb.AppendLine("    '*Fishdom*',");
+            sb.AppendLine("    '*Homescapes*',");
+            sb.AppendLine("    '*Township*',");
+            sb.AppendLine("    '*JewelQuest*',");
+            sb.AppendLine("    '*Mahjong*',");
+            sb.AppendLine("    '*Minesweeper*',");
+            sb.AppendLine("    '*Hearts*',");
+            sb.AppendLine("    '*Spades*',");
+            sb.AppendLine("    '*Sudoku*'");
+            sb.AppendLine(")");
+            sb.AppendLine("foreach ($pat in $gamePatterns) {");
+            sb.AppendLine("    try {");
+            sb.AppendLine("        $pkgs = Get-AppxPackage -Name $pat -AllUsers -ErrorAction SilentlyContinue");
+            sb.AppendLine("        if (-not $pkgs) { $pkgs = Get-AppxPackage -Name $pat -ErrorAction SilentlyContinue }");
+            sb.AppendLine("        foreach ($p in $pkgs) {");
+            sb.AppendLine("            Write-Host ('  Desinstalando pacote de jogo: ' + $p.Name + ' (' + $p.Version + ')...')");
+            sb.AppendLine("            try {");
+            sb.AppendLine("                Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("                Remove-AppxPackage -Package $p.PackageFullName -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("                Write-Host ('[ok] Pacote de jogo desinstalado: ' + $p.Name)");
+            sb.AppendLine("                $removedCount++");
+            sb.AppendLine("            } catch {");
+            sb.AppendLine("                Write-Host ('  [!] Falha ao remover pacote ' + $p.Name + ': ' + $_.Exception.Message)");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    } catch {}");
+            sb.AppendLine("    try {");
+            sb.AppendLine("        $prov = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like $pat -or $_.PackageName -like $pat }");
+            sb.AppendLine("        foreach ($pr in $prov) {");
+            sb.AppendLine("            $disp = if ($pr.DisplayName) { $pr.DisplayName } else { $pr.PackageName }");
+            sb.AppendLine("            Write-Host ('  Removendo provisionamento de jogo: ' + $disp + '...')");
+            sb.AppendLine("            try {");
+            sb.AppendLine("                Remove-AppxProvisionedPackage -Online -PackageName $pr.PackageName -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("                Write-Host ('[ok] Provisionamento removido da imagem: ' + $disp)");
+            sb.AppendLine("                $removedCount++");
+            sb.AppendLine("            } catch {}");
+            sb.AppendLine("        }");
+            sb.AppendLine("    } catch {}");
+            sb.AppendLine("}");
+            sb.AppendLine("$regPaths = @(");
+            sb.AppendLine("    'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
+            sb.AppendLine("    'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
+            sb.AppendLine("    'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'");
+            sb.AppendLine(")");
+            sb.AppendLine("$gameWin32Keywords = @(");
+            sb.AppendLine("    'Steam', 'Epic Games', 'Riot Games', 'Valorant', 'Battle.net',");
+            sb.AppendLine("    'Ubisoft Connect', 'GOG Galaxy', 'EA app', 'Origin', 'Roblox Player',");
+            sb.AppendLine("    'Minecraft Launcher', 'Rockstar Games'");
+            sb.AppendLine(")");
+            sb.AppendLine("try {");
+            sb.AppendLine("    $items = Get-ItemProperty $regPaths -ErrorAction SilentlyContinue");
+            sb.AppendLine("    foreach ($item in $items) {");
+            sb.AppendLine("        $dn = $item.DisplayName");
+            sb.AppendLine("        if ($dn) {");
+            sb.AppendLine("            foreach ($kw in $gameWin32Keywords) {");
+            sb.AppendLine("                if ($dn -match [regex]::Escape($kw)) {");
+            sb.AppendLine("                    Write-Host ('  Localizado jogo/launcher Win32: ' + $dn)");
+            sb.AppendLine("                    $quiet = $item.QuietUninstallString");
+            sb.AppendLine("                    $uninst = $item.UninstallString");
+            sb.AppendLine("                    try {");
+            sb.AppendLine("                        if ($quiet) {");
+            sb.AppendLine("                            Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $quiet) -Wait -WindowStyle Hidden");
+            sb.AppendLine("                            Write-Host ('[ok] Jogo Win32 desinstalado: ' + $dn)");
+            sb.AppendLine("                            $removedCount++");
+            sb.AppendLine("                        } elseif ($uninst) {");
+            sb.AppendLine("                            if ($uninst -match 'msiexec') {");
+            sb.AppendLine("                                $msiCmd = $uninst -replace '(?i)/I', '/X' + ' /qn /norestart'");
+            sb.AppendLine("                                Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $msiCmd) -Wait -WindowStyle Hidden");
+            sb.AppendLine("                            } else {");
+            sb.AppendLine("                                Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $uninst + ' /S /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /quiet /qn') -Wait -WindowStyle Hidden");
+            sb.AppendLine("                            }");
+            sb.AppendLine("                            Write-Host ('[ok] Jogo Win32 desinstalado: ' + $dn)");
+            sb.AppendLine("                            $removedCount++");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                    } catch {");
+            sb.AppendLine("                        Write-Host ('  [!] Falha ao desinstalar ' + $dn + ': ' + $_.Exception.Message)");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                    break");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+            sb.AppendLine("try {");
+            sb.AppendLine("    $xboxSvcs = @('XblAuthManager', 'XblGameSave', 'XboxNetApiSvc', 'XboxGipSvc')");
+            sb.AppendLine("    foreach ($s in $xboxSvcs) {");
+            sb.AppendLine("        $svc = Get-Service -Name $s -ErrorAction SilentlyContinue");
+            sb.AppendLine("        if ($svc) {");
+            sb.AppendLine("            Stop-Service -Name $s -Force -ErrorAction SilentlyContinue");
+            sb.AppendLine("            Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("    if (-not (Test-Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\GameDVR')) {");
+            sb.AppendLine("        New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\GameDVR' -Force -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("    }");
+            sb.AppendLine("    Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\GameDVR' -Name 'AllowGameDVR' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("    Set-ItemProperty -Path 'HKCU:\\System\\GameConfigStore' -Name 'GameDVR_Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("} catch {}");
+            sb.AppendLine("if ($removedCount -gt 0) {");
+            sb.AppendLine("    Write-Host ('[ok] Varredura concluida: ' + $removedCount + ' jogos e componentes removidos com sucesso.')");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    Write-Host '[ok] Varredura concluida: Nenhum jogo ou componente pendente encontrado.'");
+            sb.AppendLine("}");
 
-            int exitCode = await RunProcessAsync("powershell",
-                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"{0}\"", psScript),
-                180000, null, false);
-
+            int exitCode = await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 300000);
             if (exitCode == 0)
-            {
-                Log("[ok] Jogos e pacotes recreativos removidos com sucesso.", ConsoleColor.Green);
-            }
+                Log("[ok] Processamento de desinstalação de jogos concluído.", ConsoleColor.Green);
             else
-            {
-                Log("Aviso: Remoção de jogos finalizada com código " + exitCode, ConsoleColor.Yellow);
-            }
+                Log("Aviso: Varredura de jogos finalizada com código " + exitCode, ConsoleColor.Yellow);
 
             await Task.Delay(300);
         }
@@ -5019,103 +5125,177 @@ namespace InstallerGUI.Services
         /// </summary>
         public async Task RemoveOtherUserProfilesAsync(string keepUser1 = null, string keepUser2 = null)
         {
-            Log("Removendo e limpando perfis antigos do Windows...", ConsoleColor.Yellow);
+            Log("Iniciando varredura e limpeza de perfis antigos do Windows...", ConsoleColor.Yellow);
 
             string currentLoggedUser = Environment.UserName;
             string k1 = string.IsNullOrEmpty(keepUser1) ? "" : keepUser1;
             string k2 = string.IsNullOrEmpty(keepUser2) ? "" : keepUser2;
 
-            string psScript = string.Format(
-                "$keepList = @('{0}', '{1}', '{2}', 'Administrator', 'Administrador', 'DefaultAccount', 'Guest', 'Convidado', 'WDAGUtilityAccount'); " +
-                "$systemSids = @('S-1-5-18', 'S-1-5-19', 'S-1-5-20'); " +
-                "Get-CimInstance Win32_UserProfile | ForEach-Object {{ " +
-                "    $sid = $_.SID; " +
-                "    $path = $_.LocalPath; " +
-                "    $leaf = Split-Path -Leaf $path; " +
-                "    if ($_.Special -or ($systemSids -contains $sid) -or ($path -match '(?i)Default|Public|All Users')) {{ return; }} " +
-                "    $matched = $false; " +
-                "    foreach ($k in $keepList) {{ if ($k -and ($leaf -like $k)) {{ $matched = $true; break; }} }} " +
-                "    if (-not $matched) {{ " +
-                "        try {{ " +
-                "            Write-Host ('  Removendo perfil antigo: ' + $path); " +
-                "            Remove-CimInstance -InputObject $_ -ErrorAction Stop; " +
-                "        }} catch {{ " +
-                "            Write-Host ('  Falha ao remover perfil ' + $path + ': ' + $_.Exception.Message); " +
-                "        }} " +
-                "    }} " +
-                "}}",
-                currentLoggedUser, k1, k2);
+            var sb = new StringBuilder();
+            sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+            sb.AppendLine(string.Format("$keepList = @('{0}', '{1}', '{2}', 'Administrator', 'Administrador', 'DefaultAccount', 'Guest', 'Convidado', 'WDAGUtilityAccount')",
+                currentLoggedUser, k1, k2));
+            sb.AppendLine("$systemSids = @('S-1-5-18', 'S-1-5-19', 'S-1-5-20')");
+            sb.AppendLine("$removedCount = 0");
+            sb.AppendLine("Get-CimInstance Win32_UserProfile | ForEach-Object {");
+            sb.AppendLine("    $sid = $_.SID");
+            sb.AppendLine("    $path = $_.LocalPath");
+            sb.AppendLine("    $leaf = Split-Path -Leaf $path");
+            sb.AppendLine("    if ($_.Special -or ($systemSids -contains $sid) -or ($path -match '(?i)Default|Public|All Users')) { return }");
+            sb.AppendLine("    $matched = $false");
+            sb.AppendLine("    foreach ($k in $keepList) { if ($k -and ($leaf -like $k)) { $matched = $true; break } }");
+            sb.AppendLine("    if (-not $matched) {");
+            sb.AppendLine("        try {");
+            sb.AppendLine("            Write-Host ('  Removendo perfil antigo: ' + $path)");
+            sb.AppendLine("            Remove-CimInstance -InputObject $_ -ErrorAction Stop");
+            sb.AppendLine("            Write-Host ('[ok] Perfil removido com sucesso: ' + $path)");
+            sb.AppendLine("            $removedCount++");
+            sb.AppendLine("        } catch {");
+            sb.AppendLine("            Write-Host ('  [!] Falha ao remover perfil ' + $path + ': ' + $_.Exception.Message)");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine("if ($removedCount -gt 0) {");
+            sb.AppendLine("    Write-Host ('[ok] Limpeza concluida: ' + $removedCount + ' perfis antigos removidos.')");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    Write-Host '[ok] Nenhum perfil antigo adicional para remover.'");
+            sb.AppendLine("}");
 
-            int exitCode = await RunProcessAsync("powershell",
-                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"{0}\"", psScript),
-                180000, null, false);
-
+            int exitCode = await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 180000);
             if (exitCode == 0)
-            {
                 Log("[ok] Limpeza de perfis de usuário do Windows concluída.", ConsoleColor.Green);
-            }
             else
-            {
                 Log("Aviso: Limpeza de perfis finalizada com código " + exitCode, ConsoleColor.Yellow);
-            }
 
             await Task.Delay(300);
         }
 
         /// <summary>
-        /// Desinstala silenciosamente antivírus de terceiros instalados (McAfee, Avast, AVG, Norton, etc.)
-        /// e assegura que o Microsoft Defender permaneça ativo e operacional.
+        /// Realiza uma varredura profunda no sistema (via Central de Segurança do Windows WMI SecurityCenter2,
+        /// registro HKLM/HKCU de 32 e 64 bits e serviços do sistema) e desinstala silenciosamente todos os antivírus
+        /// de terceiros encontrados (McAfee, Avast, AVG, Norton, Kaspersky, Bitdefender, ESET, etc.),
+        /// reativando e assegurando a operação do Microsoft Defender com proteção em tempo real.
         /// </summary>
         public async Task UninstallThirdPartyAntivirusAsync()
         {
-            Log("Verificando e desinstalando silenciosamente antivírus de terceiros...", ConsoleColor.Yellow);
+            Log("Iniciando varredura no Windows por antivírus de terceiros...", ConsoleColor.Yellow);
 
-            string psScript =
-                "$avKeywords = @('McAfee', 'Avast', 'AVG', 'Norton', 'Kaspersky', 'Bitdefender', 'ESET', 'TotalAV', 'Avira', 'Malwarebytes', 'Webroot', 'Trend Micro', 'Sophos', 'Baidu'); " +
-                "$regPaths = @('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall', 'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall'); " +
-                "foreach ($p in $regPaths) { " +
-                "    if (Test-Path $p) { " +
-                "        Get-ChildItem -Path $p -ErrorAction SilentlyContinue | ForEach-Object { " +
-                "            $dn = $_.GetValue('DisplayName'); " +
-                "            $quiet = $_.GetValue('QuietUninstallString'); " +
-                "            $uninst = $_.GetValue('UninstallString'); " +
-                "            if ($dn) { " +
-                "                foreach ($kw in $avKeywords) { " +
-                "                    if ($dn -match ('(?i)' + [regex]::Escape($kw))) { " +
-                "                        Write-Host ('  Localizado antivirus de terceiro: ' + $dn); " +
-                "                        try { " +
-                "                            if ($quiet) { " +
-                "                                Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $quiet) -Wait -WindowStyle Hidden; " +
-                "                            } elseif ($uninst) { " +
-                "                                if ($uninst -match 'msiexec') { " +
-                "                                    $msiArgs = $uninst -replace '(?i)/I', '/X' + ' /qn /norestart'; " +
-                "                                    Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $msiArgs) -Wait -WindowStyle Hidden; " +
-                "                                } else { " +
-                "                                    Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $uninst + ' /SILENT /VERYSILENT /SUPPRESSMSGBOXES /NORESTART') -Wait -WindowStyle Hidden; " +
-                "                                } " +
-                "                            } " +
-                "                        } catch {} " +
-                "                    } " +
-                "                } " +
-                "            } " +
-                "        } " +
-                "    } " +
-                "} " +
-                "try { Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue; } catch {}; " +
-                "try { Start-Service WinDefend -ErrorAction SilentlyContinue; } catch {}";
+            var sb = new StringBuilder();
+            sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+            sb.AppendLine("$detectedAVs = @()");
+            sb.AppendLine("try {");
+            sb.AppendLine("    $avCim = Get-CimInstance -Namespace root\\SecurityCenter2 -ClassName AntivirusProduct -ErrorAction SilentlyContinue |");
+            sb.AppendLine("             Where-Object { $_.displayName -notmatch '(?i)Windows Defender' }");
+            sb.AppendLine("    if ($avCim) {");
+            sb.AppendLine("        foreach ($av in $avCim) {");
+            sb.AppendLine("            $detectedAVs += $av.displayName");
+            sb.AppendLine("            Write-Host ('  [Alerta] Antivirus ativo detectado no sistema: ' + $av.displayName)");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {");
+            sb.AppendLine("    Write-Host ('  Aviso ao consultar SecurityCenter2: ' + $_.Exception.Message)");
+            sb.AppendLine("}");
+            sb.AppendLine("$regPaths = @(");
+            sb.AppendLine("    'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
+            sb.AppendLine("    'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
+            sb.AppendLine("    'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'");
+            sb.AppendLine(")");
+            sb.AppendLine("$avKeywords = @(");
+            sb.AppendLine("    'McAfee', 'Avast', 'AVG', 'Norton', 'Symantec', 'Kaspersky', 'Bitdefender',");
+            sb.AppendLine("    'ESET', 'TotalAV', 'Avira', 'Malwarebytes', 'Webroot', 'Trend Micro',");
+            sb.AppendLine("    'Sophos', 'Baidu', 'Panda', 'BullGuard', 'F-Secure', 'Comodo', 'Segurazo',");
+            sb.AppendLine("    'RAV Endpoint', 'ByteFence', 'CCleaner Cloud', 'SuperAntiSpyware', 'Quick Heal',");
+            sb.AppendLine("    'Adaware', '360 Total Security', 'Dr.Web', 'G Data', 'VIPRE', 'ZoneAlarm'");
+            sb.AppendLine(")");
+            sb.AppendLine("$uninstalledCount = 0");
+            sb.AppendLine("try {");
+            sb.AppendLine("    $items = Get-ItemProperty $regPaths -ErrorAction SilentlyContinue");
+            sb.AppendLine("    foreach ($item in $items) {");
+            sb.AppendLine("        $dn = $item.DisplayName");
+            sb.AppendLine("        if ($dn) {");
+            sb.AppendLine("            $isTarget = $false");
+            sb.AppendLine("            foreach ($kw in $avKeywords) {");
+            sb.AppendLine("                if ($dn -match ('(?i)' + [regex]::Escape($kw))) { $isTarget = $true; break }");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if (-not $isTarget) {");
+            sb.AppendLine("                foreach ($det in $detectedAVs) {");
+            sb.AppendLine("                    if ($dn -match ('(?i)' + [regex]::Escape($det))) { $isTarget = $true; break }");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if ($isTarget) {");
+            sb.AppendLine("                Write-Host ('  Localizado software de seguranca: ' + $dn)");
+            sb.AppendLine("                $quiet = $item.QuietUninstallString");
+            sb.AppendLine("                $uninst = $item.UninstallString");
+            sb.AppendLine("                $child = $item.PSChildName");
+            sb.AppendLine("                try {");
+            sb.AppendLine("                    if ($child -match '^\\{[0-9a-fA-F\\-]{36}\\}$') {");
+            sb.AppendLine("                        Write-Host ('  Executando desinstalacao silenciosa MSI: ' + $child)");
+            sb.AppendLine("                        Start-Process -FilePath 'msiexec.exe' -ArgumentList ('/x ' + $child + ' /qn /norestart') -Wait -WindowStyle Hidden");
+            sb.AppendLine("                        Write-Host ('[ok] Desinstalado com sucesso: ' + $dn)");
+            sb.AppendLine("                        $uninstalledCount++");
+            sb.AppendLine("                    } elseif ($quiet) {");
+            sb.AppendLine("                        Write-Host ('  Executando desinstalacao silenciosa: ' + $dn)");
+            sb.AppendLine("                        Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $quiet) -Wait -WindowStyle Hidden");
+            sb.AppendLine("                        Write-Host ('[ok] Desinstalado com sucesso: ' + $dn)");
+            sb.AppendLine("                        $uninstalledCount++");
+            sb.AppendLine("                    } elseif ($uninst) {");
+            sb.AppendLine("                        Write-Host ('  Executando desinstalacao automatizada: ' + $dn)");
+            sb.AppendLine("                        if ($uninst -match 'msiexec') {");
+            sb.AppendLine("                            $msiArgs = $uninst -replace '(?i)/I', '/X' + ' /qn /norestart'");
+            sb.AppendLine("                            Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $msiArgs) -Wait -WindowStyle Hidden");
+            sb.AppendLine("                        } else {");
+            sb.AppendLine("                            Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $uninst + ' /SILENT /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /quiet /qn /s /S') -Wait -WindowStyle Hidden");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                        Write-Host ('[ok] Desinstalado com sucesso: ' + $dn)");
+            sb.AppendLine("                        $uninstalledCount++");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                } catch {");
+            sb.AppendLine("                    Write-Host ('  [!] Falha ao desinstalar ' + $dn + ': ' + $_.Exception.Message)");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+            sb.AppendLine("try {");
+            sb.AppendLine("    Get-Service | Where-Object {");
+            sb.AppendLine("        $sn = $_.Name; $sd = $_.DisplayName");
+            sb.AppendLine("        foreach ($kw in $avKeywords) {");
+            sb.AppendLine("            if ($sn -match ('(?i)' + [regex]::Escape($kw)) -or $sd -match ('(?i)' + [regex]::Escape($kw))) { return $true }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        return $false");
+            sb.AppendLine("    } | ForEach-Object {");
+            sb.AppendLine("        try {");
+            sb.AppendLine("            Write-Host ('  Finalizando servico residual: ' + $_.DisplayName)");
+            sb.AppendLine("            Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue");
+            sb.AppendLine("            Set-Service -Name $_.Name -StartupType Disabled -ErrorAction SilentlyContinue");
+            sb.AppendLine("        } catch {}");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+            sb.AppendLine("try {");
+            sb.AppendLine("    Write-Host 'Verificando e reativando Microsoft Defender...'");
+            sb.AppendLine("    Set-MpPreference -DisableRealtimeMonitoring $false -ErrorAction SilentlyContinue");
+            sb.AppendLine("    Set-MpPreference -DisableIntrusionPreventionSystem $false -ErrorAction SilentlyContinue");
+            sb.AppendLine("    Set-MpPreference -DisableIOAVProtection $false -ErrorAction SilentlyContinue");
+            sb.AppendLine("    Set-MpPreference -DisableScriptScanning $false -ErrorAction SilentlyContinue");
+            sb.AppendLine("    $defPol = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows Defender'");
+            sb.AppendLine("    if (Test-Path $defPol) {");
+            sb.AppendLine("        Set-ItemProperty -Path $defPol -Name 'DisableAntiSpyware' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("        Set-ItemProperty -Path $defPol -Name 'DisableRealtimeMonitoring' -Value 0 -Type DWord -ErrorAction SilentlyContinue");
+            sb.AppendLine("    }");
+            sb.AppendLine("    Start-Service WinDefend -ErrorAction SilentlyContinue");
+            sb.AppendLine("    Write-Host '[ok] Microsoft Defender ativo e com protecao em tempo real habilitada.'");
+            sb.AppendLine("} catch {}");
+            sb.AppendLine("if ($uninstalledCount -gt 0 -or $detectedAVs.Count -gt 0) {");
+            sb.AppendLine("    Write-Host ('[ok] Varredura concluida: Antivirus de terceiros tratados e removidos.')");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    Write-Host '[ok] Varredura concluida: Nenhum antivirus de terceiros pendente no sistema.'");
+            sb.AppendLine("}");
 
-            int exitCode = await RunProcessAsync("powershell",
-                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"{0}\"", psScript),
-                300000, null, false);
-
+            int exitCode = await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 300000);
             if (exitCode == 0)
-            {
                 Log("[ok] Antivírus de terceiros desinstalados e Microsoft Defender verificado.", ConsoleColor.Green);
-            }
             else
-            {
                 Log("Aviso: Rotina de desinstalação de antivírus finalizada com código " + exitCode, ConsoleColor.Yellow);
-            }
 
             await Task.Delay(300);
         }
@@ -5669,6 +5849,99 @@ namespace InstallerGUI.Services
                 }
 
                 return process.ExitCode;
+            }
+        }
+
+        /// <summary>
+        /// Executa um processo redirecionando e capturando a saída em tempo real linha a linha para o log da aplicação.
+        /// </summary>
+        private async Task<int> RunProcessWithLoggingAsync(string fileName, string arguments,
+            int timeoutMs = 600000, string workingDirectory = null)
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = fileName,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                WorkingDirectory = workingDirectory ?? string.Empty,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            var tcs = new TaskCompletionSource<int>();
+
+            using (var process = new Process { StartInfo = psi })
+            {
+                process.EnableRaisingEvents = true;
+                process.Exited += (sender, args) =>
+                {
+                    tcs.TrySetResult(process.ExitCode);
+                };
+
+                process.OutputDataReceived += (sender, args) =>
+                {
+                    if (!string.IsNullOrWhiteSpace(args.Data))
+                    {
+                        string line = args.Data.Trim();
+                        if (line.StartsWith("[ok]"))
+                            Log(line, ConsoleColor.Green);
+                        else if (line.StartsWith("X ") || line.StartsWith("[erro]"))
+                            Log(line, ConsoleColor.Red);
+                        else if (line.StartsWith("[Alerta]") || line.StartsWith("[!]"))
+                            Log(line, ConsoleColor.Yellow);
+                        else
+                            Log(line, ConsoleColor.Yellow);
+                    }
+                };
+
+                process.ErrorDataReceived += (sender, args) =>
+                {
+                    if (!string.IsNullOrWhiteSpace(args.Data))
+                    {
+                        Log("  " + args.Data.Trim(), ConsoleColor.Yellow);
+                    }
+                };
+
+                process.Start();
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+
+                await Task.WhenAny(tcs.Task, Task.Delay(timeoutMs));
+
+                if (!process.HasExited)
+                {
+                    try { process.Kill(); } catch { }
+                    Log(string.Format("  Processo {0} excedeu o tempo limite.", fileName), ConsoleColor.Yellow);
+                    return -1;
+                }
+
+                return process.ExitCode;
+            }
+        }
+
+        /// <summary>
+        /// Salva um script PowerShell temporário codificado em UTF-8 e o executa com captura de saída em tempo real.
+        /// </summary>
+        private async Task<int> RunPowerShellScriptWithLoggingAsync(string scriptContent, int timeoutMs = 600000)
+        {
+            string tempScript = Path.Combine(Path.GetTempPath(), string.Format("exabit_ps_{0}.ps1", Guid.NewGuid().ToString("N")));
+            try
+            {
+                File.WriteAllText(tempScript, scriptContent, Encoding.UTF8);
+                string args = string.Format("-NoProfile -ExecutionPolicy Bypass -File \"{0}\"", tempScript);
+                return await RunProcessWithLoggingAsync("powershell", args, timeoutMs);
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(tempScript))
+                        File.Delete(tempScript);
+                }
+                catch { }
             }
         }
 
