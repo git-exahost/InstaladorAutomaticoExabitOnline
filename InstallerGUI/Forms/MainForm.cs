@@ -145,7 +145,7 @@ namespace InstallerGUI.Forms
             float scale = GetDpiScale();
 
             // Configurações da janela responsivas ao DPI
-            Text = "Auto Instalador de Programas - EXABIT Soluções em TI";
+            Text = string.Format("Auto Instalador de Programas v{0} - EXABIT Soluções em TI", GetAppVersion());
 
             // Calcula dimensões adaptáveis ao tamanho do monitor e escala
             var workingArea = Screen.PrimaryScreen.WorkingArea;
@@ -217,6 +217,25 @@ namespace InstallerGUI.Forms
             {
                 return 1.0f;
             }
+        }
+
+        /// <summary>
+        /// Obtém a versão do aplicativo a partir dos metadados do assembly (ex: "2.0.0.83").
+        /// </summary>
+        private static string GetAppVersion()
+        {
+            try
+            {
+                var ver = Assembly.GetExecutingAssembly().GetName().Version;
+                if (ver != null)
+                {
+                    return ver.ToString();
+                }
+            }
+            catch
+            {
+            }
+            return "2.0.0.83";
         }
 
         // ──────────────────────────────────────────────
@@ -437,7 +456,7 @@ namespace InstallerGUI.Forms
 
             leftPanel.Controls.Add(new Label
             {
-                Text = "Auto Instalador de Programas",
+                Text = string.Format("Auto Instalador de Programas v{0}", GetAppVersion()),
                 Font = new Font("Segoe UI", 13.5f, FontStyle.Bold),
                 ForeColor = CorDestaque,
                 AutoSize = true,

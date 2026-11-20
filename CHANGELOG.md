@@ -7,6 +7,14 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.83] - 2026-11-20
+
+### Adicionado
+- **Exibição da Versão do Aplicativo no Título**:
+  - A versão do sistema agora é informada dinamicamente tanto na barra de título da janela (`Auto Instalador de Programas v2.0.0.83 - EXABIT Soluções em TI`) quanto no cabeçalho visual superior da interface gráfica (`Auto Instalador de Programas v2.0.0.83`), obtida diretamente dos metadados do Assembly.
+
+---
+
 ## [2.0.0.82] - 2026-11-20
 
 ### Adicionado
