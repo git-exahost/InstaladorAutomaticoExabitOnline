@@ -7,6 +7,25 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.93] - 2026-11-20
+
+### Aprimorado / Corrigido
+- **Compatibilidade Global e Funcionamento de Todos os Programas em Todos os Perfis (Existentes e Novos)**:
+  - **Provisionamento de Pacotes MSIX (ChatGPT Desktop e Affinity Studio)**:
+    - Adicionado suporte completo a provisionamento nativo via `Add-AppxProvisionedPackage -Online -PackagePath ... -SkipLicense` e registro para todos os usuários via `Add-AppxPackage -AllUsers`.
+    - Isso garante que pacotes modernos (MSIX/Appx) não fiquem restritos apenas ao perfil que executou a instalação: todos os usuários existentes recebem o aplicativo e qualquer **novo perfil de usuário** criado posteriormente no Windows terá o app automaticamente instalado na primeira inicialização.
+    - Nas chamadas do `winget`, adicionado o parâmetro `--scope machine` para forçar a instalação no escopo do sistema operacional.
+  - **Instalação em Nível de Máquina (`ALLUSERS=1`) para Suíte ArtCraft e MSIs**:
+    - Ajustados os argumentos de instalação de todos os 13 aplicativos da suíte Craft da Storytold (`cadcraft`, `deckcraft`, `designcraft`, `effectcraft`, `filmcraft`, `gridcraft`, `lightcraft`, `pdfcraft`, `photocraft`, `soundcraft`, `texturecraft`, `vectorcraft`, `wordcraft`) e do `nodejs` para `/qn /norestart ALLUSERS=1`.
+    - No `InstallerService.cs`, implementada injeção automática de `ALLUSERS=1` para qualquer pacote `.msi` caso o parâmetro não esteja explicitado.
+    - Adicionado parâmetro `/allusers` nos instaladores executáveis (ArtCraft Studio, Claude Desktop, DeepSeek Desktop, Gemini Desktop, Antigravity, Antigravity IDE, VS Code, CrystalDiskInfo, CrystalDiskMark, EaseUS Todo Backup, Recuva).
+  - **Rotina de Propagação e Normalização Multi-Usuário (`EnsureAllProgramsAccessibleForAllProfilesAsync`)**:
+    - Executada automaticamente após o ciclo de instalação de programas para eliminar qualquer bloqueio de ACL ou isolamento per-user.
+    - Concede permissões recursivas de leitura e execução (`(OI)(CI)RX`) ao grupo `Users` (SID `*S-1-5-32-545`) em `%LOCALAPPDATA%\Programs`.
+    - Espelha pastas de executáveis per-user para o diretório compartilhado `C:\ProgramData\Programs`.
+    - Propaga atalhos do Menu Iniciar (`.lnk`) de programas instalados para o Menu Iniciar Comum (`C:\ProgramData\Microsoft\Windows\Start Menu\Programs`) e para o perfil modelo de novos usuários (`C:\Users\Default\AppData\Roaming\Microsoft\Windows\Start Menu\Programs`), além dos perfis de usuário padrão e administrador.
+    - Registra caminhos de executáveis no Registro do Windows (`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths`), permitindo localização imediata pela barra de pesquisa e comando Executar (`Win+R`) em qualquer perfil.
+
 ## [2.0.0.92] - 2026-11-20
 
 ### Aprimorado / Corrigido

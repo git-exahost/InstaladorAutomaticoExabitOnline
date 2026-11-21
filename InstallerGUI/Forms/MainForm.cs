@@ -252,7 +252,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.92";
+            return "2.0.0.93";
         }
 
         // ──────────────────────────────────────────────
@@ -3840,37 +3840,37 @@ namespace InstallerGUI.Forms
 
             var manutencaoList = new List<ProgramInfo>
             {
-                new ProgramInfo("crystaldiskinfo", "CrystalDiskInfo",         "CrystalDiskInfo9_9_5.exe", "/VERYSILENT /NORESTART /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("crystaldiskmark", "CrystalDiskMark",         "CrystalDiskMark9_0_3.exe", "/VERYSILENT /NORESTART /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("easeustodo",      "EaseUS Todo Backup Free", "tb_free.exe",              "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES",  "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("recuva",          "Recuva Free",             "rcsetup155.exe",           "/S",                                        "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("crystaldiskinfo", "CrystalDiskInfo",         "CrystalDiskInfo9_9_5.exe", "/VERYSILENT /NORESTART /ALLUSERS /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("crystaldiskmark", "CrystalDiskMark",         "CrystalDiskMark9_0_3.exe", "/VERYSILENT /NORESTART /ALLUSERS /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("easeustodo",      "EaseUS Todo Backup Free", "tb_free.exe",              "/VERYSILENT /NORESTART /ALLUSERS /SUPPRESSMSGBOXES",  "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("recuva",          "Recuva Free",             "rcsetup155.exe",           "/S /allusers",                              "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
             };
             manutencaoList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
             var craftList = new List<ProgramInfo>
             {
-                new ProgramInfo("cadcraft",    "CADCraft (Desenho Técnico CAD)",     "cadcraft-windows-x64.msi",    "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("deckcraft",   "DeckCraft (Apresentações e Slides)", "deckcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("designcraft", "DesignCraft (Design Gráfico e UI)",  "designcraft-windows-x64.msi", "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("effectcraft", "EffectCraft (Efeitos Visuais e VFX)","effectcraft-windows-x64.msi","/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("filmcraft",   "FilmCraft (Editor de Vídeo)",        "filmcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("gridcraft",   "GridCraft (Planilhas Eletrônicas)",  "gridcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("lightcraft",  "LightCraft (Iluminação e Estúdio 3D)","lightcraft-windows-x64.msi", "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("pdfcraft",    "PdfCraft (Leitor e Editor de PDF)",  "pdfcraft-windows-x64.msi",    "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("photocraft",  "PhotoCraft (Editor de Fotos)",       "photocraft-windows-x64.msi",  "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("soundcraft",  "SoundCraft (Editor de Áudio)",       "soundcraft-windows-x64.msi",  "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("texturecraft","TextureCraft (Texturização 3D)",     "texturecraft-windows-x64.msi","/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("vectorcraft", "VectorCraft (Ilustração Vetorial)",  "vectorcraft-windows-x64.msi", "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("wordcraft",   "WordCraft (Editor de Texto)",        "wordcraft-windows-x64.msi",   "/qn /norestart", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("cadcraft",    "CADCraft (Desenho Técnico CAD)",     "cadcraft-windows-x64.msi",    "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("deckcraft",   "DeckCraft (Apresentações e Slides)", "deckcraft-windows-x64.msi",   "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("designcraft", "DesignCraft (Design Gráfico e UI)",  "designcraft-windows-x64.msi", "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("effectcraft", "EffectCraft (Efeitos Visuais e VFX)","effectcraft-windows-x64.msi","/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("filmcraft",   "FilmCraft (Editor de Vídeo)",        "filmcraft-windows-x64.msi",   "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("gridcraft",   "GridCraft (Planilhas Eletrônicas)",  "gridcraft-windows-x64.msi",   "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("lightcraft",  "LightCraft (Iluminação e Estúdio 3D)","lightcraft-windows-x64.msi", "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("pdfcraft",    "PdfCraft (Leitor e Editor de PDF)",  "pdfcraft-windows-x64.msi",    "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("photocraft",  "PhotoCraft (Editor de Fotos)",       "photocraft-windows-x64.msi",  "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("soundcraft",  "SoundCraft (Editor de Áudio)",       "soundcraft-windows-x64.msi",  "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("texturecraft","TextureCraft (Texturização 3D)",     "texturecraft-windows-x64.msi","/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("vectorcraft", "VectorCraft (Ilustração Vetorial)",  "vectorcraft-windows-x64.msi", "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("wordcraft",   "WordCraft (Editor de Texto)",        "wordcraft-windows-x64.msi",   "/qn /norestart ALLUSERS=1", "", "ArtCraft") { RequiresInternet = true, DefaultChecked = false },
             };
             craftList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
             var devList = new List<ProgramInfo>
             {
-                new ProgramInfo("antigravity",    "Antigravity",         "Antigravity-x64.exe", "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("antigravityide", "Antigravity IDE",     "Antigravity_IDE.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("vscode",         "Visual Studio Code",  "VSCodeSetup_x64.exe", "/VERYSILENT /NORESTART /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("nodejs",         "Node.js LTS",         "node_lts_x64.msi",    "/qn /norestart",                                  "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("antigravity",    "Antigravity",         "Antigravity-x64.exe", "/S /allusers",                                            "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("antigravityide", "Antigravity IDE",     "Antigravity_IDE.exe", "/VERYSILENT /NORESTART /ALLUSERS /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("vscode",         "Visual Studio Code",  "VSCodeSetup_x64.exe", "/VERYSILENT /NORESTART /ALLUSERS /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("nodejs",         "Node.js LTS",         "node_lts_x64.msi",    "/qn /norestart ALLUSERS=1",                               "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("filezilla",      "FileZilla Client",    "FileZilla_setup.exe", "/S",                                              "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("dbeaver",        "DBeaver Community",   "dbeaver_setup.exe",   "/S /allusers",                                    "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
             };
@@ -3879,15 +3879,15 @@ namespace InstallerGUI.Forms
             {
                 new ProgramInfo("affinity",  "Affinity Studio (Português)",        "Affinity.msix",            "",                                            "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("blender",   "Blender (3D e Criação)",             "blender.msi",              "/qn /norestart ALLUSERS=1",                   "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup-x64.exe", "/VERYSILENT /NORESTART /SUPPRESSMSGBOXES /SP-", "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("tracedraw", "TraceDraw (Vetorização Automática)", "tracedraw-setup-x64.exe", "/VERYSILENT /NORESTART /ALLUSERS /SUPPRESSMSGBOXES /SP-", "", "Design & Multimídia") { RequiresInternet = true, DefaultChecked = false },
             };
 
             var aiList = new List<ProgramInfo>
             {
                 new ProgramInfo("chatgpt",  "ChatGPT Desktop",  "ChatGPT-x64.msix",             "",                                    "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("claude",   "Claude Desktop",   "Claude-Setup-x64.exe",         "--silent",                            "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("deepseek", "DeepSeek Desktop", "deepseek-harness-win-x64.exe", "/S",                                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("gemini",   "Gemini Desktop",   "GeminiSetup.exe",              "/S",                                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("claude",   "Claude Desktop",   "Claude-Setup-x64.exe",         "--silent /allusers",                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("deepseek", "DeepSeek Desktop", "deepseek-harness-win-x64.exe", "/S /allusers",                        "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("gemini",   "Gemini Desktop",   "GeminiSetup.exe",              "/S /allusers",                        "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
             };
             aiList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
@@ -3899,7 +3899,7 @@ namespace InstallerGUI.Forms
             // 3. Inteligência Artificial
             list.AddRange(aiList);
             // 4. ArtCraft Studio e apps Craft
-            list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S", "", "ArtCraft") { DefaultChecked = false });
+            list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S /allusers", "", "ArtCraft") { DefaultChecked = false });
             list.AddRange(craftList);
             // 5. Desenvolvimento
             list.AddRange(devList);

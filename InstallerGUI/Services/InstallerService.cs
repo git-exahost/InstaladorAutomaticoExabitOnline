@@ -3233,7 +3233,7 @@ namespace InstallerGUI.Services
                 Log("Instalando Affinity Studio via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id Canva.Affinity -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id Canva.Affinity --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0)
@@ -3246,10 +3246,10 @@ namespace InstallerGUI.Services
                 string msixPath = await EnsureProgramDownloadedAsync(program);
                 if (!string.IsNullOrEmpty(msixPath) && File.Exists(msixPath))
                 {
-                    Log("  Instalando pacote MSIX do Affinity Studio...", ConsoleColor.Cyan);
+                    Log("  Instalando e provisionando pacote MSIX do Affinity Studio para todos os perfis...", ConsoleColor.Cyan);
                     string safeMsixPath = msixPath.Replace("'", "''");
                     int exitCode = await RunProcessAsync("powershell",
-                        string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxPackage -Path '{0}'\"", safeMsixPath),
+                        string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxProvisionedPackage -Online -PackagePath '{0}' -SkipLicense; Add-AppxPackage -Path '{0}' -AllUsers; if (-not (Get-AppxPackage -AllUsers *Affinity*)) {{ Add-AppxPackage -Path '{0}' }}\"", safeMsixPath),
                         600000, null, false);
 
                     if (exitCode == 0)
@@ -3329,7 +3329,7 @@ namespace InstallerGUI.Services
                 Log("Instalando Gemini Desktop via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id Google.GeminiDesktop -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id Google.GeminiDesktop --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsGeminiDesktopInstalled())
@@ -3352,7 +3352,7 @@ namespace InstallerGUI.Services
                 Log("Instalando ChatGPT Desktop via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id OpenAI.ChatGPT -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id OpenAI.ChatGPT --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsChatGPTInstalled())
@@ -3365,10 +3365,10 @@ namespace InstallerGUI.Services
                 string msixPath = await EnsureProgramDownloadedAsync(program);
                 if (!string.IsNullOrEmpty(msixPath) && File.Exists(msixPath))
                 {
-                    Log("  Instalando pacote MSIX do ChatGPT Desktop...", ConsoleColor.Cyan);
+                    Log("  Instalando e provisionando pacote MSIX do ChatGPT Desktop para todos os perfis...", ConsoleColor.Cyan);
                     string safeMsixPath = msixPath.Replace("'", "''");
                     int exitCode = await RunProcessAsync("powershell",
-                        string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxPackage -Path '{0}'\"", safeMsixPath),
+                        string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxProvisionedPackage -Online -PackagePath '{0}' -SkipLicense; Add-AppxPackage -Path '{0}' -AllUsers; if (-not (Get-AppxPackage -AllUsers *OpenAI.ChatGPT*)) {{ Add-AppxPackage -Path '{0}' }}\"", safeMsixPath),
                         600000, null, false);
 
                     if (exitCode == 0 || IsChatGPTInstalled())
@@ -3400,7 +3400,7 @@ namespace InstallerGUI.Services
                 Log("Instalando Claude Desktop via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id Anthropic.Claude -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id Anthropic.Claude --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsClaudeDesktopInstalled())
@@ -3423,7 +3423,7 @@ namespace InstallerGUI.Services
                 Log("Instalando DeepSeek Desktop via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id DeepSeek.DeepSeekHarnessDesktop -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id DeepSeek.DeepSeekHarnessDesktop --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsDeepSeekDesktopInstalled())
@@ -3446,7 +3446,7 @@ namespace InstallerGUI.Services
                 Log("Instalando CrystalDiskInfo via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id CrystalDewWorld.CrystalDiskInfo -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id CrystalDewWorld.CrystalDiskInfo --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsCrystalDiskInfoInstalled())
@@ -3469,7 +3469,7 @@ namespace InstallerGUI.Services
                 Log("Instalando CrystalDiskMark via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id CrystalDewWorld.CrystalDiskMark -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id CrystalDewWorld.CrystalDiskMark --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsCrystalDiskMarkInstalled())
@@ -3492,7 +3492,7 @@ namespace InstallerGUI.Services
                 Log("Instalando Recuva Free via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id Piriform.Recuva -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id Piriform.Recuva --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsRecuvaInstalled())
@@ -3512,7 +3512,7 @@ namespace InstallerGUI.Services
                     Log("  Tentando instalação do 7-Zip via Windows Package Manager (winget)...", ConsoleColor.Yellow);
                     string wingetExe = FindWingetExecutable();
                     int wingetExit = await RunProcessAsync(wingetExe,
-                        "install --id 7zip.7zip -e --silent --accept-package-agreements --accept-source-agreements",
+                        "install --id 7zip.7zip --scope machine -e --silent --accept-package-agreements --accept-source-agreements",
                         300000, null, false);
                     if (wingetExit == 0 || Is7ZipInstalled())
                     {
@@ -3525,7 +3525,7 @@ namespace InstallerGUI.Services
                     Log("  Tentando instalação do Google Chrome via Windows Package Manager (winget)...", ConsoleColor.Yellow);
                     string wingetExe = FindWingetExecutable();
                     int wingetExit = await RunProcessAsync(wingetExe,
-                        "install --id Google.Chrome -e --silent --accept-package-agreements --accept-source-agreements",
+                        "install --id Google.Chrome --scope machine -e --silent --accept-package-agreements --accept-source-agreements",
                         600000, null, false);
                     if (wingetExit == 0 || IsChromeInstalled())
                     {
@@ -3645,8 +3645,13 @@ namespace InstallerGUI.Services
                     int exitCode;
                     if (extension == ".msi")
                     {
+                        string msiArgs = program.Arguments ?? "";
+                        if (msiArgs.IndexOf("ALLUSERS=", StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            msiArgs = (msiArgs + " ALLUSERS=1").Trim();
+                        }
                         exitCode = await RunProcessAsync("msiexec",
-                            string.Format("/i \"{0}\" {1}", fullPath, program.Arguments),
+                            string.Format("/i \"{0}\" {1}", fullPath, msiArgs),
                             timeout, procWorkDir);
                     }
                     else
@@ -5031,6 +5036,11 @@ namespace InstallerGUI.Services
                 if (File.Exists(Path.Combine(progFiles, @"Google\Gemini\Gemini.exe")))
                     return true;
 
+                string commonProg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Programs");
+                if (File.Exists(Path.Combine(commonProg, @"Google\Gemini\Gemini.exe")) ||
+                    File.Exists(Path.Combine(commonProg, @"Gemini\Gemini.exe")))
+                    return true;
+
                 string[] regKeys = new string[]
                 {
                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Gemini",
@@ -5062,6 +5072,11 @@ namespace InstallerGUI.Services
                 string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 if (File.Exists(Path.Combine(localApp, @"Programs\ChatGPT\ChatGPT.exe")) ||
                     File.Exists(Path.Combine(localApp, @"OpenAI\ChatGPT\ChatGPT.exe")))
+                    return true;
+
+                string commonProg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Programs");
+                if (File.Exists(Path.Combine(commonProg, @"ChatGPT\ChatGPT.exe")) ||
+                    File.Exists(Path.Combine(commonProg, @"OpenAI\ChatGPT\ChatGPT.exe")))
                     return true;
 
                 string winApps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps");
@@ -5108,6 +5123,11 @@ namespace InstallerGUI.Services
                 if (File.Exists(Path.Combine(progFiles, @"Claude\Claude.exe")))
                     return true;
 
+                string commonProg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Programs");
+                if (File.Exists(Path.Combine(commonProg, @"Claude\Claude.exe")) ||
+                    File.Exists(Path.Combine(commonProg, @"AnthropicClaude\Claude.exe")))
+                    return true;
+
                 string[] regKeys = new string[]
                 {
                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Claude",
@@ -5145,6 +5165,12 @@ namespace InstallerGUI.Services
                 string progFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
                 if (File.Exists(Path.Combine(progFiles, @"DeepSeek\deepseek.exe")) ||
                     File.Exists(Path.Combine(progFiles, @"DeepSeek Harness\DeepSeek Harness.exe")))
+                    return true;
+
+                string commonProg = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Programs");
+                if (File.Exists(Path.Combine(commonProg, @"deepseek-harness\DeepSeek Harness.exe")) ||
+                    File.Exists(Path.Combine(commonProg, @"deepseek-desktop\DeepSeek Desktop.exe")) ||
+                    File.Exists(Path.Combine(commonProg, @"deepseek\DeepSeek.exe")))
                     return true;
 
                 string[] regKeys = new string[]
@@ -6324,6 +6350,9 @@ namespace InstallerGUI.Services
 
                 if (!cancelled)
                 {
+                    // Garante que todos os programas instalados fiquem acessíveis para todos os perfis do Windows (atuais e novos)
+                    await EnsureAllProgramsAccessibleForAllProfilesAsync(options);
+
                     // Limpa atalhos de todas as áreas de trabalho no final de todas as instalações (se selecionado)
                     if (options.CleanDesktopShortcuts)
                     {
@@ -6376,6 +6405,139 @@ namespace InstallerGUI.Services
             catch (OperationCanceledException)
             {
                 Log("=== INSTALAÇÃO CANCELADA ===", ConsoleColor.Yellow);
+            }
+        }
+
+        /// <summary>
+        /// Garante que todos os programas instalados (especialmente suíte ArtCraft, ferramentas de IA como ChatGPT,
+        /// Claude, DeepSeek, Gemini, etc.) fiquem acessíveis e funcionais para todos os perfis de usuário do Windows,
+        /// incluindo o usuário atual, o administrador, o usuário padrão e quaisquer novos perfis criados no futuro.
+        /// </summary>
+        private async Task EnsureAllProgramsAccessibleForAllProfilesAsync(InstallationOptions options)
+        {
+            Log("Garantindo compatibilidade de todos os programas para todos os perfis de usuário (atuais e novos)...", ConsoleColor.Cyan);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("# Script de Compatibilidade e Acesso Global de Programas para Todos os Perfis (EXABIT)");
+            sb.AppendLine("$ErrorActionPreference = 'SilentlyContinue'");
+            sb.AppendLine();
+            sb.AppendLine("# 1. Concede permissao de Leitura e Execucao em %LOCALAPPDATA%\\Programs para o grupo Users (SID *S-1-5-32-545)");
+            sb.AppendLine("$localPrograms = \"$env:LOCALAPPDATA\\Programs\"");
+            sb.AppendLine("if (Test-Path $localPrograms) {");
+            sb.AppendLine("    & icacls.exe $localPrograms /grant \"*S-1-5-32-545:(OI)(CI)RX\" /T /C /Q 2>$null | Out-Null");
+            sb.AppendLine("}");
+            sb.AppendLine();
+            sb.AppendLine("# 2. Configura diretorio compartilhado do sistema C:\\ProgramData\\Programs");
+            sb.AppendLine("$commonProgramsDir = \"$env:ProgramData\\Programs\"");
+            sb.AppendLine("if (-not (Test-Path $commonProgramsDir)) {");
+            sb.AppendLine("    New-Item -ItemType Directory -Path $commonProgramsDir -Force | Out-Null");
+            sb.AppendLine("}");
+            sb.AppendLine("& icacls.exe $commonProgramsDir /grant \"*S-1-5-32-545:(OI)(CI)RX\" /T /C /Q 2>$null | Out-Null");
+            sb.AppendLine();
+            sb.AppendLine("# 3. Espelha pastas de aplicativos de LocalAppData\\Programs para ProgramData\\Programs");
+            sb.AppendLine("if (Test-Path $localPrograms) {");
+            sb.AppendLine("    Get-ChildItem -Path $localPrograms -Directory -ErrorAction SilentlyContinue | ForEach-Object {");
+            sb.AppendLine("        $target = Join-Path $commonProgramsDir $_.Name");
+            sb.AppendLine("        if (-not (Test-Path $target)) {");
+            sb.AppendLine("            Copy-Item -Path $_.FullName -Destination $target -Recurse -Force -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
+            sb.AppendLine("# 4. Provisiona pacotes MSIX/Appx para todos os perfis existentes e futuros (ChatGPT, Affinity, etc.)");
+            sb.AppendLine("$cacheDirs = @(\"$env:ProgramData\\EXABIT\\Downloads\", \"$env:ProgramData\\EXABIT\\Setup\", \"$PSScriptRoot\\..\\dist\\Programas\")");
+            sb.AppendLine("foreach ($cDir in $cacheDirs) {");
+            sb.AppendLine("    if (Test-Path $cDir) {");
+            sb.AppendLine("        Get-ChildItem -Path $cDir -Filter \"*.msix\" -Recurse -ErrorAction SilentlyContinue | ForEach-Object {");
+            sb.AppendLine("            Add-AppxProvisionedPackage -Online -PackagePath $_.FullName -SkipLicense -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("            Add-AppxPackage -Path $_.FullName -AllUsers -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
+            sb.AppendLine("# 5. Propagacao de atalhos do Menu Iniciar para CommonStartMenu e Perfil Default");
+            sb.AppendLine("$wscript = New-Object -ComObject WScript.Shell");
+            sb.AppendLine("$userStartMenu = [Environment]::GetFolderPath('Programs')");
+            sb.AppendLine("$commonStartMenu = [Environment]::GetFolderPath('CommonPrograms')");
+            sb.AppendLine("$defaultStartMenu = \"$env:SystemDrive\\Users\\Default\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\"");
+            sb.AppendLine("if (-not (Test-Path $defaultStartMenu)) {");
+            sb.AppendLine("    New-Item -ItemType Directory -Path $defaultStartMenu -Force | Out-Null");
+            sb.AppendLine("}");
+            sb.AppendLine();
+            sb.AppendLine("$destStartMenus = @($commonStartMenu, $defaultStartMenu)");
+            if (options != null && options.CreateStandardUser && !string.IsNullOrWhiteSpace(options.StandardUserName))
+            {
+                sb.AppendLine(string.Format("$destStartMenus += \"$env:SystemDrive\\Users\\{0}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\"", options.StandardUserName.Trim()));
+            }
+            if (options != null && options.CreateAdmin)
+            {
+                sb.AppendLine("$destStartMenus += \"$env:SystemDrive\\Users\\admin\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\"");
+            }
+            sb.AppendLine();
+            sb.AppendLine("if (Test-Path $userStartMenu) {");
+            sb.AppendLine("    $ignoreNames = @('System Tools', 'Administrative Tools', 'Accessibility', 'Accessories', 'Windows PowerShell')");
+            sb.AppendLine("    Get-ChildItem -Path $userStartMenu -Filter '*.lnk' -Recurse -ErrorAction SilentlyContinue | ForEach-Object {");
+            sb.AppendLine("        $rel = $_.FullName.Substring($userStartMenu.Length).TrimStart('\\', '/')");
+            sb.AppendLine("        $shouldSkip = $false");
+            sb.AppendLine("        foreach ($ign in $ignoreNames) { if ($rel -like \"$ign*\") { $shouldSkip = $true; break } }");
+            sb.AppendLine("        if (-not $shouldSkip) {");
+            sb.AppendLine("            $srcSh = $wscript.CreateShortcut($_.FullName)");
+            sb.AppendLine("            $tPath = $srcSh.TargetPath");
+            sb.AppendLine("            $tArgs = $srcSh.Arguments");
+            sb.AppendLine("            $tWork = $srcSh.WorkingDirectory");
+            sb.AppendLine("            $tIcon = $srcSh.IconLocation");
+            sb.AppendLine();
+            sb.AppendLine("            if ($tPath -like \"$localPrograms\\*\") {");
+            sb.AppendLine("                $subRel = $tPath.Substring($localPrograms.Length).TrimStart('\\', '/')");
+            sb.AppendLine("                $alt = Join-Path $commonProgramsDir $subRel");
+            sb.AppendLine("                if (Test-Path $alt) {");
+            sb.AppendLine("                    $tPath = $alt");
+            sb.AppendLine("                    $tWork = Split-Path $alt -Parent");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+            sb.AppendLine("            foreach ($dstMenu in $destStartMenus) {");
+            sb.AppendLine("                $dstPath = Join-Path $dstMenu $rel");
+            sb.AppendLine("                $dstDir = Split-Path $dstPath -Parent");
+            sb.AppendLine("                if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Path $dstDir -Force | Out-Null }");
+            sb.AppendLine("                $newSh = $wscript.CreateShortcut($dstPath)");
+            sb.AppendLine("                $newSh.TargetPath = $tPath");
+            sb.AppendLine("                $newSh.Arguments = $tArgs");
+            sb.AppendLine("                $newSh.WorkingDirectory = $tWork");
+            sb.AppendLine("                if ($tIcon) { $newSh.IconLocation = $tIcon }");
+            sb.AppendLine("                $newSh.Save()");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
+            sb.AppendLine("# 6. Registra executaveis em HKLM App Paths para busca global e comando Executar");
+            sb.AppendLine("$appPaths = \"HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\"");
+            sb.AppendLine("$scanFolders = @($commonProgramsDir, \"$env:ProgramFiles\", \"${env:ProgramFiles(x86)}\")");
+            sb.AppendLine("foreach ($sF in $scanFolders) {");
+            sb.AppendLine("    if (Test-Path $sF) {");
+            sb.AppendLine("        Get-ChildItem -Path $sF -Filter \"*.exe\" -Recurse -Depth 3 -ErrorAction SilentlyContinue | ForEach-Object {");
+            sb.AppendLine("            $name = $_.Name");
+            sb.AppendLine("            if ($name -notmatch 'unins|setup|update|helper|crash|elevate|patch|install') {");
+            sb.AppendLine("                $keyPath = Join-Path $appPaths $name");
+            sb.AppendLine("                if (-not (Test-Path $keyPath)) {");
+            sb.AppendLine("                    New-Item -Path $keyPath -Force -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("                    Set-ItemProperty -Path $keyPath -Name '(default)' -Value $_.FullName -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("                    Set-ItemProperty -Path $keyPath -Name 'Path' -Value $_.DirectoryName -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+
+            try
+            {
+                await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 300000);
+                Log("[ok] Programas e atalhos configurados com sucesso para todos os perfis de usuário.", ConsoleColor.Green);
+            }
+            catch (Exception ex)
+            {
+                Log(string.Format("  Aviso ao propagar programas para todos os perfis: {0}", ex.Message), ConsoleColor.Yellow);
             }
         }
 
