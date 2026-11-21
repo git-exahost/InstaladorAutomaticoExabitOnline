@@ -190,7 +190,8 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 
 ## Regras Críticas de Operação
 
-- **NUNCA fazer `git push` sem ordem do usuário**: Qualquer alteração, commit ou build deve permanecer estritamente local. O envio de atualizações para o repositório remoto (GitHub) **só pode ser feito quando o usuário mandar explicitamente**.
+- **NÃO fazer `git commit` nem `git push` a cada alteração**: Não perca tempo criando commits intermediários ou enviando para o repositório a cada tarefa ou ajuste realizado. O foco deve ser codificar, compilar e validar o funcionamento localmente de forma rápida e ágil.
+- **Aguardar a ordem explícita do usuário para commitar e subir**: Somente execute `git commit` e/ou `git push` para o GitHub quando o usuário pedir expressamente (ex: *"pode subir para o github"*, *"faça o commit e push"*).
 - **Testar compilação** sempre após alterações: `build.bat`
 - **Testar execução** abrindo o .exe (verificar se a janela aparece)
 - **Layout**: usar `Dock = DockStyle.Fill` para preenchimento automático

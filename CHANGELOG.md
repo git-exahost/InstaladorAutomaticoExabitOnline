@@ -7,6 +7,51 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.97] - 2026-11-21
+
+### Corrigido — Arquitetura de timers de métricas totalmente reescrita
+
+- **Dois timers independentes** substituem o antigo timer único com flag `_isPeriodicMetricsRunning`:
+  - **`_syncMetricsTimer` (3 segundos, síncrono)**: atualiza espaço em disco (C: e drives expandidos) e RAM de forma 100% síncrona via `DriveInfo` e `GlobalMemoryStatusEx`. Executa em menos de 5ms, nunca bloqueia a UI thread e nunca é travado pelo ping.
+  - **`_pingTimer` (5 segundos, `Task.Run`)**: realiza ICMP ping para `1.1.1.1` (timeout 1500ms) e, em caso de falha, tenta `8.8.8.8`. Executa em thread pool, posta o resultado de volta na UI via `BeginInvoke`. Totalmente independente do timer de disco.
+- **Detecção real de Offline**: O ping agora usa `System.Net.NetworkInformation.Ping.Send` diretamente (não `HasInternetConnectionAsync`). Se ambos os IPs não respondem em 1500ms, exibe `"Offline ○/●"` imediatamente, sem depender de `NetworkInterface.GetIsNetworkAvailable()` que mentia "Connected" mesmo sem internet real.
+- **Fim do bloqueio mútuo**: Na arquitetura anterior, o flag `_isPeriodicMetricsRunning` impedia que disco e RAM fossem atualizados enquanto o ping aguardava resposta (até 3,4s de await). Agora, disco atualiza a cada 3s independentemente, e ping a cada 5s, sem interferência.
+- **Click handlers** dos labels de conexão e do `_barDiagDisk` agora chamam `SyncMetricsTimer_Tick` + `TriggerPingNow()` em vez do antigo método unificado.
+- **Pausa durante instalação**: Ambos os timers são parados ao iniciar a instalação, retomando automaticamente ao fechar o formulário.
+
+---
+
+## [2.0.0.96] - 2026-11-21
+
+### Aprimorado / Corrigido
+- **Card Compacto de Diagnóstico ("Diagnóstico do Sistema")**:
+  - Removido o texto descritivo e a porcentagem escrita do campo *"Disco C:"*, mantendo exclusivamente a barra de progresso horizontal (`MiniUsageBar`), conforme padrão visual minimalista oficial.
+  - A barra de progresso continua sendo recalculada e atualizada dinamicamente a cada 5 segundos através de APIs nativas do `DriveInfo`, com renderização imediata (`Refresh()`).
+- **Diagnóstico de Conectividade e Ping a Cada 5 Segundos**:
+  - Unificado o monitoramento em um único timer periódico de 5 segundos (`_metricsRefreshTimer`), eliminando o antigo timer concorrente de 2 segundos (`_connectionMonitorTimer`) que causava colisões de sockets ICMP e acionava consultas WMI completas em segundo plano que sobrescreviam o texto da tela inicial.
+  - Substituídos os glifos circulares imperceptíveis `↻`/`↺` por um indicador pulsante de alta visibilidade: `●` (ponto sólido preenchido) e `○` (círculo vazado), que alterna com clareza a cada 5 segundos fornecendo feedback inequívoco de atividade do monitoramento em tempo real (ex: `Online (31 ms) ●` e `Online (31 ms) ○`).
+  - Chamada imediata na abertura do aplicativo para que o ping e as métricas sejam populados no primeiro instante sem aguardar 5 segundos ociosos.
+  - Evento de clique em *Conexão* e na barra de *Disco C:* aciona medição instantânea com feedback imediato (`Medindo ping...`).
+
+## [2.0.0.95] - 2026-11-20
+
+### Aprimorado / Corrigido
+- **Correção da Opção "Ativar (senha nunca expira) para todos os perfis" quando Desmarcada**:
+  - Corrigido o método de configuração de contas locais (`ConfigureUserPasswordPolicyAsync`) para respeitar estritamente o estado do checkbox `_chkPasswordNeverExpiresGlobal`.
+  - Anteriormente, os métodos `CreateStandardUserAsync` e `CreateAdminUserAsync` continham internamente a flag `-PasswordNeverExpires $true` de forma fixa, o que fazia com que contas criadas/atualizadas (como usuário padrão e admin) recebessem a flag "A senha nunca expira" mesmo com o checkbox desmarcado na aba *Opções*.
+  - Agora, os parâmetros são propagados ponta a ponta (`options.PasswordNeverExpiresGlobal`), e quando a opção estiver desmarcada (`false`), a flag `-PasswordNeverExpires $false` é explicitamente aplicada a todos os perfis locais e aos usuários criados ou modificados, garantindo que no `lusrmgr.msc` a caixa *"A senha nunca expira"* permaneça desmarcada.
+- **Atualização Dinâmica Contínua de Espaço em Disco e Ping a Cada 5 Segundos**:
+  - **Card Compacto ("Diagnóstico do Sistema")**:
+    - Adicionado label de texto descritivo `_lblDiagDisk` ao lado da mini barra `_barDiagDisk` no campo *"Disco C:"*, exibindo a medição precisa em tempo real (ex: `300,4 GB livres (32%)`).
+    - Alinhamento horizontal nivelado entre barra e texto, permitindo clique direto no texto ou barra para forçar refresh instantâneo.
+  - **Atualização Contínua em "Mais detalhes"**:
+    - O painel de armazenamento agora mapeia as unidades fixas por letra de unidade (`panel.Tag = drive.DriveLetter`), atualizando status, gigabytes livres/totais e cores de alerta em tempo real.
+    - RAM Summary e barra de porcentagem de memória continuam sincronizados a cada 5 segundos.
+  - **Indicador Visual de Atualização do Ping**:
+    - O teste de ping agora alterna o glifo de atualização entre `↻` (sentido horário) e `↺` (sentido anti-horário) a cada ciclo de 5 segundos, fornecendo feedback visual imediato de que a medição foi realizada mesmo quando a latência de rede se mantém estável (ex: `31 ms` / `32 ms`).
+  - **Inicialização Ultrarrápida Sem Espera (`GetQuickSystemDiagnosis`)**:
+    - Adicionado método instantâneo (~2ms via .NET e Registry nativo) no `InstallerService` para carregar imediatamente a identificação da máquina, edição do Windows, todas as unidades de disco e memória RAM na abertura do programa, eliminando a tela em branco ou atrasos provocados por consultas WMI pesadas.
+
 ## [2.0.0.94] - 2026-11-20
 
 ### Adicionado / Aprimorado

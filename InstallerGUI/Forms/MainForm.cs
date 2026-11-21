@@ -46,13 +46,9 @@ namespace InstallerGUI.Forms
         private readonly InstallerService _service;
         private bool _installing;
         private bool _installationStarted;
-        private System.Windows.Forms.Timer _connectionMonitorTimer;
-        private System.Windows.Forms.Timer _metricsRefreshTimer;
-        private bool? _lastDetectedInternet;
-        private string _lastDetectedIp;
-        private bool _isUpdatingSystemInfo;
-        private bool _isPeriodicMetricsRunning;
-        private int _connectionMonitorTicks;
+        private System.Windows.Forms.Timer _syncMetricsTimer;
+        private System.Windows.Forms.Timer _pingTimer;
+        private bool _isPingRunning;
 
         // ──────────────────────────────────────────────
         // Controles da UI
@@ -116,6 +112,7 @@ namespace InstallerGUI.Forms
         private Label _lblDiagNet;
         private Label _lblDiagIp;
         private Button _btnMoreDetails;
+        private int _pingCycleCounter;
 
         // Card Expandido (Painel Completo)
         private Button _btnBackToMain;
@@ -204,6 +201,14 @@ namespace InstallerGUI.Forms
             // Monta todos os controles na tela
             BuildUI();
 
+            // Inicializa imediatamente com diagnóstico rápido em < 5ms para que a interface nunca fique vazia
+            try
+            {
+                _lastDiag = _service.GetQuickSystemDiagnosis();
+                RefreshDiagnosticViews(_lastDiag);
+            }
+            catch { }
+
             // Inicia o monitor de conectividade de rede em tempo real
             InitConnectionMonitor();
         }
@@ -253,7 +258,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.94";
+            return "2.0.0.97";
         }
 
         // ──────────────────────────────────────────────
@@ -331,17 +336,17 @@ namespace InstallerGUI.Forms
         {
             try
             {
-                if (_connectionMonitorTimer != null)
+                if (_syncMetricsTimer != null)
                 {
-                    _connectionMonitorTimer.Stop();
-                    _connectionMonitorTimer.Dispose();
-                    _connectionMonitorTimer = null;
+                    _syncMetricsTimer.Stop();
+                    _syncMetricsTimer.Dispose();
+                    _syncMetricsTimer = null;
                 }
-                if (_metricsRefreshTimer != null)
+                if (_pingTimer != null)
                 {
-                    _metricsRefreshTimer.Stop();
-                    _metricsRefreshTimer.Dispose();
-                    _metricsRefreshTimer = null;
+                    _pingTimer.Stop();
+                    _pingTimer.Dispose();
+                    _pingTimer = null;
                 }
                 System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged -= OnNetworkAvailabilityChanged;
             }
@@ -1022,7 +1027,7 @@ namespace InstallerGUI.Forms
             _lblDiagOs = CreateDiagValueLabel("Identificando...");
             tblData.Controls.Add(_lblDiagOs, 1, 2);
 
-            // 4. Disco C: (somente com a barra verde/amarela/vermelha)
+            // 4. Disco C: (com barra e texto com espaço livre e porcentagem)
             tblData.Controls.Add(CreateDiagHeaderLabel("Disco C:"), 0, 3);
             var pnlDiskContainer = new Panel
             {
@@ -1048,6 +1053,12 @@ namespace InstallerGUI.Forms
                 FillColor = initColor,
                 Cursor = Cursors.Hand,
             };
+            _barDiagDisk.Click += (s, e) =>
+            {
+                SyncMetricsTimer_Tick(s, e);
+                TriggerPingNow();
+            };
+
             pnlDiskContainer.Controls.Add(_barDiagDisk);
             tblData.Controls.Add(pnlDiskContainer, 1, 3);
 
@@ -1058,8 +1069,8 @@ namespace InstallerGUI.Forms
             _lblDiagNet.Cursor = Cursors.Hand;
             _lblDiagNet.Click += (s, e) =>
             {
-                _lblDiagNet.Text = "Atualizando teste de ping...";
-                MetricsRefreshTimer_Tick(s, e);
+                _lblDiagNet.Text = "Medindo ping...";
+                TriggerPingNow();
             };
             tblData.Controls.Add(_lblDiagNet, 1, 4);
 
@@ -1525,7 +1536,7 @@ namespace InstallerGUI.Forms
             _lblExpNetStatus.Click += (s, e) =>
             {
                 _lblExpNetStatus.Text = "Atualizando teste...";
-                MetricsRefreshTimer_Tick(s, e);
+                TriggerPingNow();
             };
             content.Controls.Add(_lblExpNetStatus, 1, 0);
 
@@ -2009,6 +2020,7 @@ namespace InstallerGUI.Forms
                 _pnlExpandedDiagnostics.BringToFront();
                 if (_lastDiag != null)
                 {
+                    _service.UpdateDynamicMetrics(_lastDiag);
                     RefreshExpandedDiagnosticsUI(_lastDiag);
                 }
                 UpdateIdentLayout();
@@ -2113,12 +2125,14 @@ namespace InstallerGUI.Forms
                         _barDiagDisk.FillColor = Color.FromArgb(240, 180, 0); // Quase cheio / Atenção (Amarelo)
                     else
                         _barDiagDisk.FillColor = CorSucesso; // Normal / Bom (Verde)
+                    _barDiagDisk.Refresh();
                 }
             }
 
             if (_lblDiagNet != null)
             {
-                _lblDiagNet.Text = diag.ConnectionStatusText + " ↻";
+                string refreshGlyph = (_pingCycleCounter % 2 == 0) ? "●" : "○";
+                _lblDiagNet.Text = string.Format("{0} {1}", diag.ConnectionStatusText, refreshGlyph);
                 _lblDiagNet.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) 
                     ? CorSucesso 
                     : ((diag.ConnectionStatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : Color.FromArgb(230, 50, 50));
@@ -2149,7 +2163,8 @@ namespace InstallerGUI.Forms
             // Card 2: Conexão e Rede
             if (_lblExpNetStatus != null)
             {
-                _lblExpNetStatus.Text = diag.ConnectionStatusText + " ↻";
+                string refreshGlyph = (_pingCycleCounter % 2 == 0) ? "●" : "○";
+                _lblExpNetStatus.Text = string.Format("{0} {1}", diag.ConnectionStatusText, refreshGlyph);
                 _lblExpNetStatus.ForeColor = (diag.ConnectionStatusColor == ConsoleColor.Green) 
                     ? CorSucesso 
                     : ((diag.ConnectionStatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : Color.FromArgb(230, 50, 50));
@@ -2215,6 +2230,7 @@ namespace InstallerGUI.Forms
                             Size = new Size(Math.Max(100, _pnlStorageViewport.ClientSize.Width - 12), itemH),
                             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                             BackColor = Color.Transparent,
+                            Tag = drive.DriveLetter,
                         };
 
                         var lblDriveText = new Label
@@ -2853,14 +2869,7 @@ namespace InstallerGUI.Forms
             // Prepara a interface para a instalação
             _installing = true;
             _installationStarted = true;
-            if (_connectionMonitorTimer != null)
-            {
-                _connectionMonitorTimer.Stop();
-            }
-            if (_metricsRefreshTimer != null)
-            {
-                _metricsRefreshTimer.Stop();
-            }
+            // Timers de disco e ping continuam rodando durante a instalação
             _btnInstall.Enabled = false;
             _btnInstall.BackColor = Color.FromArgb(0, 75, 25);
             if (_downloadProgressBar != null) _downloadProgressBar.Value = 0;
@@ -3080,20 +3089,23 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Inicializa o timer de monitoramento contínuo de conectividade de rede (a cada 2 segundos).
-        /// Permite detectar imediatamente quando a internet cai ou volta na tela inicial, atualizando IP e Ping sem travamento.
+        /// Inicializa dois timers independentes: um síncrono para disco e RAM (3s)
+        /// e um assíncrono para ping (5s), eliminando bloqueio mútuo entre as atualizações.
         /// </summary>
         private void InitConnectionMonitor()
         {
-            _connectionMonitorTimer = new System.Windows.Forms.Timer();
-            _connectionMonitorTimer.Interval = 2000;
-            _connectionMonitorTimer.Tick += ConnectionMonitorTimer_Tick;
-            _connectionMonitorTimer.Start();
+            _syncMetricsTimer = new System.Windows.Forms.Timer();
+            _syncMetricsTimer.Interval = 3000;
+            _syncMetricsTimer.Tick += SyncMetricsTimer_Tick;
+            _syncMetricsTimer.Start();
 
-            _metricsRefreshTimer = new System.Windows.Forms.Timer();
-            _metricsRefreshTimer.Interval = 5000;
-            _metricsRefreshTimer.Tick += MetricsRefreshTimer_Tick;
-            _metricsRefreshTimer.Start();
+            _pingTimer = new System.Windows.Forms.Timer();
+            _pingTimer.Interval = 5000;
+            _pingTimer.Tick += PingTimer_Tick;
+            _pingTimer.Start();
+
+            SyncMetricsTimer_Tick(null, EventArgs.Empty);
+            TriggerPingNow();
 
             try
             {
@@ -3103,104 +3115,169 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Atualiza periodicamente a cada 5 segundos as informações de espaço em disco e teste de ping,
-        /// além do uso de memória RAM, tanto no card compacto quanto no diagnóstico expandido.
+        /// Atualiza espaço em disco (C: e drives expandidos) e RAM de forma 100% síncrona a cada 3 segundos.
+        /// Nunca bloqueia a UI thread com awaits; executa em menos de 5ms.
         /// </summary>
-        private async void MetricsRefreshTimer_Tick(object sender, EventArgs e)
+        private void SyncMetricsTimer_Tick(object sender, EventArgs e)
         {
-            if (_installing || _installationStarted || IsDisposed || _isPeriodicMetricsRunning) return;
-            _isPeriodicMetricsRunning = true;
+            if (IsDisposed) return;
             try
             {
-                // 1. Atualiza espaço em disco de forma instantânea (via DriveInfo nativo)
                 var diskDiag = GetSystemDriveFreeSpaceDiagnosis();
-                if (_barDiagDisk != null && diskDiag != null)
+                if (diskDiag != null && _barDiagDisk != null)
                 {
                     _barDiagDisk.Percent = diskDiag.PercentUsed;
                     if (diskDiag.Color == ConsoleColor.Red)
-                        _barDiagDisk.FillColor = Color.FromArgb(230, 50, 50); // Cheio / Crítico (< 10% livre ou < 15 GB)
+                        _barDiagDisk.FillColor = Color.FromArgb(230, 50, 50);
                     else if (diskDiag.Color == ConsoleColor.Yellow)
-                        _barDiagDisk.FillColor = Color.FromArgb(240, 180, 0); // Atenção (< 20% livre ou < 30 GB)
+                        _barDiagDisk.FillColor = Color.FromArgb(240, 180, 0);
                     else
-                        _barDiagDisk.FillColor = CorSucesso; // Saudável / Bom (Verde)
-                    _barDiagDisk.Invalidate();
+                        _barDiagDisk.FillColor = CorSucesso;
+                    _barDiagDisk.Refresh();
                 }
 
-                // Se houver diagnóstico prévio, atualiza as métricas dinâmicas completas (RAM e Discos no painel expandido)
                 if (_lastDiag != null)
                 {
                     _service.UpdateDynamicMetrics(_lastDiag);
                     RefreshDynamicMetricsViews(_lastDiag);
                 }
 
-                // 2. Atualiza teste de ping de forma assíncrona (sem congelar a UI)
-                var pingDiag = await _service.MeasureInternetPingAsync();
-                if (IsDisposed || _installing || _installationStarted) return;
-
-                if (pingDiag != null && pingDiag.Success)
+                string currentIp = GetLocalIpAddress();
+                if (_lblDiagIp != null && !string.IsNullOrEmpty(currentIp) && currentIp != "Indisponível")
                 {
-                    string pingText = string.Format("Online ({0} ms) ↻", pingDiag.LatencyMs);
-                    Color pingColor = (pingDiag.LatencyMs < 80)
-                        ? CorSucesso
-                        : ((pingDiag.LatencyMs < 180) ? Color.FromArgb(240, 180, 0) : Color.FromArgb(230, 50, 50));
+                    _lblDiagIp.Text = currentIp + " [+]";
+                }
+            }
+            catch { }
+        }
 
-                    if (_lblDiagNet != null)
+        /// <summary>
+        /// Dispara o teste de ping imediatamente fora do ciclo normal do timer,
+        /// usado ao clicar nos labels de conexão ou ao detectar mudança de rede.
+        /// </summary>
+        private void TriggerPingNow()
+        {
+            if (IsDisposed) return;
+            PingTimer_Tick(null, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Executa o teste de ping a cada 5 segundos em thread separada via Task.Run,
+        /// sem bloquear a UI thread. Detecta offline corretamente ao expirar o timeout ICMP.
+        /// </summary>
+        private void PingTimer_Tick(object sender, EventArgs e)
+        {
+            if (IsDisposed || _isPingRunning) return;
+            _isPingRunning = true;
+            _pingCycleCounter++;
+            int cycle = _pingCycleCounter;
+
+            Task.Run(delegate
+            {
+                long latencyMs = -1;
+                bool success = false;
+                try
+                {
+                    using (var ping = new System.Net.NetworkInformation.Ping())
                     {
-                        _lblDiagNet.Text = pingText;
-                        _lblDiagNet.ForeColor = pingColor;
+                        var reply = ping.Send("1.1.1.1", 1500);
+                        if (reply != null && reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                        {
+                            latencyMs = reply.RoundtripTime;
+                            success = true;
+                        }
                     }
-                    if (_lblExpNetStatus != null)
+                }
+                catch { }
+
+                if (!success)
+                {
+                    try
                     {
-                        _lblExpNetStatus.Text = pingText;
-                        _lblExpNetStatus.ForeColor = pingColor;
+                        using (var ping2 = new System.Net.NetworkInformation.Ping())
+                        {
+                            var reply2 = ping2.Send("8.8.8.8", 1500);
+                            if (reply2 != null && reply2.Status == System.Net.NetworkInformation.IPStatus.Success)
+                            {
+                                latencyMs = reply2.RoundtripTime;
+                                success = true;
+                            }
+                        }
                     }
+                    catch { }
+                }
+
+                string glyph = (cycle % 2 == 0) ? "●" : "○";
+                string pingText;
+                Color pingColor;
+
+                if (success)
+                {
+                    pingText = string.Format("Online ({0} ms) {1}", latencyMs, glyph);
+                    pingColor = (latencyMs < 80)
+                        ? CorSucesso
+                        : ((latencyMs < 180) ? Color.FromArgb(240, 180, 0) : Color.FromArgb(230, 50, 50));
 
                     if (_lastDiag != null)
                     {
                         _lastDiag.HasInternet = true;
-                        _lastDiag.ConnectionStatusText = string.Format("Online ({0} ms)", pingDiag.LatencyMs);
-                        _lastDiag.PingLatencyText = string.Format("{0} ms", pingDiag.LatencyMs);
-                        _lastDiag.ConnectionStatusColor = (pingDiag.LatencyMs < 80)
+                        _lastDiag.ConnectionStatusText = string.Format("Online ({0} ms)", latencyMs);
+                        _lastDiag.PingLatencyText = string.Format("{0} ms", latencyMs);
+                        _lastDiag.ConnectionStatusColor = (latencyMs < 80)
                             ? ConsoleColor.Green
-                            : ((pingDiag.LatencyMs < 180) ? ConsoleColor.Yellow : ConsoleColor.Red);
+                            : ((latencyMs < 180) ? ConsoleColor.Yellow : ConsoleColor.Red);
                     }
                 }
                 else
                 {
-                    bool online = await _service.HasInternetConnectionAsync();
-                    if (IsDisposed || _installing || _installationStarted) return;
-
-                    string statusText = online ? "Online ↻" : "Offline ↻";
-                    Color statusColor = online ? CorSucesso : Color.FromArgb(230, 50, 50);
-
-                    if (_lblDiagNet != null)
-                    {
-                        _lblDiagNet.Text = statusText;
-                        _lblDiagNet.ForeColor = statusColor;
-                    }
-                    if (_lblExpNetStatus != null)
-                    {
-                        _lblExpNetStatus.Text = statusText;
-                        _lblExpNetStatus.ForeColor = statusColor;
-                    }
+                    pingText = string.Format("Offline {0}", glyph);
+                    pingColor = Color.FromArgb(230, 50, 50);
 
                     if (_lastDiag != null)
                     {
-                        _lastDiag.HasInternet = online;
-                        _lastDiag.ConnectionStatusText = online ? "Online" : "Offline";
-                        _lastDiag.ConnectionStatusColor = online ? ConsoleColor.Green : ConsoleColor.Red;
+                        _lastDiag.HasInternet = false;
+                        _lastDiag.ConnectionStatusText = "Offline";
+                        _lastDiag.ConnectionStatusColor = ConsoleColor.Red;
                     }
                 }
-            }
-            catch { }
-            finally
+
+                try
+                {
+                    if (!IsDisposed)
+                    {
+                        BeginInvoke(new Action(delegate
+                        {
+                            try
+                            {
+                                if (!IsDisposed)
+                                {
+                                    if (_lblDiagNet != null)
+                                    {
+                                        _lblDiagNet.Text = pingText;
+                                        _lblDiagNet.ForeColor = pingColor;
+                                        _lblDiagNet.Refresh();
+                                    }
+                                    if (_lblExpNetStatus != null)
+                                    {
+                                        _lblExpNetStatus.Text = pingText;
+                                        _lblExpNetStatus.ForeColor = pingColor;
+                                        _lblExpNetStatus.Refresh();
+                                    }
+                                }
+                            }
+                            catch { }
+                        }));
+                    }
+                }
+                catch { }
+            }).ContinueWith(delegate(Task t)
             {
-                _isPeriodicMetricsRunning = false;
-            }
+                _isPingRunning = false;
+            });
         }
 
         /// <summary>
-        /// Atualiza periodicamente a cada 3 segundos as métricas de uso de memória RAM e espaço em disco
+        /// Atualiza periodicamente a cada 5 segundos as métricas de uso de memória RAM e espaço em disco
         /// na tela inicial e no painel expandido de diagnóstico sem congelar a interface.
         /// </summary>
         private void RefreshDynamicMetricsViews(FullSystemDiagnosticInfo diag)
@@ -3208,7 +3285,7 @@ namespace InstallerGUI.Forms
             if (diag == null || IsDisposed) return;
 
             // 1. Atualiza Mini Bar de Disco C: no card compacto
-            if (_barDiagDisk != null && diag.Drives != null)
+            if (diag.Drives != null && _barDiagDisk != null)
             {
                 var cDrive = diag.Drives.FirstOrDefault(d => d.DriveLetter.Equals("C:", StringComparison.OrdinalIgnoreCase)) ?? diag.Drives.FirstOrDefault();
                 if (cDrive != null)
@@ -3220,7 +3297,7 @@ namespace InstallerGUI.Forms
                         _barDiagDisk.FillColor = Color.FromArgb(240, 180, 0);
                     else
                         _barDiagDisk.FillColor = CorSucesso;
-                    _barDiagDisk.Invalidate();
+                    _barDiagDisk.Refresh();
                 }
             }
 
@@ -3232,37 +3309,45 @@ namespace InstallerGUI.Forms
             if (_barExpRam != null)
             {
                 _barExpRam.Percent = diag.RamUsagePercent;
-                _barExpRam.Invalidate();
+                _barExpRam.Refresh();
             }
 
-            // 3. Atualiza Discos na visão expandida se o painel estiver visível
-            if (_pnlExpandedDiagnostics != null && _pnlExpandedDiagnostics.Visible && _pnlStorageContent != null && diag.Drives != null)
+            // 3. Atualiza Discos na visão expandida
+            if (_pnlStorageContent != null && diag.Drives != null && diag.Drives.Count > 0)
             {
-                int driveIndex = 0;
-                foreach (Control c in _pnlStorageContent.Controls)
+                if (_pnlStorageContent.Controls.Count == 0)
                 {
-                    var panel = c as Panel;
-                    if (panel != null && driveIndex < diag.Drives.Count)
+                    RefreshExpandedDiagnosticsUI(diag);
+                }
+                else
+                {
+                    foreach (var drive in diag.Drives)
                     {
-                        var drive = diag.Drives[driveIndex];
-                        foreach (Control inner in panel.Controls)
+                        foreach (Control c in _pnlStorageContent.Controls)
                         {
-                            var lbl = inner as Label;
-                            if (lbl != null)
+                            var panel = c as Panel;
+                            if (panel != null && (string.Equals(panel.Tag as string, drive.DriveLetter, StringComparison.OrdinalIgnoreCase) || (_pnlStorageContent.Controls.Count == 1 && panel.Tag == null)))
                             {
-                                lbl.Text = string.Format("Disco {0} ({1}): {2}", drive.DriveLetter, drive.MediaType, drive.StatusText);
-                            }
-                            var bar = inner as MiniUsageBar;
-                            if (bar != null)
-                            {
-                                bar.Percent = drive.PercentUsed;
-                                bar.FillColor = (drive.StatusColor == ConsoleColor.Red)
-                                    ? Color.FromArgb(230, 50, 50)
-                                    : ((drive.StatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : CorSucesso);
-                                bar.Invalidate();
+                                foreach (Control inner in panel.Controls)
+                                {
+                                    var lbl = inner as Label;
+                                    if (lbl != null)
+                                    {
+                                        lbl.Text = string.Format("Disco {0} ({1}): {2}", drive.DriveLetter, drive.MediaType, drive.StatusText);
+                                    }
+                                    var bar = inner as MiniUsageBar;
+                                    if (bar != null)
+                                    {
+                                        bar.Percent = drive.PercentUsed;
+                                        bar.FillColor = (drive.StatusColor == ConsoleColor.Red)
+                                            ? Color.FromArgb(230, 50, 50)
+                                            : ((drive.StatusColor == ConsoleColor.Yellow) ? Color.FromArgb(240, 180, 0) : CorSucesso);
+                                        bar.Refresh();
+                                    }
+                                }
+                                break;
                             }
                         }
-                        driveIndex++;
                     }
                 }
             }
@@ -3270,7 +3355,7 @@ namespace InstallerGUI.Forms
 
         private void OnNetworkAvailabilityChanged(object sender, System.Net.NetworkInformation.NetworkAvailabilityEventArgs e)
         {
-            if (_installing || _installationStarted || IsDisposed) return;
+            if (IsDisposed) return;
             try
             {
                 if (InvokeRequired)
@@ -3285,55 +3370,11 @@ namespace InstallerGUI.Forms
             catch { }
         }
 
-        private async void TriggerNetworkAvailabilityCheck()
+        private void TriggerNetworkAvailabilityCheck()
         {
-            if (_installing || _installationStarted || IsDisposed) return;
-            await CheckAndRefreshConnectionStatusAsync(true);
-        }
-
-        private async void ConnectionMonitorTimer_Tick(object sender, EventArgs e)
-        {
-            if (_installing || _installationStarted || IsDisposed) return;
-            await CheckAndRefreshConnectionStatusAsync(false);
-        }
-
-        /// <summary>
-        /// Verifica a conectividade com a internet e atualiza a tela inicial dinamicamente se o status mudou.
-        /// </summary>
-        private async Task CheckAndRefreshConnectionStatusAsync(bool forceCheck)
-        {
-            if (_installing || _installationStarted || _isUpdatingSystemInfo || IsDisposed) return;
-
-            _isUpdatingSystemInfo = true;
-            try
-            {
-                _connectionMonitorTicks++;
-                bool currentInternet = await _service.HasInternetConnectionAsync();
-                string currentIp = GetLocalIpAddress();
-
-                bool statusChanged = (!_lastDetectedInternet.HasValue) ||
-                                     (currentInternet != _lastDetectedInternet.Value) ||
-                                     (currentIp != _lastDetectedIp);
-
-                if (statusChanged || forceCheck)
-                {
-                    _lastDetectedInternet = currentInternet;
-                    _lastDetectedIp = currentIp;
-
-                    var diag = await _service.GetFullSystemDiagnosisAsync();
-                    RefreshDiagnosticViews(diag);
-
-                    if (!_installing && !_installationStarted && !IsDisposed)
-                    {
-                        RenderInitialSystemInfo();
-                    }
-                }
-            }
-            catch { }
-            finally
-            {
-                _isUpdatingSystemInfo = false;
-            }
+            if (IsDisposed) return;
+            SyncMetricsTimer_Tick(null, EventArgs.Empty);
+            TriggerPingNow();
         }
 
         /// <summary>

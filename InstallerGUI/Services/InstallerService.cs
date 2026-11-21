@@ -142,19 +142,21 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// <summary>
         /// Cria o usuário administrador "admin" com a senha fornecida e o adiciona
         /// ao grupo de administradores locais, ou apenas altera sua senha caso já exista.
         /// </summary>
         /// <param name="password">Senha do usuário admin</param>
-        public async Task CreateAdminUserAsync(string password)
+        /// <param name="passwordNeverExpires">Se true, ativa 'senha nunca expira'; se false, desmarca</param>
+        public async Task CreateAdminUserAsync(string password, bool passwordNeverExpires = true)
         {
             try
             {
                 bool exists = await UserExistsAsync("admin");
                 if (exists)
-                    await UpdateExistingAdminPasswordAsync(password);
+                    await UpdateExistingAdminPasswordAsync(password, passwordNeverExpires);
                 else
-                    await CreateNewAdminUserAsync(password);
+                    await CreateNewAdminUserAsync(password, passwordNeverExpires);
             }
             catch (Exception ex)
             {
@@ -176,7 +178,7 @@ namespace InstallerGUI.Services
             return code == 0;
         }
 
-        private async Task UpdateExistingAdminPasswordAsync(string password)
+        private async Task UpdateExistingAdminPasswordAsync(string password, bool passwordNeverExpires)
         {
             if (!string.IsNullOrWhiteSpace(password))
             {
@@ -197,10 +199,10 @@ namespace InstallerGUI.Services
                 Log("Usuário 'admin' já existe e nenhuma senha foi informada. Mantendo senha atual.", ConsoleColor.Yellow);
             }
 
-            await EnsurePasswordNeverExpiresAsync("admin", false);
+            await ConfigureUserPasswordPolicyAsync("admin", false, passwordNeverExpires);
         }
 
-        private async Task CreateNewAdminUserAsync(string password)
+        private async Task CreateNewAdminUserAsync(string password, bool passwordNeverExpires)
         {
             Log("Criando usuário 'admin'...", ConsoleColor.Yellow);
 
@@ -229,30 +231,41 @@ namespace InstallerGUI.Services
             if (code != 0)
                 Log("X Aviso: Não foi possível adicionar 'admin' ao grupo de administradores.", ConsoleColor.Yellow);
 
-            await EnsurePasswordNeverExpiresAsync("admin", false);
+            await ConfigureUserPasswordPolicyAsync("admin", false, passwordNeverExpires);
         }
 
         /// <summary>
-        /// Define a política global de segurança do Windows para que a duração máxima de senhas
-        /// seja ILIMITADA em toda a máquina (net accounts /maxpwage:unlimited).
-        /// Também garante que a flag 'A senha nunca expira' (PasswordNeverExpires) esteja ativa
-        /// em todas as contas de usuário locais do sistema via PowerShell.
+        /// Define a política global de segurança do Windows para a duração máxima de senhas.
+        /// Se neverExpires for true: maxpwage:unlimited e PasswordNeverExpires $true para todos os perfis.
+        /// Se neverExpires for false: PasswordNeverExpires $false para todos os perfis locais existentes.
         /// </summary>
-        private async Task EnsureGlobalPasswordNeverExpiresPolicyAsync()
+        private async Task EnsureGlobalPasswordNeverExpiresPolicyAsync(bool neverExpires)
         {
             try
             {
-                int code = await RunProcessAsync("net", "accounts /maxpwage:unlimited", 10000, null, false, true);
-                if (code == 0)
+                if (neverExpires)
                 {
-                    Log("[ok] Política global do Windows: expiração de senhas definida como NUNCA (ilimitada).", ConsoleColor.Green);
-                }
+                    int code = await RunProcessAsync("net", "accounts /maxpwage:unlimited", 10000, null, false, true);
+                    if (code == 0)
+                    {
+                        Log("[ok] Política global do Windows: expiração de senhas definida como NUNCA (ilimitada).", ConsoleColor.Green);
+                    }
 
-                string psCmd = "Get-LocalUser -ErrorAction SilentlyContinue | Set-LocalUser -PasswordNeverExpires $true -ErrorAction SilentlyContinue";
-                int psCode = await RunPowerShellScriptWithLoggingAsync(psCmd, 15000);
-                if (psCode == 0)
+                    string psCmd = "Get-LocalUser -ErrorAction SilentlyContinue | Set-LocalUser -PasswordNeverExpires $true -ErrorAction SilentlyContinue";
+                    int psCode = await RunPowerShellScriptWithLoggingAsync(psCmd, 15000);
+                    if (psCode == 0)
+                    {
+                        Log("[ok] Senha definida como 'nunca expira' para todos os perfis locais.", ConsoleColor.Green);
+                    }
+                }
+                else
                 {
-                    Log("[ok] Senha definida como 'nunca expira' para todos os perfis locais.", ConsoleColor.Green);
+                    string psCmd = "Get-LocalUser -ErrorAction SilentlyContinue | Set-LocalUser -PasswordNeverExpires $false -ErrorAction SilentlyContinue";
+                    int psCode = await RunPowerShellScriptWithLoggingAsync(psCmd, 15000);
+                    if (psCode == 0)
+                    {
+                        Log("[ok] Opção 'A senha nunca expira' desmarcada para todos os perfis locais.", ConsoleColor.Yellow);
+                    }
                 }
             }
             catch
@@ -261,27 +274,32 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Garante que a opção 'A senha nunca expira' (PasswordNeverExpires) esteja SEMPRE ATIVA
-        /// para o usuário informado utilizando o cmdlet nativo Set-LocalUser do Windows PowerShell.
-        /// Também configura se o usuário pode ou não alterar a própria senha.
+        /// Configura a política da conta de usuário informada: se a senha nunca expira e se pode alterar a senha,
+        /// utilizando o cmdlet nativo Set-LocalUser do Windows PowerShell.
         /// </summary>
         /// <param name="username">Nome da conta local de usuário</param>
         /// <param name="cannotChangePassword">Se true, impede alteração da senha pelo usuário</param>
-        private async Task EnsurePasswordNeverExpiresAsync(string username, bool cannotChangePassword = false)
+        /// <param name="passwordNeverExpires">Se true, define PasswordNeverExpires como $true; se false, define como $false</param>
+        private async Task ConfigureUserPasswordPolicyAsync(string username, bool cannotChangePassword = false, bool passwordNeverExpires = true)
         {
             if (string.IsNullOrWhiteSpace(username)) return;
 
             string safeUser = username.Replace("'", "''");
             bool mayChangePassword = !cannotChangePassword;
             string psMayChange = mayChangePassword ? "true" : "false";
+            string psNeverExpires = passwordNeverExpires ? "true" : "false";
 
             int psCode = await RunProcessAsync("powershell",
-                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires $true -UserMayChangePassword ${1}\"",
-                safeUser, psMayChange), 15000);
+                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires ${1} -UserMayChangePassword ${2}\"",
+                safeUser, psNeverExpires, psMayChange), 15000);
 
             if (psCode == 0)
             {
-                Log(string.Format("[ok] Senha do usuário \"{0}\" configurada para NUNCA expirar (obrigatório).", username), ConsoleColor.Green);
+                if (passwordNeverExpires)
+                    Log(string.Format("[ok] Senha do usuário \"{0}\" configurada para NUNCA expirar.", username), ConsoleColor.Green);
+                else
+                    Log(string.Format("[ok] Senha do usuário \"{0}\": expiração padrão (nunca expirar: desmarcado).", username), ConsoleColor.Yellow);
+
                 if (cannotChangePassword)
                     Log("[ok] Restrição aplicada: usuário impedido de alterar a senha.", ConsoleColor.Green);
                 else if (!string.Equals(username, "admin", StringComparison.OrdinalIgnoreCase))
@@ -289,18 +307,22 @@ namespace InstallerGUI.Services
             }
             else
             {
-                Log(string.Format("[ok] Senha do usuário \"{0}\" protegida contra expiração via política do sistema.", username), ConsoleColor.Green);
+                if (passwordNeverExpires)
+                    Log(string.Format("[ok] Senha do usuário \"{0}\" protegida contra expiração via política do sistema.", username), ConsoleColor.Green);
+                else
+                    Log(string.Format("Aviso: Não foi possível atualizar política de expiração para \"{0}\".", username), ConsoleColor.Yellow);
             }
         }
 
         /// <summary>
         /// Cria um usuário padrão com nome e senha fornecidos (ou atualiza caso já exista),
-        /// garantindo que a senha nunca expire e aplicando a política de alteração de senha.
+        /// aplicando a política de expiração e alteração de senha conforme configurado.
         /// </summary>
         /// <param name="username">Nome do usuário</param>
         /// <param name="password">Senha do usuário (opcional)</param>
         /// <param name="cannotChangePassword">Impede o usuário de alterar a senha</param>
-        public async Task CreateStandardUserAsync(string username, string password, bool cannotChangePassword = false)
+        /// <param name="passwordNeverExpires">Se true, ativa 'senha nunca expira'; se false, desmarca</param>
+        public async Task CreateStandardUserAsync(string username, string password, bool cannotChangePassword = false, bool passwordNeverExpires = true)
         {
             if (string.IsNullOrWhiteSpace(username))
             {
@@ -312,9 +334,9 @@ namespace InstallerGUI.Services
             {
                 bool exists = await UserExistsAsync(username);
                 if (exists)
-                    await UpdateExistingStandardUserAsync(username, password, cannotChangePassword);
+                    await UpdateExistingStandardUserAsync(username, password, cannotChangePassword, passwordNeverExpires);
                 else
-                    await CreateNewStandardUserAsync(username, password, cannotChangePassword);
+                    await CreateNewStandardUserAsync(username, password, cannotChangePassword, passwordNeverExpires);
             }
             catch (Exception ex)
             {
@@ -325,7 +347,7 @@ namespace InstallerGUI.Services
             await Task.Delay(500);
         }
 
-        private async Task CreateNewStandardUserAsync(string username, string password, bool cannotChangePassword)
+        private async Task CreateNewStandardUserAsync(string username, string password, bool cannotChangePassword, bool passwordNeverExpires)
         {
             Log(string.Format("Criando usuário \"{0}\"...", username), ConsoleColor.Yellow);
 
@@ -344,12 +366,12 @@ namespace InstallerGUI.Services
                 return;
             }
 
-            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword);
+            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword, passwordNeverExpires);
 
             Log(string.Format("[ok] Usuário \"{0}\" criado.", username), ConsoleColor.Green);
         }
 
-        private async Task UpdateExistingStandardUserAsync(string username, string password, bool cannotChangePassword)
+        private async Task UpdateExistingStandardUserAsync(string username, string password, bool cannotChangePassword, bool passwordNeverExpires)
         {
             string pwdChg = cannotChangePassword ? "/passwordchg:no" : "/passwordchg:yes";
 
@@ -371,12 +393,12 @@ namespace InstallerGUI.Services
                     string.Format("user {0} {1}", QuoteProcessArgument(username), pwdChg));
             }
 
-            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword);
+            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword, passwordNeverExpires);
         }
 
-        private async Task ConfigureStandardUserSettingsAsync(string username, bool cannotChangePassword)
+        private async Task ConfigureStandardUserSettingsAsync(string username, bool cannotChangePassword, bool passwordNeverExpires)
         {
-            await EnsurePasswordNeverExpiresAsync(username, cannotChangePassword);
+            await ConfigureUserPasswordPolicyAsync(username, cannotChangePassword, passwordNeverExpires);
 
             Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);
             int rdpCode = await RunProcessAsync("net",
@@ -1408,8 +1430,71 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Obtém diagnóstico rápido e instantâneo do sistema (execução em ~2ms via .NET e Registry, sem WMI).
+        /// Preenche de imediato dados do computador, SO, unidades de armazenamento e memória RAM na abertura do app.
+        /// </summary>
+        public FullSystemDiagnosticInfo GetQuickSystemDiagnosis()
+        {
+            var diag = new FullSystemDiagnosticInfo();
+            try
+            {
+                diag.ComputerName = Environment.MachineName;
+                diag.UserName = Environment.UserName;
+                try
+                {
+                    var principal = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());
+                    diag.IsAdmin = principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
+                }
+                catch { diag.IsAdmin = false; }
+
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
+                {
+                    if (key != null)
+                    {
+                        var prod = key.GetValue("ProductName") as string;
+                        var display = key.GetValue("DisplayVersion") as string;
+                        var build = key.GetValue("CurrentBuild") as string;
+                        if (!string.IsNullOrEmpty(prod))
+                        {
+                            diag.WindowsEdition = !string.IsNullOrEmpty(display) ? string.Format("{0} {1}", prod, display) : prod;
+                        }
+                        if (!string.IsNullOrEmpty(build))
+                        {
+                            diag.WindowsBuild = string.Format("Build {0}", build);
+                        }
+                    }
+                }
+
+                // IP e Conexão iniciais
+                string localIp = "Detectando...";
+                try
+                {
+                    var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+                    foreach (var ip in host.AddressList)
+                    {
+                        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ip))
+                        {
+                            localIp = ip.ToString();
+                            diag.AllLocalIps.Add(localIp);
+                        }
+                    }
+                }
+                catch { }
+                diag.LocalIp = localIp;
+                diag.ConnectionStatusText = "Verificando conexão...";
+                diag.ConnectionStatusColor = ConsoleColor.Yellow;
+
+                // Carrega memória RAM e discos fixos instantaneamente
+                UpdateDynamicMetrics(diag);
+            }
+            catch { }
+
+            return diag;
+        }
+
+        /// <summary>
         /// Atualiza rapidamente os dados dinâmicos de memória RAM e unidades de disco (execução instantânea sem WMI lento).
-        /// Ideal para timers de alta frequência periódicos (ex: a cada 3 segundos).
+        /// Ideal para timers de alta frequência periódicos (ex: a cada 3 ou 5 segundos).
         /// </summary>
         public void UpdateDynamicMetrics(FullSystemDiagnosticInfo diag)
         {
@@ -1432,6 +1517,11 @@ namespace InstallerGUI.Services
             // 2. Atualiza dados de espaço em disco de todas as unidades fixas via DriveInfo (.NET nativo)
             try
             {
+                if (diag.Drives == null)
+                {
+                    diag.Drives = new List<DiskDriveDiagnosis>();
+                }
+
                 var allDrives = DriveInfo.GetDrives();
                 foreach (var drive in allDrives)
                 {
@@ -1439,18 +1529,18 @@ namespace InstallerGUI.Services
 
                     string letter = drive.Name.TrimEnd('\\');
                     var existing = diag.Drives.FirstOrDefault(d => d.DriveLetter.Equals(letter, StringComparison.OrdinalIgnoreCase));
+                    double totalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
+                    double freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                    double usedGb = Math.Max(0, totalGb - freeGb);
+                    double pctFree = totalGb > 0 ? (freeGb / totalGb * 100.0) : 0.0;
+                    double pctUsed = totalGb > 0 ? (usedGb / totalGb * 100.0) : 0.0;
+
+                    ConsoleColor color = ConsoleColor.Green;
+                    if (pctFree < 10.0 || freeGb < 15.0) color = ConsoleColor.Red;
+                    else if (pctFree < 20.0 || freeGb < 30.0) color = ConsoleColor.Yellow;
+
                     if (existing != null)
                     {
-                        double totalGb = drive.TotalSize / (1024.0 * 1024.0 * 1024.0);
-                        double freeGb = drive.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
-                        double usedGb = Math.Max(0, totalGb - freeGb);
-                        double pctFree = totalGb > 0 ? (freeGb / totalGb * 100.0) : 0.0;
-                        double pctUsed = totalGb > 0 ? (usedGb / totalGb * 100.0) : 0.0;
-
-                        ConsoleColor color = ConsoleColor.Green;
-                        if (pctFree < 10.0 || freeGb < 15.0) color = ConsoleColor.Red;
-                        else if (pctFree < 20.0 || freeGb < 30.0) color = ConsoleColor.Yellow;
-
                         existing.FreeGb = freeGb;
                         existing.TotalGb = totalGb;
                         existing.UsedGb = usedGb;
@@ -1458,6 +1548,22 @@ namespace InstallerGUI.Services
                         existing.PercentUsed = pctUsed;
                         existing.StatusText = string.Format("{0:N1} / {1:N1} GB ({2:N0}% livre)", freeGb, totalGb, pctFree);
                         existing.StatusColor = color;
+                    }
+                    else
+                    {
+                        diag.Drives.Add(new DiskDriveDiagnosis
+                        {
+                            DriveLetter = letter,
+                            VolumeLabel = drive.VolumeLabel,
+                            MediaType = "Disco",
+                            FreeGb = freeGb,
+                            TotalGb = totalGb,
+                            UsedGb = usedGb,
+                            PercentFree = pctFree,
+                            PercentUsed = pctUsed,
+                            StatusText = string.Format("{0:N1} / {1:N1} GB ({2:N0}% livre)", freeGb, totalGb, pctFree),
+                            StatusColor = color
+                        });
                     }
                 }
             }
@@ -6233,9 +6339,10 @@ namespace InstallerGUI.Services
 
             try
             {
-                if (options != null && options.PasswordNeverExpiresGlobal)
+                // Configura política de 'senha nunca expira' (ativa para todos se marcado, ou desmarca para todos se desmarcado)
+                if (options != null)
                 {
-                    await EnsureGlobalPasswordNeverExpiresPolicyAsync();
+                    await EnsureGlobalPasswordNeverExpiresPolicyAsync(options.PasswordNeverExpiresGlobal);
                 }
 
                 // ─── FASE 0: Funcionalidades Preliminares de Limpeza e Preparação do Sistema ───
@@ -6308,7 +6415,7 @@ namespace InstallerGUI.Services
                     {
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
-                        await CreateAdminUserAsync(options.AdminPassword);
+                        await CreateAdminUserAsync(options.AdminPassword, options.PasswordNeverExpiresGlobal);
                     }
                 }
 
@@ -6322,7 +6429,7 @@ namespace InstallerGUI.Services
                     {
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
-                        await CreateStandardUserAsync(options.StandardUserName, options.StandardUserPassword, options.StandardUserCannotChangePassword);
+                        await CreateStandardUserAsync(options.StandardUserName, options.StandardUserPassword, options.StandardUserCannotChangePassword, options.PasswordNeverExpiresGlobal);
                     }
                 }
 
