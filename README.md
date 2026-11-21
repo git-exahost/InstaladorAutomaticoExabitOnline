@@ -10,6 +10,8 @@
 - [Estrutura de Pastas](#estrutura-de-pastas)
 - [Como Usar](#como-usar)
 - [Como Compilar](#como-compilar)
+- [Assinatura Digital](#assinatura-digital)
+- [Verificação SHA-256](#verificação-sha-256)
 - [Adicionar ou Remover Programas](#adicionar-ou-remover-programas)
 - [Arquitetura do Código](#arquitetura-do-código)
 - [Guia de Modificação](#guia-de-modificação)
@@ -22,15 +24,29 @@
 Este programa foi criado para automatizar a instalação de programas e a
 configuração inicial de computadores com Windows. Ele é útil para quem
 precisa preparar vários notebooks/máquinas com o mesmo conjunto de
-aplicativos.
+aplicativos, sem precisar baixar instaladores manualmente.
+
+A instalação é **100% online**: o próprio instalador baixa cada programa
+direto do site oficial do fabricante (ou de repositórios internos da
+EXABIT), executa em modo silencioso e guarda o cache em
+`C:\ProgramData\EXABIT\Downloads`.
 
 ### Funcionalidades
 
 - **Renomear o computador** com um nome personalizado
-- **Criar usuários** (admin e/ou padrão) automaticamente
-- **Aplicar papel de parede** personalizado da empresa
-- **Instalação 100% online de programas** em modo silencioso (sem necessidade de arquivos pré-baixados em pasta local)
-- **Limpar atalhos** do Desktop público ao final
+- **Criar usuários** (admin e/ou padrão) com políticas de senha
+  (senha nunca expira / usuário não pode alterar a senha)
+- **Aplicar papéis de parede** corporativos (EXABIT e Nortel) em todos os
+  temas do Windows, com opção de impedir alteração
+- **Instalação online e silenciosa** de dezenas de programas, com
+  progresso de download e log em tempo real
+- **Diagnóstico do sistema** em tempo real: CPU, RAM, discos, rede, ping,
+  antivírus, BitLocker, reinicialização pendente e fonte/bateria
+- **Log de sessão em arquivo** em `C:\ProgramData\EXABIT\Logs` (para suporte)
+- **Verificação opcional de SHA-256** dos instaladores baixados
+- **Limpeza do sistema**: desinstalar jogos, remover antivírus de
+  terceiros, apagar perfis antigos e limpar atalhos do Desktop público
+- **Atalhos corporativos** (Suporte EXABIT, Exahost, Webmail Nortel, etc.)
 - **Reiniciar** o computador ao concluir (opcional)
 
 ---
@@ -38,41 +54,53 @@ aplicativos.
 ## Estrutura de Pastas
 
 ```
-Auto Install/
-├── InstallerGUI/                  <<< CÓDIGO FONTE (C# WinForms)
+Instalador Automatico Exabit Online/
+├── InstallerGUI/                        <<< CÓDIGO FONTE (C# WinForms)
 │   ├── Forms/
-│   │   └── MainForm.cs            # Janela principal da interface
+│   │   └── MainForm.cs                  # Janela principal e interface
 │   ├── Models/
-│   │   └── ProgramInfo.cs         # Modelo de dados de cada programa
+│   │   └── ProgramInfo.cs               # Modelo de dados de cada programa
 │   ├── Services/
-│   │   └── InstallerService.cs    # Lógica de instalação (coração)
+│   │   └── InstallerService.cs          # Lógica de instalação e diagnóstico
 │   ├── Properties/
-│   │   └── AssemblyInfo.cs        # Metadados da versão
-│   ├── install.ico                # Ícone do executável
-│   ├── Program.cs                 # Ponto de entrada
-│   ├── InstallerGUI.csproj        # Projeto MSBuild
-│   └── build.bat                  # Script para compilar
+│   │   └── AssemblyInfo.cs              # Metadados da versão
+│   ├── Image/
+│   │   └── logo_exabit.png              # Logo embutido no executável
+│   ├── Sound/
+│   │   └── R2D2.mp3                     # Som de conclusão
+│   ├── Scripts/
+│   │   └── apply_wallpapers.ps1         # Script de papéis de parede
+│   ├── app.config                       # Configuração de DPI
+│   ├── app.manifest                     # Requer Administrador
+│   ├── sign.ps1                         # Assinatura Authenticode (opcional)
+│   ├── InstallerGUI.csproj              # Projeto MSBuild
+│   ├── build.bat                        # Script oficial de compilação
+│   ├── Program.cs                       # Ponto de entrada
+│   └── install.ico                      # Ícone do executável
 │
-├── dist/                          <<< ARQUIVOS DE DISTRIBUIÇÃO
-│   ├── install.exe                # Executável compilado
-│   ├── Programas/                 # Instaladores (Adobe, Chrome, etc.)
-│   ├── Scripts/                   # Scripts auxiliares (wallpaper, etc.)
-│   └── build_info.txt             # Data da última compilação
+├── dist/                                <<< ARQUIVOS DE DISTRIBUIÇÃO
+│   ├── Instalador Automatico Exabit.exe # Executável compilado
+│   ├── Instalador Automatico Exabit.exe.config
+│   ├── Wallpapers/                      # Papéis de parede por cliente
+│   └── build_info.txt                   # Data da última compilação
 │
-├── src/                           # (projeto antigo - removido)
-├── archive/                       # Scripts batch antigos (referência)
-└── README.md                      # Este arquivo
+├── archive/                             # Scripts batch antigos (referência)
+├── README.md                            # Este arquivo
+├── CHANGELOG.md                         # Registro de versões
+└── AGENTS.md                            # Diretrizes para agentes de IA
 ```
 
 ### O que cada arquivo faz
 
 | Arquivo | Função |
 |---------|--------|
-| `Program.cs` | Ponto de entrada. Inicia o Windows Forms. |
-| `Forms/MainForm.cs` | Interface gráfica (checkboxes, botões, log). |
-| `Models/ProgramInfo.cs` | Define o que é um "programa" (nome, caminho, args). |
-| `Services/InstallerService.cs` | Executa cada etapa da instalação (renomear, criar usuário, instalar). |
-| `build.bat` | Compila o projeto usando o compilador do próprio Windows. |
+| `Program.cs` | Ponto de entrada. Verifica privilégios e eleva para Administrador. |
+| `Forms/MainForm.cs` | Interface gráfica (abas, checkboxes, cards, log). |
+| `Models/ProgramInfo.cs` | Define o que é um "programa" (nome, arquivo, argumentos, flags). |
+| `Services/InstallerService.cs` | Executa cada etapa (contas, wallpaper, downloads, instalação, limpeza). |
+| `Scripts/apply_wallpapers.ps1` | Aplica os wallpapers em todos os temas e perfis. |
+| `sign.ps1` | Assina o executável com um certificado corporativo real. |
+| `build.bat` | Compila o projeto usando o `csc.exe` do próprio Windows. |
 
 ---
 
@@ -80,29 +108,33 @@ Auto Install/
 
 ### Pré-requisitos
 
-- Windows 7 ou superior (64 bits recomendado)
+- Windows 10/11 (64 bits recomendado)
 - .NET Framework 4.8 (já vem instalado no Windows 10/11)
-- Executar **como Administrador** (necessário para criar usuários, renomear PC)
+- **Conexão com a internet** (a instalação dos programas é online)
+- Executar **como Administrador** (o executável já solicita elevação)
 
 ### Execução
 
 1. Copie a pasta `dist/` inteira para um pendrive
-2. No computador alvo, execute `dist\install.exe` como Administrador
-3. Na tela que abrir:
-   - Marque as opções desejadas (nome do PC, criar usuários, wallpaper)
-   - Selecione os programas que quer instalar
-   - Clique em **INICIAR INSTALAÇÃO**
-4. Acompanhe o progresso pelo log na tela
-5. Ao final, escolha se deseja reiniciar o computador
+2. No computador alvo, execute `dist\Instalador Automatico Exabit.exe`
+3. Na tela que abrir, percorra as abas:
+   - **Configurações**: nome do computador, senha do admin, usuário padrão
+   - **Atalhos**: atalhos corporativos a criar no Desktop
+   - **Opções**: localização, política de senha, wallpapers
+   - **Funcionalidades**: limpeza de jogos/antivírus/perfis e lista de programas
+4. Selecione os programas desejados
+5. Clique em **INICIAR INSTALAÇÃO**
+6. Acompanhe o progresso e o log na tela
+7. Ao final, escolha se deseja reiniciar o computador
 
-> NOTA: A instalação é silenciosa (automática). Os programas serão instalados
-> sem abrir janelas de confirmação.
+> NOTA: A instalação é silenciosa (automática). Os programas são baixados
+> e instalados sem abrir janelas de confirmação.
 
 ---
 
 ## Como Compilar
 
-### Método 1: Via build.bat (recomendado)
+### Método oficial: `build.bat`
 
 Dê um duplo-clique em `InstallerGUI\build.bat` ou execute no terminal:
 
@@ -112,22 +144,42 @@ build.bat
 ```
 
 O script vai:
-1. Localizar o compilador C# do .NET Framework
-2. Compilar todos os arquivos .cs
-3. Gerar `dist\install.exe`
 
-### Método 2: Via linha de comando manual
+1. Localizar o compilador C# do .NET Framework (`csc.exe`)
+2. Compilar todos os arquivos `.cs`
+3. Embutir logo, som e o script de wallpaper como recursos
+4. Gerar `dist\Instalador Automatico Exabit.exe`
+5. Copiar o `app.config` para `dist\`
+6. Executar `sign.ps1` (assinatura opcional — veja abaixo)
+
+> O `build.bat` continua sendo o **método oficial** de build (não exige
+> Visual Studio). O `InstallerGUI.csproj` está alinhado a ele e pode ser
+> usado para editar/compilar no Visual Studio, gerando o mesmo executável
+> em `bin\Release\`.
+
+### Compilação manual
 
 ```cmd
 cd InstallerGUI
 
 "%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" ^
     /target:winexe ^
-    /out:bin\Release\install.exe ^
+    /out:"..\dist\Instalador Automatico Exabit.exe" ^
+    /win32manifest:app.manifest ^
+    /platform:anycpu ^
+    /highentropyva+ ^
     /reference:System.dll ^
     /reference:System.Core.dll ^
     /reference:System.Drawing.dll ^
     /reference:System.Windows.Forms.dll ^
+    /reference:Microsoft.CSharp.dll ^
+    /reference:System.ServiceProcess.dll ^
+    /reference:System.Management.dll ^
+    /reference:System.IO.Compression.dll ^
+    /reference:System.IO.Compression.FileSystem.dll ^
+    /resource:Image\logo_exabit.png,InstallerGUI.logo_exabit.png ^
+    /resource:Sound\R2D2.mp3,InstallerGUI.R2D2.mp3 ^
+    /resource:Scripts\apply_wallpapers.ps1,InstallerGUI.apply_wallpapers.ps1 ^
     /win32icon:install.ico ^
     /optimize+ ^
     /nologo ^
@@ -140,41 +192,112 @@ cd InstallerGUI
 
 ---
 
+## Assinatura Digital
+
+O executável pode ser assinado com **Authenticode** para reduzir avisos do
+SmartScreen/antivírus. A assinatura usa **somente um certificado
+corporativo real (OV/EV)**:
+
+- Via arquivo PFX:
+
+```cmd
+set EXABIT_SIGN_PFX=C:\certs\exabit-codesign.pfx
+set EXABIT_SIGN_PFX_PASSWORD=senha-do-pfx
+build.bat
+```
+
+- Ou com um certificado já instalado no repositório
+  `Cert:\CurrentUser\My` / `Cert:\LocalMachine\My` que tenha chave privada
+  e seja emitido por uma CA (`Subject` diferente de `Issuer`).
+
+Se nenhum certificado real estiver configurado, o `sign.ps1` apenas avisa
+e a compilação continua normalmente (sem assinatura).
+
+> **Importante:** o projeto não cria mais certificados autoassinados nem
+> instala certificados em "Autoridades Raiz Confiáveis". Isso evita que
+> qualquer binário forjado com o mesmo nome seja aceito como confiável.
+> Para uma CA interna, distribua o certificado da CA aos clientes via GPO.
+
+---
+
+## Verificação SHA-256
+
+Cada `ProgramInfo` possui o campo opcional `Sha256`. Quando preenchido, o
+instalador baixado (ou reaproveitado do cache) é validado antes de ser
+executado:
+
+- hash correto → a instalação prossegue e o log registra
+  `[ok] Hash SHA-256 de <programa> validado.`
+- hash divergente → o arquivo é apagado do cache e a instalação do
+  programa é abortada com mensagem `X`.
+
+```csharp
+new ProgramInfo("meuprograma", "Meu Programa", "setup.exe", "/S", "", "Geral")
+    { Sha256 = "0123...abcdef" },
+```
+
+> Deixe `Sha256` vazio para programas cujo download usa URL "latest"
+> (Chrome, Firefox, VSCode, AnyDesk etc.), pois o conteúdo muda a cada
+> release. Prefira preencher o hash quando a URL é versionada e o
+> fabricante publica o checksum oficial.
+
+---
+
 ## Adicionar ou Remover Programas
+
+O catálogo de programas fica em `GetDefaultProgramList()` no
+`Forms/MainForm.cs`, e a lógica de download/instalação fica no
+`Services/InstallerService.cs`.
 
 ### Adicionar um novo programa
 
-1. **Copie o instalador** para a pasta `dist\Programas\`
-2. **Abra o arquivo** `InstallerGUI\Forms\MainForm.cs`
-3. **Localize o método** `GetDefaultProgramList()` (linha ~340)
-4. **Adicione um novo item** no formato:
+1. **Cadastre o programa** em `GetDefaultProgramList()` (`MainForm.cs`):
 
 ```csharp
 new ProgramInfo(
-    "identificador",     // ID único (ex: "vlc", "teamviewer")
-    "Nome do Programa",  // Nome exibido na interface
-    "instalador.exe",    // Nome do arquivo na pasta Programas
-    "/S"                 // Argumentos para instalação silenciosa
-)
+    "meuprograma",              // ID único (usado na lógica)
+    "Meu Programa",             // Nome exibido na interface
+    "meuprograma_setup.exe",    // Nome do arquivo no cache
+    "/S",                       // Argumentos de instalação silenciosa
+    "",                         // Subpasta opcional
+    "Geral")                    // Categoria
+    { RequiresInternet = true, DefaultChecked = false },
 ```
 
-> **Dica**: Para descobrir os argumentos de instalação silenciosa de um
-> programa, pesquise por `"nome_do_programa" silent install` no Google.
+2. **Implemente o download** no `InstallerService`:
+   - Adicione um branch em `EnsureProgramDownloadedAsync()` **ou**
+   - Crie um método `ResolveMeuProgramaInstallerAsync(ProgramInfo)` que
+     chame `DownloadFileOnlineAsync(url, arquivo, nome, tamanhoMinimo)`.
+   - Use sempre `https://` e a URL oficial do fabricante.
 
-5. **Recompile** o projeto (rode `build.bat`)
+3. **Ajuste a instalação** em `InstallProgramAsync()` se o programa
+   precisar de tratamento especial (MSI, MSIX, `winget`, `UseShellExecute`,
+   fechar processos antes, etc.). Para instaladores comuns, o fluxo padrão
+   já usa `Arguments`.
+
+4. **Opcional — pular se já instalado**: crie um `IsMeuProgramaInstalled()`
+   e retorne `true` no início do branch correspondente.
+
+5. **Recompile** com `build.bat`.
 
 ### Remover um programa
 
-1. No mesmo método `GetDefaultProgramList()`, remova ou comente a linha
-2. Recompile
-3. Opcional: remova o instalador da pasta `dist\Programas\`
+1. Remova o item em `GetDefaultProgramList()`.
+2. Opcional: remova o branch em `EnsureProgramDownloadedAsync()` e o
+   tratamento em `InstallProgramAsync()`.
+3. Recompile.
 
-### Exemplo completo
+### Flags disponíveis em `ProgramInfo`
 
-```csharp
-// Antes de adicionar, pesquise os argumentos silent do instalador
-new ProgramInfo("teamviewer", "TeamViewer", "TeamViewer_Setup.exe", "/S"),
-```
+| Propriedade | Efeito |
+|-------------|---------|
+| `RequiresInternet` | Indica que o programa precisa de download online |
+| `DefaultChecked` | Se aparece marcado por padrão |
+| `TimeoutMs` | Tempo máximo de espera (0 = padrão global) |
+| `FireAndForget` | Inicia o instalador sem aguardar o término |
+| `UseShellExecute` | Usa ShellExecute (necessário em alguns instaladores) |
+| `ProcessWorkingDir` | Diretório de trabalho do processo |
+| `Category` | Agrupa o programa na interface |
 
 ---
 
@@ -186,17 +309,17 @@ new ProgramInfo("teamviewer", "TeamViewer", "TeamViewer_Setup.exe", "/S"),
 ┌────────────────────────────────────────────────┐
 │  Forms/MainForm.cs          (CAMADA DE VISÃO)   │
 │  - Interface gráfica                            │
-│  - Checkboxes, botões, log                      │
+│  - Abas, checkboxes, botões, log                │
 │  - Só se comunica com o InstallerService        │
 ├────────────────────────────────────────────────┤
 │  Services/InstallerService.cs (CAMADA DE LÓGICA)│
 │  - Executa processos (netsh, powershell, etc.)  │
+│  - Downloads online e diagnóstico do sistema    │
 │  - Dispara eventos de progresso e log           │
-│  - Não sabe nada sobre a interface              │
+│  - Não referencia System.Windows.Forms          │
 ├────────────────────────────────────────────────┤
 │  Models/ProgramInfo.cs       (CAMADA DE DADOS)  │
-│  - Apenas dados (nome, caminho, argumentos)     │
-│  - Sem lógica                                   │
+│  - Apenas dados (nome, arquivo, argumentos)     │
 └────────────────────────────────────────────────┘
 ```
 
@@ -207,22 +330,22 @@ Usuário clica "INICIAR INSTALAÇÃO"
         │
         ▼
 MainForm.BtnInstall_Click()
-    ├── Cria InstallationOptions com as escolhas do usuário
-    ├── Chama InstallerService.RunFullInstallationAsync()
+    ├── Monta InstallationOptions com as escolhas do usuário
+    ├── Chama InstallerService.RunFullInstallationAsync(options)
     │       │
-    │       ▼ (sequencial)
-    │   Renomear Computador  ──── RunProcessAsync("powershell", ...)
-    │   Criar Admin          ──── RunProcessAsync("net", ...)
-    │   Criar Usuário Padrão ──── RunProcessAsync("net", ...)
-    │   Aplicar Wallpaper    ──── RunProcessAsync("wallpaper.cmd", ...)
-    │   Instalar Programa 1  ──── RunProcessAsync("chrome.exe", "/silent")
-    │   Instalar Programa 2  ──── RunProcessAsync("firefox.msi", "/qn")
-    │   ...                  ──── RunProcessAsync(...)
-    │   Limpar Desktop
+    │       ▼
+    │   Fase 0: Limpeza (jogos, antivírus, perfis antigos)
+    │   Fase 1: Renomear computador
+    │   Fase 2: Criar admin e usuário padrão
+    │   Fase 3: Aplicar wallpapers
+    │   Fase 4: Baixar e instalar cada programa selecionado
+    │   Fase 5: Atalhos corporativos e limpeza do Desktop
     │       │
     │       ▼ (eventos)
-    │   OnProgress → MainForm.UpdateProgress()  (atualiza barra)
-    │   OnLog      → MainForm.AppendLog()       (escreve no log)
+    │   OnProgress          → barra de progresso
+    │   OnDownloadProgress  → barra de download
+    │   OnLog               → console de log
+    │   OnInstallationCompleted → tela de conclusão
     │
     ▼
 Pergunta se deseja reiniciar
@@ -230,93 +353,99 @@ Pergunta se deseja reiniciar
 
 ### Eventos
 
-O serviço se comunica com a interface através de eventos:
+O serviço se comunica com a interface exclusivamente por eventos:
 
 ```csharp
-// No InstallerService:
-public event Action<string, ConsoleColor> OnLog;
+public event Action<string, ConsoleColor?> OnLog;
 public event Action<int, int> OnProgress;
-
-// No MainForm (conexão no construtor):
-_service.OnLog += AppendLog;
-_service.OnProgress += UpdateProgress;
+public event Action<string, int, long, long> OnDownloadProgress;
+public event Action OnInstallationCompleted;
 ```
 
-Isso permite que a lógica de instalação funcione **sem conhecer a interface**.
-Se um dia você quiser criar uma interface diferente (ex: web, console),
-basta conectar os eventos de outra forma.
+Isso permite que a lógica funcione **sem conhecer a interface**.
 
 ---
 
 ## Guia de Modificação
 
-### Cenário 1: Mudar a senha do admin
+### Cenário 1: Alterar a política de senha
 
-No arquivo `Services\InstallerService.cs`, localize o método
-`CreateAdminUserAsync()` e altere a linha:
+A senha do admin **não é mais fixa no código**: ela vem do campo
+"Senha do Admin" na aba **Configurações**. A política "senha nunca expira"
+fica na aba **Opções** (`_chkPasswordNeverExpiresGlobal`) e é aplicada por
+`EnsureGlobalPasswordNeverExpiresPolicyAsync()` e
+`ConfigureUserPasswordPolicyAsync()`.
 
-```csharp
-// Linha ~105: altere a senha entre aspas
-await RunProcessAsync("net",
-    "user admin \"EXA@admin#202_\" /add", 10000);
-```
+### Cenário 2: Trocar os papéis de parede
 
-### Cenário 2: Mudar o nome do wallpaper
+Os wallpapers ficam em `dist\Wallpapers\` (e `dist\Wallpapers\Nortel\`).
+O script `Scripts\apply_wallpapers.ps1` aplica todos os arquivos em todos
+os temas do Windows. Se existir uma cópia em `dist\Scripts\`, ela tem
+precedência sobre a versão embutida no executável.
 
-No arquivo `Services\InstallerService.cs`, localize `SetWallpaperAsync()`:
+### Cenário 3: Adicionar um atalho corporativo
 
-```csharp
-string scriptPath = Path.Combine(_basePath, "Scripts", "wallpaper.cmd");
-```
-
-O script `wallpaper.cmd` é quem define qual imagem será usada. Edite
-diretamente o arquivo `dist\Scripts\wallpaper.cmd`.
-
-### Cenário 3: Adicionar uma nova empresa (ex: "NORTEL")
-
-1. Crie um novo método em `InstallerService.cs` (ex: `CreateNortelUserAsync()`)
-2. Adicione um checkbox em `MainForm.cs` no `BuildConfigPanel()`
-3. No `BtnInstall_Click()`, inclua a chamada ao novo método
-4. Recompile
+1. Adicione a propriedade em `InstallationOptions` (`InstallerService.cs`).
+2. Adicione o checkbox na aba **Atalhos** (`MainForm.cs`).
+3. Preencha a opção no `BtnInstall_Click()`.
+4. Crie o atalho no método responsável em `InstallerService.cs`.
 
 ### Cenário 4: Mudar o tema de cores
 
-No início do `MainForm.cs`, há constantes de cor:
+No início do `MainForm.cs` há constantes de cor:
 
 ```csharp
-private static readonly Color CorFundo = Color.FromArgb(30, 30, 30);
-private static readonly Color CorPainel = Color.FromArgb(40, 40, 40);
-private static readonly Color CorDestaque = Color.FromArgb(0, 180, 255);
-private static readonly Color CorSucesso = Color.FromArgb(0, 200, 80);
+private static readonly Color CorFundo           = Color.FromArgb(30, 30, 30);
+private static readonly Color CorPainel          = Color.FromArgb(40, 40, 40);
+private static readonly Color CorDestaque        = Color.FromArgb(0, 180, 255);
+private static readonly Color CorDestaqueLaranja = Color.FromArgb(255, 140, 0);
+private static readonly Color CorSucesso         = Color.FromArgb(0, 200, 80);
 ```
 
-Altere os valores RGB para personalizar as cores.
+A cor oficial da marca é o **laranja `#FF8C00`**, usada em abas ativas,
+checkboxes, barras de progresso e scrollbars.
 
 ---
 
 ## Resolução de Problemas
 
-### "O sistema não reconhece o comando"
+### "Este programa precisa ser executado como Administrador"
 
-Certifique-se de estar executando o `install.exe` como Administrador.
-Clique com o botão direito > "Executar como administrador".
+Execute o `.exe` com botão direito > "Executar como administrador". O
+manifesto já pede elevação automaticamente; se o UAC for cancelado, o
+programa encerra.
 
-### "Falha ao renomear o computador"
+### Onde encontro o log da instalação?
 
-- O nome do computador não pode conter espaços ou caracteres especiais
-- Execute como Administrador
-- No Windows 10/11, a renomeação via PowerShell é mais confiável
+Em `C:\ProgramData\EXABIT\Logs\install-YYYYMMDD-HHMMSS.log` (fallback em
+`%TEMP%\EXABIT_Logs`). O caminho também aparece no início da instalação,
+no console de log.
+
+### "Não foi possível baixar o programa X"
+
+- Verifique a conexão com a internet e possíveis bloqueios de proxy/firewall
+- Confirme acesso aos domínios oficiais dos fabricantes
+- Apague o cache e tente novamente:
+  `C:\ProgramData\EXABIT\Downloads`
+
+### "Assinatura desconhecida" / aviso do SmartScreen
+
+O executável só é reconhecido como confiável se assinado com um
+certificado OV/EV real. Veja a seção [Assinatura Digital](#assinatura-digital).
+Não instale certificados autoassinados na raiz do sistema.
 
 ### "O programa X não instalou"
 
-- Verifique se o instalador está em `dist\Programas\`
-- Verifique se os argumentos de instalação silenciosa estão corretos
-- Alguns instaladores podem exigir reinicialização entre instalações
+- Verifique o log na tela (mensagens com prefixo `X`)
+- Confirme se os argumentos de instalação silenciosa estão corretos
+- Alguns instaladores exigem reinicialização entre instalações
+- Programas via `winget`/MSIX podem depender da versão do Windows
 
 ### Erro ao compilar
 
-- Certifique-se de que os arquivos .cs estão nas pastas corretas
-- O compilador `csc.exe` deve existir em `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\`
+- Certifique-se de que os arquivos `.cs` estão nas pastas corretas
+- O compilador `csc.exe` deve existir em
+  `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\`
 - Se estiver em um sistema 32 bits, use o caminho `Framework\` (sem `64`)
 
 ---
@@ -325,8 +454,8 @@ Clique com o botão direito > "Executar como administrador".
 
 - **Linguagem:** C# 5.0
 - **Framework:** .NET Framework 4.8
-- **Interface:** Windows Forms
-- **Compilador:** csc.exe (embutido no Windows)
+- **Interface:** Windows Forms (controles GDI+ customizados)
+- **Compilador:** `csc.exe` (embutido no Windows)
 - **Ícone:** `install.ico`
 
 ---

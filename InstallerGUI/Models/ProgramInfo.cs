@@ -78,6 +78,12 @@ namespace InstallerGUI.Models
         public string DownloadUrl { get; set; }
 
         /// <summary>
+        /// Hash SHA-256 esperado do instalador baixado (hexadecimal).
+        /// Se vazio, o download não é verificado por hash.
+        /// </summary>
+        public string Sha256 { get; set; }
+
+        /// <summary>
         /// Categoria ou grupo do programa (ex: "Geral", "ArtCraft", "Desenvolvimento").
         /// Utilizado pela interface para agrupar e exibir divisórias visuais.
         /// </summary>

@@ -14,26 +14,38 @@ do Windows em notebooks/máquinas recém-formatadas.
 ## Estrutura do Projeto
 
 ```
-Auto Install/
+Instalador Automatico Exabit Online/
 ├── InstallerGUI/             → CÓDIGO FONTE
 │   ├── Forms/
 │   │   └── MainForm.cs       → Interface gráfica
 │   ├── Models/
 │   │   └── ProgramInfo.cs    → Modelo de dados dos programas
 │   ├── Services/
-│   │   └── InstallerService.cs → Lógica de instalação
-│   ├── Program.cs            → Entry point
-│   ├── build.bat             → Script de compilação
+│   │   └── InstallerService.cs → Lógica de instalação e diagnóstico
+│   ├── Image/                → Recursos visuais embutidos (logo)
+│   ├── Sound/                → Sons embutidos (R2D2.mp3)
+│   ├── Scripts/              → apply_wallpapers.ps1 (embutido)
+│   ├── Properties/
+│   │   └── AssemblyInfo.cs   → Versão do assembly
+│   ├── Program.cs            → Entry point (elevação UAC)
+│   ├── app.manifest          → requireAdministrator + DPI
+│   ├── app.config            → Configuração de DPI
+│   ├── sign.ps1              → Assinatura Authenticode (opcional)
+│   ├── build.bat             → Script oficial de compilação
 │   └── install.ico           → Ícone do executável
 ├── dist/                     → ARQUIVOS DE DISTRIBUIÇÃO
-│   ├── install.exe           → Executável compilado
-│   ├── Programas/            → Instaladores dos programas
-│   └── Scripts/              → Scripts auxiliares
+│   ├── Instalador Automatico Exabit.exe → Executável compilado
+│   ├── Wallpapers/           → Papéis de parede (EXABIT e Nortel)
+│   └── build_info.txt        → Data da última compilação
 ├── archive/                  → Scripts batch antigos (referência)
 ├── README.md                 → Documentação principal
 ├── CHANGELOG.md              → Registro de versões
 └── AGENTS.md                 → Este arquivo
 ```
+
+> **Instalação 100% online:** não existe mais a pasta `dist/Programas/`.
+> Cada programa é baixado do site oficial e armazenado em
+> `C:\ProgramData\EXABIT\Downloads` (cache).
 
 ## Arquitetura (Camadas)
 
@@ -50,6 +62,7 @@ Models/ProgramInfo.cs     → DADOS - Estrutura dos programas
 - A comunicação entre service e UI é feita **exclusivamente por eventos**:
   - `OnLog(string, ConsoleColor?)` → para mensagens no log
   - `OnProgress(int, int)` → para atualizar a barra de progresso
+  - `OnDownloadProgress(string, int, long, long)` → progresso de download
   - `OnInstallationCompleted()` → disparado quando a instalação é concluída com sucesso
 - Para acessar a UI com segurança de thread: `Invoke(new Action(...))`
 
@@ -99,17 +112,50 @@ Compila com `csc.exe` (vem no Windows via .NET Framework).
 Não requer Visual Studio, NuGet, SDKs ou qualquer instalação adicional.
 O .NET Framework 4.8 já está presente no Windows 10/11.
 
+- Saída oficial: `dist/Instalador Automatico Exabit.exe`
+- O `InstallerGUI.csproj` serve para edição no Visual Studio e está
+  alinhado ao `build.bat` (mesmo nome de saída, referências, manifesto,
+  ícone e recursos embutidos)
+- `sign.ps1` é executado no final e **só assina com certificado real**
+  (PFX via `EXABIT_SIGN_PFX`/`EXABIT_SIGN_PFX_PASSWORD` ou certificado
+  OV/EV instalado no repositório). Sem certificado real, a assinatura é
+  ignorada e o build continua.
+
+## Logs e Verificação de Integridade
+
+- Toda chamada a `Log()` grava também em
+  `C:\ProgramData\EXABIT\Logs\install-yyyyMMdd-HHmmss.log`
+  (fallback `%TEMP%\EXABIT_Logs`), com cabeçalho de versão, máquina,
+  usuário e sistema.
+- `ProgramInfo.Sha256` é opcional: quando preenchido, o instalador baixado
+  é validado antes da instalação. Hash divergente apaga o cache e aborta
+  aquele programa. Sem hash, o comportamento é o atual.
+
 ## Como Adicionar um Novo Programa
 
-1. Colocar o instalador em `dist/Programas/`
-2. Descobrir os argumentos de instalação silenciosa (pesquisar no Google)
-3. Adicionar na lista `GetDefaultProgramList()` em `MainForm.cs`
-4. Executar `build.bat`
+1. Descobrir a URL oficial de download e os argumentos silenciosos
+2. Cadastrar em `GetDefaultProgramList()` (`Forms/MainForm.cs`), com ID,
+   nome, arquivo de cache, argumentos e categoria
+3. Implementar o download em `Services/InstallerService.cs`:
+   - branch em `ResolveProgramInstallerAsync()`, ou
+   - método `Resolve<Id>InstallerAsync()` usando `DownloadFileOnlineAsync`
+   - `EnsureProgramDownloadedAsync()` é o wrapper que chama o resolvedor
+     e valida o SHA-256 antes de devolver o caminho
+4. Ajustar `InstallProgramAsync()` apenas se precisar de tratamento
+   especial (MSI, MSIX, `winget`, `UseShellExecute`, fechar processos)
+5. Opcional: criar `Is<Id>Installed()` para pular reinstalações
+6. Opcional: preencher `Sha256` (hex) quando a URL for versionada e o
+   fabricante publicar checksum oficial
+7. Executar `build.bat`
 
 Formato do item:
 ```csharp
-new ProgramInfo("id", "Nome Exibido", "arquivo.exe", "/S")
+new ProgramInfo("id", "Nome Exibido", "arquivo_cache.exe", "/S", "", "Geral")
+    { RequiresInternet = true, DefaultChecked = false },
 ```
+
+> Nunca use `http://` para downloads. Use sempre a URL HTTPS oficial do
+> fabricante. Não há pasta local de instaladores.
 
 ## Instalação Silenciosa (Argumentos Comuns)
 
@@ -127,12 +173,16 @@ new ProgramInfo("id", "Nome Exibido", "arquivo.exe", "/S")
 BtnInstall_Click()
   → Cria InstallationOptions (opções do usuário)
   → RunFullInstallationAsync(options)
-      ├── RenameComputerAsync()
-      ├── CreateAdminUserAsync()
-      ├── CreateStandardUserAsync()
-      ├── SetWallpaperAsync()
-      ├── InstallProgramAsync() [para cada programa]
-      └── CleanPublicDesktop()
+      ├── Fase 0: UninstallAllGamesAsync()
+      │           UninstallThirdPartyAntivirusAsync()
+      │           RemoveOtherUserProfilesAsync()
+      ├── Fase 1: RenameComputerAsync()
+      ├── Fase 2: CreateAdminUserAsync()
+      │           CreateStandardUserAsync()
+      ├── Fase 3: SetWallpaperAsync()
+      ├── Fase 4: InstallProgramAsync() [para cada programa]
+      ├── Fase 5: EnsureAllProgramsAccessibleForAllProfilesAsync()
+      │           atalhos corporativos + CleanPublicDesktop()
   → Pergunta se quer reiniciar
   → Se sim: shutdown /r /t 10
 ```
@@ -199,6 +249,9 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 - **Threading**: toda atualização de UI vinda de evento deve usar `Invoke`
 - **Tratamento de erros**: toda etapa de instalação deve ter try/catch
 - **Log**: mensagens em português com prefixo `[ok]`, `X`, `⚠`
+- **Assinatura**: nunca criar certificado autoassinado nem instalá-lo em
+  "Autoridades Raiz Confiáveis". Use apenas certificado OV/EV real
+  (`EXABIT_SIGN_PFX`/`EXABIT_SIGN_PFX_PASSWORD` ou repositório)
 
 ## Para Agentes de IA
 

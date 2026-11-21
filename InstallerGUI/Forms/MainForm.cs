@@ -32,8 +32,8 @@ namespace InstallerGUI.Forms
 
         private static readonly Color CorFundo = Color.FromArgb(30, 30, 30);
         private static readonly Color CorPainel = Color.FromArgb(40, 40, 40);
-        private static readonly Color CorDestaque = Color.FromArgb(243, 146, 0);
-        private static readonly Color CorDestaqueLaranja = Color.FromArgb(243, 146, 0);
+        private static readonly Color CorDestaque = Color.FromArgb(255, 140, 0);
+        private static readonly Color CorDestaqueLaranja = Color.FromArgb(255, 140, 0);
         private static readonly Color CorDestaqueAzul = Color.FromArgb(0, 180, 255);
         private static readonly Color CorSucesso = Color.FromArgb(0, 200, 80);
         private static readonly Color CorTexto = Color.White;
@@ -211,6 +211,41 @@ namespace InstallerGUI.Forms
 
             // Inicia o monitor de conectividade de rede em tempo real
             InitConnectionMonitor();
+
+            // Dispara imediatamente em segundo plano a varredura completa de hardware e segurança
+            StartBackgroundFullDiagnosis();
+        }
+
+        private bool _isFullDiagnosisRunning;
+
+        /// <summary>
+        /// Dispara o diagnóstico de hardware e segurança completo em segundo plano via Task.Run,
+        /// atualizando a interface gráfica de forma assíncrona assim que os dados detalhados estiverem prontos.
+        /// </summary>
+        private void StartBackgroundFullDiagnosis()
+        {
+            if (_isFullDiagnosisRunning || IsDisposed) return;
+            _isFullDiagnosisRunning = true;
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var fullDiag = await _service.GetFullSystemDiagnosisAsync();
+                    if (fullDiag != null && !IsDisposed)
+                    {
+                        Invoke(new Action(() =>
+                        {
+                            RefreshDiagnosticViews(fullDiag);
+                        }));
+                    }
+                }
+                catch { }
+                finally
+                {
+                    _isFullDiagnosisRunning = false;
+                }
+            });
         }
 
         /// <summary>
@@ -258,7 +293,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.97";
+            return "2.0.0.98";
         }
 
         // ──────────────────────────────────────────────
@@ -1450,7 +1485,7 @@ namespace InstallerGUI.Forms
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
             };
-            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(102 * scale))); // 102px acomoda "Computador:" sem corte ou quebra
+            tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(115 * scale))); // 115px acomoda "Computador:" sem corte ou quebra
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
@@ -1703,7 +1738,7 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(95 * scale))); // 95px suficiente para "Memória RAM:" e "Processador:"
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(115 * scale))); // 115px suficiente para "Memória RAM:" e "Processador:"
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(38 * scale))); // Processador (2 linhas)
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(32 * scale))); // Memória RAM (texto + barra próxima, padrão idêntico ao disco)
@@ -1775,7 +1810,7 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(102 * scale))); // 102px suficiente para "Número de Série:"
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(115 * scale))); // 115px suficiente para "Número de Série:" sem quebra ou corte
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
@@ -1857,7 +1892,7 @@ namespace InstallerGUI.Forms
             };
             _lblExpSecurity = new Label
             {
-                Text = "Windows Defender: Ativo | BitLocker: Desativado",
+                Text = "Antivírus: Identificando... | BitLocker: Verificando...",
                 ForeColor = Color.White,
                 Font = new Font("Segoe UI", 8.5f),
                 Location = new Point(0, (int)(16 * scale)),
@@ -2023,6 +2058,7 @@ namespace InstallerGUI.Forms
                     _service.UpdateDynamicMetrics(_lastDiag);
                     RefreshExpandedDiagnosticsUI(_lastDiag);
                 }
+                StartBackgroundFullDiagnosis();
                 UpdateIdentLayout();
                 UpdateNetIpsLayout();
                 UpdateStorageDrivesLayout();
@@ -2281,7 +2317,10 @@ namespace InstallerGUI.Forms
             }
             if (_lblExpRam != null)
             {
-                _lblExpRam.Text = string.Format("{0} ({1:N1} GB em uso - {2:N0}%)", diag.RamSummary, diag.UsedRamGb, diag.RamUsagePercent);
+                string ramTitle = (!string.IsNullOrEmpty(diag.RamSummary) && diag.RamSummary != "Memória")
+                    ? diag.RamSummary
+                    : string.Format("{0:N0} GB RAM", Math.Round(diag.TotalRamGb));
+                _lblExpRam.Text = string.Format("{0} ({1:N1} GB em uso - {2:N0}%)", ramTitle, diag.UsedRamGb, diag.RamUsagePercent);
             }
             if (_barExpRam != null)
             {
@@ -2291,11 +2330,11 @@ namespace InstallerGUI.Forms
             // Card 5: Dispositivo e Garantia
             if (_lblExpManufacturer != null)
             {
-                _lblExpManufacturer.Text = string.IsNullOrEmpty(diag.Manufacturer) ? "Genérico / Padrão" : diag.Manufacturer;
+                _lblExpManufacturer.Text = (string.IsNullOrEmpty(diag.Manufacturer) || diag.Manufacturer == "Fabricante" || diag.Manufacturer == "Identificando...") ? "Genérico / Padrão" : diag.Manufacturer;
             }
             if (_lblExpModel != null)
             {
-                _lblExpModel.Text = string.IsNullOrEmpty(diag.Model) ? "Placa-Mãe / Padrão" : diag.Model;
+                _lblExpModel.Text = (string.IsNullOrEmpty(diag.Model) || diag.Model == "Modelo" || diag.Model == "Identificando...") ? "Placa-Mãe / Padrão" : diag.Model;
             }
             if (_lblExpSerial != null)
             {
@@ -2305,7 +2344,12 @@ namespace InstallerGUI.Forms
             // Card 6: Segurança e Status
             if (_lblExpSecurity != null)
             {
-                _lblExpSecurity.Text = string.Format("Windows Defender: {0} | BitLocker: {1}", diag.DefenderStatusText, diag.BitLockerStatusText);
+                string avText = !string.IsNullOrEmpty(diag.AntivirusSummary)
+                    ? diag.AntivirusSummary
+                    : (!string.IsNullOrEmpty(diag.ThirdPartyAntivirus)
+                        ? string.Format("{0} (Ativo)", diag.ThirdPartyAntivirus)
+                        : (diag.DefenderActive ? "Microsoft Defender (Ativo)" : "Desativado"));
+                _lblExpSecurity.Text = string.Format("Antivírus: {0} | BitLocker: {1}", avText, diag.BitLockerStatusText);
             }
             if (_lblExpSystemState != null)
             {
@@ -3095,7 +3139,7 @@ namespace InstallerGUI.Forms
         private void InitConnectionMonitor()
         {
             _syncMetricsTimer = new System.Windows.Forms.Timer();
-            _syncMetricsTimer.Interval = 3000;
+            _syncMetricsTimer.Interval = 5000;
             _syncMetricsTimer.Tick += SyncMetricsTimer_Tick;
             _syncMetricsTimer.Start();
 
@@ -3115,7 +3159,7 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Atualiza espaço em disco (C: e drives expandidos) e RAM de forma 100% síncrona a cada 3 segundos.
+        /// Atualiza espaço em disco (C: e drives expandidos), RAM e energia de forma 100% síncrona a cada 5 segundos.
         /// Nunca bloqueia a UI thread com awaits; executa em menos de 5ms.
         /// </summary>
         private void SyncMetricsTimer_Tick(object sender, EventArgs e)
@@ -3304,7 +3348,10 @@ namespace InstallerGUI.Forms
             // 2. Atualiza RAM na visão expandida
             if (_lblExpRam != null)
             {
-                _lblExpRam.Text = string.Format("{0} ({1:N1} GB em uso - {2:N0}%)", diag.RamSummary, diag.UsedRamGb, diag.RamUsagePercent);
+                string ramTitle = (!string.IsNullOrEmpty(diag.RamSummary) && diag.RamSummary != "Memória")
+                    ? diag.RamSummary
+                    : string.Format("{0:N0} GB RAM", Math.Round(diag.TotalRamGb));
+                _lblExpRam.Text = string.Format("{0} ({1:N1} GB em uso - {2:N0}%)", ramTitle, diag.UsedRamGb, diag.RamUsagePercent);
             }
             if (_barExpRam != null)
             {
@@ -3348,6 +3395,14 @@ namespace InstallerGUI.Forms
                                 break;
                             }
                         }
+                    }
+
+                    // 4. Atualiza Estado do sistema no card Segurança e Status
+                    if (_lblExpSystemState != null)
+                    {
+                        _lblExpSystemState.Text = string.Format("Reboot Pendente: {0} | Fonte: {1}",
+                            diag.PendingRebootText,
+                            diag.PowerSourceText);
                     }
                 }
             }
@@ -3988,7 +4043,7 @@ namespace InstallerGUI.Forms
         private int _value;
         private int _maximum = 100;
         private Color _trackColor = Color.FromArgb(45, 45, 45);
-        private Color _progressColor = Color.FromArgb(243, 146, 0);
+        private Color _progressColor = Color.FromArgb(255, 140, 0);
 
         public ThinProgressBar()
         {
@@ -4273,7 +4328,7 @@ namespace InstallerGUI.Forms
         private int _smallChange = 1;
 
         private Color _trackColor = Color.FromArgb(40, 40, 40);
-        private Color _thumbColor = Color.FromArgb(243, 146, 0);
+        private Color _thumbColor = Color.FromArgb(255, 140, 0);
         private Color _thumbHoverColor = Color.FromArgb(255, 170, 40);
         private Color _thumbPressedColor = Color.FromArgb(220, 125, 0);
 

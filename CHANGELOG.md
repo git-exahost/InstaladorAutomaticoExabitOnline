@@ -7,6 +7,74 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.99] - 2026-11-21
+
+### Segurança — Assinatura Authenticode real e remoção do certificado autoassinado
+
+- **`sign.ps1` reescrito para usar apenas certificado corporativo real**:
+  - Aceita PFX por `EXABIT_SIGN_PFX` / `EXABIT_SIGN_PFX_PASSWORD` (ou parâmetros `-PfxPath` / `-PfxPassword`).
+  - Também aceita certificado OV/EV instalado no repositório (`CurrentUser\My` / `LocalMachine\My`) que tenha chave privada e seja emitido por uma CA.
+  - Removida a criação automática via `New-SelfSignedCertificate`.
+  - Sem certificado real configurado, a assinatura é ignorada com aviso e o build continua normalmente.
+  - Removida a exportação do `.cer` para instalação nas máquinas clientes.
+- **Removidos `dist\Instalar_Certificado_EXABIT.cmd` e `dist\exabit_cert.cer`**:
+  - O script instalava o certificado autoassinado em "Autoridades Raiz Confiáveis", permitindo que qualquer binário forjado com o mesmo nome fosse aceito como confiável.
+  - Para CA interna, a distribuição do certificado deve ser feita via GPO.
+- **`build.bat`**: mensagem de assinatura ajustada para indicar que é opcional.
+
+### Adicionado
+
+- **Log de sessão em arquivo**: todas as mensagens do `InstallerService` passam a ser gravadas em `C:\ProgramData\EXABIT\Logs\install-yyyyMMdd-HHmmss.log` (fallback para `%TEMP%\EXABIT_Logs`), com cabeçalho de versão, máquina, usuário e sistema. O caminho do arquivo é exibido no início da instalação.
+- **Verificação SHA-256 de instaladores**: novo campo `ProgramInfo.Sha256`. Quando preenchido, o arquivo baixado é validado antes da instalação; em caso de divergência, o cache é removido e a instalação do programa é abortada com log `X`. Sem hash preenchido, o comportamento permanece idêntico ao atual.
+
+### Build
+
+- **`InstallerGUI.csproj` alinhado ao `build.bat`**:
+  - `AssemblyName` corrigido para `Instalador Automatico Exabit`.
+  - Adicionadas referências `System.Management`, `System.ServiceProcess`, `System.IO.Compression` e `System.IO.Compression.FileSystem`.
+  - Adicionados `app.manifest` (`ApplicationManifest`), `install.ico` (`ApplicationIcon`) e o recurso embutido `Scripts\apply_wallpapers.ps1`.
+  - Adicionados `PlatformTarget=AnyCPU`, `Prefer32Bit=false` e `HighEntropyVA=true`, equivalentes às opções do `csc.exe` no `build.bat`.
+  - Build por Visual Studio/MSBuild agora gera o mesmo executável do build oficial, com os três recursos embutidos.
+
+### Documentação
+
+- **`README.md` atualizado**: instalação 100% online, estrutura real do projeto, saída `dist\Instalador Automatico Exabit.exe`, fluxo de build/assinatura, cadastro de programas (URL + `Resolve*`) e guia de modificação.
+- **`AGENTS.md` atualizado**: árvore de arquivos, eventos, fluxo em fases, cadastro de programas online e regra de nunca usar certificado autoassinado.
+
+---
+
+## [2.0.0.98] - 2026-11-21
+
+### Corrigido — Diagnóstico do Sistema Completo, Antivírus e BitLocker
+
+- **Atualização Periódica da Fonte e da Bateria (`Estado do sistema`)**:
+  - A fonte conectada e a porcentagem da bateria agora são atualizadas a cada 5 segundos no card "Segurança e Status".
+  - `UpdateDynamicMetrics` passou a consultar `GetSystemPowerStatus` junto com RAM e unidades de disco.
+  - `RefreshDynamicMetricsViews` atualiza diretamente o texto "Reboot Pendente | Fonte" sem aguardar uma nova varredura completa.
+  - O timer síncrono de disco e RAM foi alinhado ao intervalo oficial de 5 segundos.
+
+- **Padronização Visual da Cor Corporativa Laranja (`UI/UX`)**:
+  - Unificadas as constantes e os componentes personalizados para utilizar rigorosamente `RGB(255, 140, 0)` / `#FF8C00`.
+  - Corrigidas barras de progresso e de rolagem personalizadas que ainda utilizavam tonalidades antigas próximas a `RGB(243, 146, 0)`.
+
+- **Restauração da Execução do Diagnóstico Completo Assíncrono (`StartBackgroundFullDiagnosis`)**:
+  - Na versão 2.0.0.97, a chamada assíncrona ao método `GetFullSystemDiagnosisAsync()` havia sido suprimida, fazendo com que campos dependentes de varredura profunda (Processador, Modelo, Fabricante, Número de Série, Resumo de Interfaces e Segurança) ficassem parados nos valores padrão ou esqueletos iniciais.
+  - Adicionado `StartBackgroundFullDiagnosis()`, disparado automaticamente na inicialização da aplicação e ao abrir a visão expandida (`_btnMoreDetails`), garantindo que todos os cards sejam enriquecidos sem congelar a interface gráfica.
+- **Diagnóstico Rápido Instantâneo (`GetQuickSystemDiagnosis`) Enriquecido**:
+  - Implementada leitura imediata via Registry (< 1ms) para Fabricante e Modelo (`HARDWARE\DESCRIPTION\System\BIOS`), Número de Série, Nome do Processador (`HARDWARE\DESCRIPTION\System\CentralProcessor\0`), Interfaces de Rede e IPs locais via `.NET NetworkInterface`, eliminando placeholders genéricos desde o primeiro milissegundo de abertura.
+- **Detecção Precisa de Antivírus Ativo de Terceiros e Microsoft Defender**:
+  - Corrigida a identificação no WMI `root\SecurityCenter2` (`AntiVirusProduct`), decodificando corretamente os bits do estado de proteção em tempo real (`productState`).
+  - Quando um antivírus de terceiros estiver instalado e ativo (ex: *Kaspersky*, *Avast*, *AVG*, *Norton*, *Bitdefender*), o card agora reporta com precisão: `Antivírus: Kaspersky (Ativo)` (ou o nome do software detectado), em vez de alegar erroneamente que o Defender é o antivírus principal.
+  - Se apenas o Microsoft Defender estiver ativo, reporta `Antivírus: Microsoft Defender (Ativo)`.
+- **Detecção Resiliente de Proteção BitLocker / Criptografia de Volume**:
+  - Corrigido erro de "Acesso Negado" no WMI `root\CIMV2\Security\MicrosoftVolumeEncryption` através da configuração obrigatória de `AuthenticationLevel.PacketPrivacy` e `ImpersonationLevel.Impersonate` no `ManagementScope`.
+  - Adicionado mecanismo de contingência via `manage-bde.exe -status C:` para conferência direta do estado de proteção quando a chamada WMI retornar inconclusiva, permitindo reportar com precisão se o BitLocker está `Ativo (C:)` ou `Desativado`.
+- **Prevenção de Truncamento Vertical e Quebra de Linha nos Cards (UI/UX)**:
+  - Ajustada a coluna de rótulos dos Cards 1 (Identificação), 4 (Hardware) e 5 (Dispositivo) para `115px`, impedindo que os rótulos *"Número de Série:"* e *"Memória RAM:"* quebrem linha e sejam cortados verticalmente.
+  - O resumo de memória RAM agora computa o total de gigabytes automaticamente (ex: `64 GB DDR5` ou `32 GB RAM`) e nunca mais reverte para a palavra isolada *"Memória"*.
+
+---
+
 ## [2.0.0.97] - 2026-11-21
 
 ### Corrigido — Arquitetura de timers de métricas totalmente reescrita

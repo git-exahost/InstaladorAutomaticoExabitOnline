@@ -73,8 +73,8 @@ if %errorlevel% equ 0 (
     echo.
     echo %DATE% %TIME% > "..\dist\build_info.txt"
 
-    REM Assinatura digital Authenticode corporativa
-    echo Aplicando assinatura digital Authenticode...
+    REM Assinatura digital Authenticode opcional - requer certificado corporativo real
+    echo Aplicando assinatura Authenticode - certificado real opcional...
     powershell -NoProfile -ExecutionPolicy Bypass -File sign.ps1
     echo.
 ) else (

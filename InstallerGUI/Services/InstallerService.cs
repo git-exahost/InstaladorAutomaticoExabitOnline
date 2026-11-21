@@ -7,6 +7,7 @@ using System.Management;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -68,9 +69,33 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Caminho do arquivo de log da sessão atual (criado sob demanda).
+        /// Retorna null caso não seja possível criar o diretório de logs.
+        /// </summary>
+        public string LogFilePath
+        {
+            get { return GetLogFilePath(); }
+        }
+
+        /// <summary>
         /// Token para cancelar a instalação.
         /// </summary>
         private System.Threading.CancellationTokenSource _cancellationTokenSource;
+
+        /// <summary>
+        /// Protege a escrita concorrente no arquivo de log.
+        /// </summary>
+        private readonly object _logFileLock = new object();
+
+        /// <summary>
+        /// Caminho do arquivo de log da sessão atual.
+        /// </summary>
+        private string _logFilePath;
+
+        /// <summary>
+        /// Indica se o cabeçalho do arquivo de log já foi escrito.
+        /// </summary>
+        private bool _logFileHeaderWritten;
 
         // ──────────────────────────────────────────────
         // Construtor
@@ -1190,92 +1215,11 @@ namespace InstallerGUI.Services
                 }
                 catch { }
 
-                // 8. Segurança (Defender e BitLocker)
+                // 8. Segurança (Antivírus e BitLocker)
                 try
                 {
-                    string thirdPartyAv = null;
-                    bool defenderActive = false;
-                    bool foundInWmi = false;
-
-                    try
-                    {
-                        using (var searcher = new ManagementObjectSearcher(@"root\SecurityCenter2", "SELECT displayName, productState FROM AntiVirusProduct"))
-                        {
-                            foreach (ManagementObject av in searcher.Get())
-                            {
-                                string name = av["displayName"] != null ? av["displayName"].ToString().Trim() : "";
-                                if (string.IsNullOrEmpty(name)) continue;
-
-                                if (name.IndexOf("Windows Defender", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                    name.IndexOf("Microsoft Defender", StringComparison.OrdinalIgnoreCase) >= 0)
-                                {
-                                    foundInWmi = true;
-                                    int pState = 0;
-                                    if (av["productState"] != null && int.TryParse(av["productState"].ToString(), out pState))
-                                    {
-                                        int stateByte = (pState >> 12) & 0x0F;
-                                        if (stateByte == 1) defenderActive = true;
-                                    }
-                                }
-                                else
-                                {
-                                    if (string.IsNullOrEmpty(thirdPartyAv))
-                                        thirdPartyAv = name;
-                                }
-                            }
-                        }
-                    }
-                    catch { }
-
-                    if (!foundInWmi)
-                    {
-                        bool defender = true;
-                        try
-                        {
-                            using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender"))
-                            {
-                                if (key != null)
-                                {
-                                    var dis = key.GetValue("DisableAntiSpyware");
-                                    if (dis != null && (int)dis == 1) defender = false;
-                                }
-                            }
-                        }
-                        catch { }
-                        defenderActive = defender;
-                    }
-
-                    diag.DefenderActive = defenderActive;
-                    diag.ThirdPartyAntivirus = thirdPartyAv;
-
-                    if (defenderActive)
-                    {
-                        diag.DefenderStatusText = "Ativo";
-                    }
-                    else
-                    {
-                        if (!string.IsNullOrEmpty(thirdPartyAv))
-                            diag.DefenderStatusText = string.Format("Desativado ({0})", thirdPartyAv);
-                        else
-                            diag.DefenderStatusText = "Desativado";
-                    }
-
-                    bool bitlocker = false;
-                    try
-                    {
-                        using (var searcher = new ManagementObjectSearcher(@"root\CIMV2\Security\MicrosoftVolumeEncryption", "SELECT ProtectionStatus FROM Win32_EncryptableVolume"))
-                        {
-                            foreach (ManagementObject vol in searcher.Get())
-                            {
-                                int status = 0;
-                                if (vol["ProtectionStatus"] != null) int.TryParse(vol["ProtectionStatus"].ToString(), out status);
-                                if (status == 1) { bitlocker = true; break; }
-                            }
-                        }
-                    }
-                    catch { }
-                    diag.BitLockerActive = bitlocker;
-                    diag.BitLockerStatusText = bitlocker ? "Ativo" : "Desativado";
+                    DetectAntivirus(diag);
+                    DetectBitLocker(diag);
                 }
                 catch { }
 
@@ -1310,7 +1254,10 @@ namespace InstallerGUI.Services
                         if (power.ACLineStatus == 1)
                             diag.PowerSourceText = "Na tomada";
                         else if (power.ACLineStatus == 0)
-                            diag.PowerSourceText = string.Format("Bateria ({0}%)", power.BatteryLifePercent);
+                            if (power.BatteryLifePercent <= 100)
+                                diag.PowerSourceText = string.Format("Bateria ({0}%)", power.BatteryLifePercent);
+                            else
+                                diag.PowerSourceText = "Bateria";
                         else
                             diag.PowerSourceText = "Na tomada";
                     }
@@ -1322,75 +1269,7 @@ namespace InstallerGUI.Services
                 catch { }
 
                 // 10. Conexão de Rede, IPs e Interfaces
-                try
-                {
-                    var ips = new List<string>();
-                    var ipsWithAdapters = new List<string>();
-                    var activeNics = new List<string>();
-                    bool hasVpn = false;
-
-                    foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
-                    {
-                        if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up)
-                            continue;
-                        if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
-                            continue;
-
-                        string desc = nic.Description ?? "";
-                        string name = nic.Name ?? "";
-                        string nicLabel = name;
-
-                        if (desc.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            desc.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            desc.IndexOf("TAP", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            desc.IndexOf("WireGuard", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            name.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            name.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            hasVpn = true;
-                            nicLabel = (name.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 || desc.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0) ? "Radmin VPN" : "VPN";
-                        }
-                        else
-                        {
-                            if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211)
-                            {
-                                activeNics.Add("Wi-Fi");
-                                nicLabel = "Wi-Fi";
-                            }
-                            else if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Ethernet)
-                            {
-                                activeNics.Add("Ethernet");
-                                nicLabel = "Ethernet";
-                            }
-                        }
-
-                        var ipProps = nic.GetIPProperties();
-                        foreach (var addr in ipProps.UnicastAddresses)
-                        {
-                            if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                            {
-                                string ipStr = addr.Address.ToString();
-                                if (!ipStr.StartsWith("127.") && !ipStr.StartsWith("169.254.") && !ips.Contains(ipStr))
-                                {
-                                    ips.Add(ipStr);
-                                    ipsWithAdapters.Add(string.Format("{0} ({1})", ipStr, nicLabel));
-                                }
-                            }
-                        }
-                    }
-
-                    diag.AllLocalIps = ipsWithAdapters.Count > 0 ? ipsWithAdapters : ips;
-                    string preferredIp = ips.FirstOrDefault(ip => !ip.StartsWith("26.")) ?? (ips.Count > 0 ? ips[0] : "Indisponível");
-                    diag.LocalIp = preferredIp;
-
-                    if (hasVpn)
-                        diag.NetworkInterfacesSummary = "Radmin / VPN detectadas";
-                    else if (activeNics.Count > 0)
-                        diag.NetworkInterfacesSummary = string.Format("{0} ativo(s)", string.Join(", ", activeNics.Distinct().ToArray()));
-                    else
-                        diag.NetworkInterfacesSummary = "Rede local ativa";
-                }
-                catch { }
+                DetectNetworkInterfacesAndIps(diag);
 
                 // 11. Status de Internet e Ping
                 try
@@ -1430,8 +1309,298 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Obtém diagnóstico rápido e instantâneo do sistema (execução em ~2ms via .NET e Registry, sem WMI).
-        /// Preenche de imediato dados do computador, SO, unidades de armazenamento e memória RAM na abertura do app.
+        /// Detecta antivírus de terceiros e status do Microsoft Defender no sistema operacional.
+        /// </summary>
+        private void DetectAntivirus(FullSystemDiagnosticInfo diag)
+        {
+            if (diag == null) return;
+            string activeThirdPartyAv = null;
+            string inactiveThirdPartyAv = null;
+            bool defenderActive = false;
+            bool defenderFound = false;
+
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher(@"root\SecurityCenter2", "SELECT displayName, productState FROM AntiVirusProduct"))
+                {
+                    foreach (ManagementObject av in searcher.Get())
+                    {
+                        string name = av["displayName"] != null ? av["displayName"].ToString().Trim() : "";
+                        if (string.IsNullOrEmpty(name)) continue;
+
+                        int pState = 0;
+                        if (av["productState"] != null) int.TryParse(av["productState"].ToString(), out pState);
+
+                        // No Windows SecurityCenter2, os bits 12 a 15 (nibble alto do byte intermediário)
+                        // indicam se a proteção em tempo real está ativa: 1 = Ativo / Habilitado, 0 = Desativado
+                        bool isEnabled = ((pState >> 12) & 0x0F) == 1;
+
+                        if (name.IndexOf("Windows Defender", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            name.IndexOf("Microsoft Defender", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            defenderFound = true;
+                            if (isEnabled) defenderActive = true;
+                        }
+                        else
+                        {
+                            if (isEnabled)
+                            {
+                                if (string.IsNullOrEmpty(activeThirdPartyAv))
+                                    activeThirdPartyAv = name;
+                                else if (activeThirdPartyAv.IndexOf(name, StringComparison.OrdinalIgnoreCase) < 0)
+                                    activeThirdPartyAv += ", " + name;
+                            }
+                            else
+                            {
+                                if (string.IsNullOrEmpty(inactiveThirdPartyAv))
+                                    inactiveThirdPartyAv = name;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (!defenderFound)
+            {
+                bool defServiceRunning = false;
+                try
+                {
+                    using (var sc = new System.ServiceProcess.ServiceController("WinDefend"))
+                    {
+                        defServiceRunning = (sc.Status == System.ServiceProcess.ServiceControllerStatus.Running);
+                    }
+                }
+                catch { }
+
+                bool regDisabled = false;
+                try
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender"))
+                    {
+                        if (key != null)
+                        {
+                            var dis = key.GetValue("DisableAntiSpyware");
+                            if (dis != null && (int)dis == 1) regDisabled = true;
+                        }
+                    }
+                }
+                catch { }
+
+                if (defServiceRunning && !regDisabled)
+                {
+                    defenderActive = true;
+                    defenderFound = true;
+                }
+            }
+
+            diag.ThirdPartyAntivirus = activeThirdPartyAv ?? inactiveThirdPartyAv;
+            diag.DefenderActive = defenderActive;
+
+            if (!string.IsNullOrEmpty(activeThirdPartyAv))
+            {
+                diag.AntivirusSummary = string.Format("{0} (Ativo)", activeThirdPartyAv);
+                diag.DefenderStatusText = string.Format("Desativado ({0})", activeThirdPartyAv);
+            }
+            else if (defenderActive)
+            {
+                diag.AntivirusSummary = "Microsoft Defender (Ativo)";
+                diag.DefenderStatusText = "Ativo";
+            }
+            else if (!string.IsNullOrEmpty(inactiveThirdPartyAv))
+            {
+                diag.AntivirusSummary = string.Format("{0} (Desativado)", inactiveThirdPartyAv);
+                diag.DefenderStatusText = "Desativado";
+            }
+            else
+            {
+                diag.AntivirusSummary = "Desativado / Não detectado";
+                diag.DefenderStatusText = "Desativado";
+            }
+        }
+
+        /// <summary>
+        /// Detecta proteção BitLocker e status de criptografia de unidade de forma resiliente.
+        /// Utiliza PacketPrivacy obrigatório na consulta WMI e fallback via manage-bde.exe.
+        /// </summary>
+        private void DetectBitLocker(FullSystemDiagnosticInfo diag)
+        {
+            if (diag == null) return;
+            bool bitlocker = false;
+            string bitlockerDrive = null;
+
+            // 1. Consulta WMI Win32_EncryptableVolume com PacketPrivacy (obrigatório pelo subsistema WMI do BitLocker)
+            try
+            {
+                var scope = new ManagementScope(@"\\.\root\CIMV2\Security\MicrosoftVolumeEncryption");
+                scope.Options.Authentication = AuthenticationLevel.PacketPrivacy;
+                scope.Options.Impersonation = ImpersonationLevel.Impersonate;
+                scope.Options.Timeout = TimeSpan.FromSeconds(2);
+                scope.Connect();
+
+                using (var searcher = new ManagementObjectSearcher(scope, new ObjectQuery("SELECT DriveLetter, ProtectionStatus, ConversionStatus FROM Win32_EncryptableVolume")))
+                {
+                    foreach (ManagementObject vol in searcher.Get())
+                    {
+                        int status = 0;
+                        if (vol["ProtectionStatus"] != null) int.TryParse(vol["ProtectionStatus"].ToString(), out status);
+                        int convStatus = 0;
+                        if (vol["ConversionStatus"] != null) int.TryParse(vol["ConversionStatus"].ToString(), out convStatus);
+                        string letter = (vol["DriveLetter"] ?? "").ToString();
+
+                        if (status == 1 || convStatus == 1 || convStatus == 2)
+                        {
+                            bitlocker = true;
+                            if (!string.IsNullOrEmpty(letter))
+                            {
+                                bitlockerDrive = letter;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 2. Fallback via manage-bde.exe se WMI não obteve proteção ativa
+            if (!bitlocker)
+            {
+                try
+                {
+                    string sysDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                    string bdePath = Path.Combine(sysDir, "manage-bde.exe");
+                    if (File.Exists(bdePath))
+                    {
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = bdePath,
+                            Arguments = "-status C:",
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true
+                        };
+                        using (var p = Process.Start(psi))
+                        {
+                            if (p.WaitForExit(1500))
+                            {
+                                string outText = p.StandardOutput.ReadToEnd();
+                                if (!string.IsNullOrEmpty(outText))
+                                {
+                                    if (outText.IndexOf("Proteção Ativada", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        outText.IndexOf("Protection On", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        outText.IndexOf("Totalmente Criptografado", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        outText.IndexOf("Fully Encrypted", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        (outText.IndexOf("100%", StringComparison.OrdinalIgnoreCase) >= 0 && outText.IndexOf("Criptografado", StringComparison.OrdinalIgnoreCase) >= 0))
+                                    {
+                                        bitlocker = true;
+                                        bitlockerDrive = "C:";
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                try { p.Kill(); } catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            diag.BitLockerActive = bitlocker;
+            if (bitlocker)
+            {
+                diag.BitLockerStatusText = !string.IsNullOrEmpty(bitlockerDrive)
+                    ? string.Format("Ativo ({0})", bitlockerDrive)
+                    : "Ativo";
+            }
+            else
+            {
+                diag.BitLockerStatusText = "Desativado";
+            }
+        }
+
+        /// <summary>
+        /// Detecta interfaces ativas de rede e endereços IPv4 locais de forma nativa e instantânea via .NET (~1ms).
+        /// </summary>
+        private void DetectNetworkInterfacesAndIps(FullSystemDiagnosticInfo diag)
+        {
+            if (diag == null) return;
+            try
+            {
+                var ips = new List<string>();
+                var ipsWithAdapters = new List<string>();
+                var activeNics = new List<string>();
+                bool hasVpn = false;
+
+                foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up)
+                        continue;
+                    if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+                        continue;
+
+                    string desc = nic.Description ?? "";
+                    string name = nic.Name ?? "";
+                    string nicLabel = name;
+
+                    if (desc.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        desc.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        desc.IndexOf("TAP", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        desc.IndexOf("WireGuard", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        name.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        name.IndexOf("VPN", StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        hasVpn = true;
+                        nicLabel = (name.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0 || desc.IndexOf("Radmin", StringComparison.OrdinalIgnoreCase) >= 0) ? "Radmin VPN" : "VPN";
+                    }
+                    else
+                    {
+                        if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Wireless80211)
+                        {
+                            activeNics.Add("Wi-Fi");
+                            nicLabel = "Wi-Fi";
+                        }
+                        else if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Ethernet)
+                        {
+                            activeNics.Add("Ethernet");
+                            nicLabel = "Ethernet";
+                        }
+                    }
+
+                    var ipProps = nic.GetIPProperties();
+                    foreach (var addr in ipProps.UnicastAddresses)
+                    {
+                        if (addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                        {
+                            string ipStr = addr.Address.ToString();
+                            if (!ipStr.StartsWith("127.") && !ipStr.StartsWith("169.254.") && !ips.Contains(ipStr))
+                            {
+                                ips.Add(ipStr);
+                                ipsWithAdapters.Add(string.Format("{0} ({1})", ipStr, nicLabel));
+                            }
+                        }
+                    }
+                }
+
+                diag.AllLocalIps = ipsWithAdapters.Count > 0 ? ipsWithAdapters : ips;
+                string preferredIp = ips.FirstOrDefault(ip => !ip.StartsWith("26.")) ?? (ips.Count > 0 ? ips[0] : "Indisponível");
+                diag.LocalIp = preferredIp;
+
+                if (hasVpn)
+                    diag.NetworkInterfacesSummary = "Radmin / VPN detectadas";
+                else if (activeNics.Count > 0)
+                    diag.NetworkInterfacesSummary = string.Format("{0} ativo(s)", string.Join(", ", activeNics.Distinct().ToArray()));
+                else
+                    diag.NetworkInterfacesSummary = "Rede local ativa";
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Obtém diagnóstico rápido e instantâneo do sistema (execução em ~2ms via .NET e Registry, sem WMI pesado).
+        /// Preenche de imediato dados do computador, SO, unidades de armazenamento, memória RAM, processador, fabricante e rede.
         /// </summary>
         public FullSystemDiagnosticInfo GetQuickSystemDiagnosis()
         {
@@ -1442,50 +1611,141 @@ namespace InstallerGUI.Services
                 diag.UserName = Environment.UserName;
                 try
                 {
+                    diag.DomainOrWorkgroup = Environment.UserDomainName;
+                }
+                catch { }
+
+                try
+                {
                     var principal = new System.Security.Principal.WindowsPrincipal(System.Security.Principal.WindowsIdentity.GetCurrent());
                     diag.IsAdmin = principal.IsInRole(System.Security.Principal.WindowsBuiltInRole.Administrator);
                 }
                 catch { diag.IsAdmin = false; }
 
+                // Identificação rápida do SO via Registry
                 using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows NT\CurrentVersion"))
                 {
                     if (key != null)
                     {
-                        var prod = key.GetValue("ProductName") as string;
-                        var display = key.GetValue("DisplayVersion") as string;
-                        var build = key.GetValue("CurrentBuild") as string;
+                        var prod = (key.GetValue("ProductName") as string) ?? "";
+                        var display = (key.GetValue("DisplayVersion") as string) ?? (key.GetValue("ReleaseId") as string) ?? "";
+                        var build = (key.GetValue("CurrentBuild") as string) ?? (key.GetValue("CurrentBuildNumber") as string) ?? "";
+                        string ubr = key.GetValue("UBR") != null ? key.GetValue("UBR").ToString() : "";
+                        if (!string.IsNullOrEmpty(ubr) && !string.IsNullOrEmpty(build))
+                        {
+                            build = build + "." + ubr;
+                        }
+
+                        int bNum = 0;
+                        if (!string.IsNullOrEmpty(build))
+                        {
+                            string firstPart = build.Split('.')[0];
+                            int.TryParse(firstPart, out bNum);
+                        }
+                        if (bNum >= 22000 && prod.IndexOf("Windows 10", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            prod = prod.Replace("Windows 10", "Windows 11");
+                        }
+
                         if (!string.IsNullOrEmpty(prod))
                         {
                             diag.WindowsEdition = !string.IsNullOrEmpty(display) ? string.Format("{0} {1}", prod, display) : prod;
                         }
                         if (!string.IsNullOrEmpty(build))
                         {
-                            diag.WindowsBuild = string.Format("Build {0}", build);
+                            diag.WindowsBuild = string.Format("(Build {0})", build);
                         }
                     }
                 }
 
-                // IP e Conexão iniciais
-                string localIp = "Detectando...";
+                // Identificação rápida de Fabricante, Modelo e Serial via Registry BIOS (0ms)
                 try
                 {
-                    var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
-                    foreach (var ip in host.AddressList)
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS"))
                     {
-                        if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(ip))
+                        if (key != null)
                         {
-                            localIp = ip.ToString();
-                            diag.AllLocalIps.Add(localIp);
+                            string mf = (key.GetValue("SystemManufacturer") as string) ?? "";
+                            string md = (key.GetValue("SystemProductName") as string) ?? "";
+                            string sn = (key.GetValue("SystemSerialNumber") as string) ?? (key.GetValue("BaseBoardSerialNumber") as string) ?? "";
+
+                            if (!string.IsNullOrEmpty(mf) && mf.IndexOf("System manufacturer", StringComparison.OrdinalIgnoreCase) < 0)
+                                diag.Manufacturer = mf.Trim();
+                            if (!string.IsNullOrEmpty(md) && md.IndexOf("System Product Name", StringComparison.OrdinalIgnoreCase) < 0)
+                                diag.Model = md.Trim();
+                            if (!string.IsNullOrEmpty(sn) && sn.IndexOf("Default", StringComparison.OrdinalIgnoreCase) < 0)
+                                diag.SerialNumber = sn.Trim();
                         }
                     }
                 }
                 catch { }
-                diag.LocalIp = localIp;
-                diag.ConnectionStatusText = "Verificando conexão...";
-                diag.ConnectionStatusColor = ConsoleColor.Yellow;
+
+                // Identificação rápida do Processador via Registry CentralProcessor (0ms)
+                try
+                {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\CentralProcessor\0"))
+                    {
+                        if (key != null)
+                        {
+                            string rawCpu = (key.GetValue("ProcessorNameString") as string) ?? "";
+                            if (!string.IsNullOrEmpty(rawCpu))
+                            {
+                                rawCpu = Regex.Replace(rawCpu, @"\((R|TM)\)", "", RegexOptions.IgnoreCase);
+                                rawCpu = Regex.Replace(rawCpu, @"@.*$", "").Trim();
+                                rawCpu = Regex.Replace(rawCpu, @"\s+", " ");
+                                diag.CpuName = rawCpu;
+                            }
+                        }
+                    }
+                }
+                catch { }
+                int procCount = Environment.ProcessorCount;
+                diag.CpuCores = procCount > 1 ? procCount / 2 : 1;
+                diag.CpuThreads = procCount;
+                diag.CpuSummary = string.Format("({0} Threads)", procCount);
 
                 // Carrega memória RAM e discos fixos instantaneamente
                 UpdateDynamicMetrics(diag);
+                diag.RamSummary = string.Format("{0:N0} GB RAM", Math.Round(diag.TotalRamGb));
+
+                // Interfaces de rede e IPs locais instantâneos via .NET NetworkInterface (1ms)
+                DetectNetworkInterfacesAndIps(diag);
+
+                // Estado de reinicialização pendente e fonte de energia (0ms)
+                try
+                {
+                    bool rebootPending = false;
+                    using (var k1 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending"))
+                        if (k1 != null) rebootPending = true;
+                    if (!rebootPending)
+                    {
+                        using (var k2 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"))
+                            if (k2 != null) rebootPending = true;
+                    }
+                    diag.PendingReboot = rebootPending;
+                    diag.PendingRebootText = rebootPending ? "Sim" : "Não";
+
+                    SYSTEM_POWER_STATUS power;
+                    if (GetSystemPowerStatus(out power))
+                    {
+                        if (power.ACLineStatus == 1)
+                            diag.PowerSourceText = "Na tomada";
+                        else if (power.ACLineStatus == 0)
+                            if (power.BatteryLifePercent <= 100)
+                                diag.PowerSourceText = string.Format("Bateria ({0}%)", power.BatteryLifePercent);
+                            else
+                                diag.PowerSourceText = "Bateria";
+                        else
+                            diag.PowerSourceText = "Na tomada";
+                    }
+                }
+                catch { }
+
+                // Antivírus rápido (< 5ms via SecurityCenter2)
+                DetectAntivirus(diag);
+
+                // BitLocker rápido
+                DetectBitLocker(diag);
             }
             catch { }
 
@@ -1514,7 +1774,26 @@ namespace InstallerGUI.Services
             }
             catch { }
 
-            // 2. Atualiza dados de espaço em disco de todas as unidades fixas via DriveInfo (.NET nativo)
+            // 2. Atualiza fonte e porcentagem da bateria via GetSystemPowerStatus (Win32)
+            try
+            {
+                SYSTEM_POWER_STATUS power;
+                if (GetSystemPowerStatus(out power))
+                {
+                    if (power.ACLineStatus == 1)
+                        diag.PowerSourceText = "Na tomada";
+                    else if (power.ACLineStatus == 0)
+                        if (power.BatteryLifePercent <= 100)
+                            diag.PowerSourceText = string.Format("Bateria ({0}%)", power.BatteryLifePercent);
+                        else
+                            diag.PowerSourceText = "Bateria";
+                    else
+                        diag.PowerSourceText = "Na tomada";
+                }
+            }
+            catch { }
+
+            // 3. Atualiza dados de espaço em disco de todas as unidades fixas via DriveInfo (.NET nativo)
             try
             {
                 if (diag.Drives == null)
@@ -2917,7 +3196,75 @@ namespace InstallerGUI.Services
             return "winget";
         }
 
+        private static string NormalizeSha256(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            var sb = new StringBuilder(value.Length);
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                bool isHex = (c >= '0' && c <= '9') ||
+                             (c >= 'a' && c <= 'f') ||
+                             (c >= 'A' && c <= 'F');
+                if (isHex)
+                    sb.Append(char.ToLowerInvariant(c));
+            }
+            return sb.ToString();
+        }
+
+        private static string ComputeSha256(string path)
+        {
+            try
+            {
+                using (var sha = SHA256.Create())
+                using (var stream = File.OpenRead(path))
+                {
+                    byte[] hash = sha.ComputeHash(stream);
+                    var sb = new StringBuilder(hash.Length * 2);
+                    for (int i = 0; i < hash.Length; i++)
+                        sb.Append(hash[i].ToString("x2"));
+                    return sb.ToString();
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private async Task<string> EnsureProgramDownloadedAsync(ProgramInfo program)
+        {
+            if (program == null)
+                return null;
+
+            string path = await ResolveProgramInstallerAsync(program);
+
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                return path;
+
+            if (string.IsNullOrEmpty(program.Sha256))
+                return path;
+
+            string expected = NormalizeSha256(program.Sha256);
+            string actual = ComputeSha256(path);
+
+            if (string.Equals(expected, actual, StringComparison.OrdinalIgnoreCase))
+            {
+                Log(string.Format("[ok] Hash SHA-256 de {0} validado.", program.DisplayName), ConsoleColor.Green);
+                return path;
+            }
+
+            Log(string.Format("X Hash SHA-256 de {0} nao confere. Esperado: {1} | Obtido: {2}",
+                program.DisplayName, expected, actual ?? "erro ao calcular"), ConsoleColor.Red);
+
+            try { File.Delete(path); } catch { }
+
+            return null;
+        }
+
+        private async Task<string> ResolveProgramInstallerAsync(ProgramInfo program)
         {
             if (program.Id == "rustdesk")
             {
@@ -6335,6 +6682,11 @@ namespace InstallerGUI.Services
 
             Log("=== INICIANDO INSTALAÇÃO ===", ConsoleColor.Cyan);
             Log(string.Format("Data: {0:dd/MM/yyyy HH:mm:ss}", DateTime.Now), ConsoleColor.Gray);
+
+            string logPath = GetLogFilePath();
+            if (!string.IsNullOrEmpty(logPath))
+                Log("Arquivo de log: " + logPath, ConsoleColor.Gray);
+
             Log("", null);
 
             try
@@ -7139,10 +7491,99 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Dispara o evento de log para a interface tratar.
+        /// Retorna o caminho do arquivo de log da sessão, criando o diretório
+        /// em C:\ProgramData\EXABIT\Logs (ou na pasta temporária como fallback).
+        /// </summary>
+        private string GetLogFilePath()
+        {
+            if (!string.IsNullOrEmpty(_logFilePath))
+                return _logFilePath;
+
+            lock (_logFileLock)
+            {
+                if (!string.IsNullOrEmpty(_logFilePath))
+                    return _logFilePath;
+
+                string directory = null;
+
+                try
+                {
+                    directory = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                        "EXABIT", "Logs");
+                    Directory.CreateDirectory(directory);
+                }
+                catch
+                {
+                    try
+                    {
+                        directory = Path.Combine(Path.GetTempPath(), "EXABIT_Logs");
+                        Directory.CreateDirectory(directory);
+                    }
+                    catch
+                    {
+                        return null;
+                    }
+                }
+
+                _logFilePath = Path.Combine(directory,
+                    string.Format("install-{0:yyyyMMdd-HHmmss}.log", DateTime.Now));
+                return _logFilePath;
+            }
+        }
+
+        /// <summary>
+        /// Grava a mensagem no arquivo de log da sessão, com data e hora.
+        /// Falhas de escrita são ignoradas para nunca interromper a instalação.
+        /// </summary>
+        private void WriteLogFile(string message)
+        {
+            try
+            {
+                string path = GetLogFilePath();
+                if (string.IsNullOrEmpty(path))
+                    return;
+
+                var buffer = new StringBuilder();
+
+                lock (_logFileLock)
+                {
+                    if (!_logFileHeaderWritten)
+                    {
+                        _logFileHeaderWritten = true;
+
+                        string version = "desconhecida";
+                        try
+                        {
+                            version = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+                        }
+                        catch { }
+
+                        buffer.AppendLine("==================================================");
+                        buffer.AppendLine(" Auto Instalador de Programas - EXABIT");
+                        buffer.AppendLine(" Versao: " + version);
+                        buffer.AppendLine(" Inicio: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                        buffer.AppendLine(" Maquina: " + Environment.MachineName);
+                        buffer.AppendLine(" Usuario: " + Environment.UserName);
+                        buffer.AppendLine(" Sistema: " + Environment.OSVersion.VersionString);
+                        buffer.AppendLine("==================================================");
+                    }
+
+                    buffer.AppendLine(string.Format("[{0:yyyy-MM-dd HH:mm:ss}] {1}",
+                        DateTime.Now, message));
+                    File.AppendAllText(path, buffer.ToString(), Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Dispara o evento de log para a interface tratar e grava no arquivo da sessão.
         /// </summary>
         private void Log(string message, ConsoleColor? color)
         {
+            WriteLogFile(message);
+
             if (OnLog != null)
                 OnLog(message, color ?? ConsoleColor.Gray);
         }
@@ -7353,6 +7794,7 @@ namespace InstallerGUI.Services
         public bool DefenderActive { get; set; }
         public string DefenderStatusText { get; set; }
         public string ThirdPartyAntivirus { get; set; }
+        public string AntivirusSummary { get; set; }
         public bool BitLockerActive { get; set; }
         public string BitLockerStatusText { get; set; }
         public bool PendingReboot { get; set; }
@@ -7372,13 +7814,14 @@ namespace InstallerGUI.Services
             ConnectionStatusColor = ConsoleColor.Yellow;
             LocalIp = "Indisponível";
             NetworkInterfacesSummary = "Detectando interfaces...";
-            CpuName = "Processador";
-            RamSummary = "Memória";
-            Manufacturer = "Fabricante";
-            Model = "Modelo";
-            SerialNumber = "Não informado";
-            DefenderStatusText = "Ativo";
-            BitLockerStatusText = "Desativado";
+            CpuName = "Identificando...";
+            RamSummary = "Memória RAM";
+            Manufacturer = "Identificando...";
+            Model = "Identificando...";
+            SerialNumber = "Identificando...";
+            AntivirusSummary = "Identificando...";
+            DefenderStatusText = "Identificando...";
+            BitLockerStatusText = "Verificando...";
             PendingRebootText = "Não";
             PowerSourceText = "Na tomada";
         }
