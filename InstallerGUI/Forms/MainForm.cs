@@ -3854,7 +3854,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("crystaldiskinfo", "CrystalDiskInfo",         "CrystalDiskInfo9_9_5.exe", "/VERYSILENT /NORESTART /ALLUSERS /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("crystaldiskmark", "CrystalDiskMark",         "CrystalDiskMark9_0_3.exe", "/VERYSILENT /NORESTART /ALLUSERS /SP-",               "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("easeustodo",      "EaseUS Todo Backup Free", "tb_free.exe",              "/VERYSILENT /NORESTART /ALLUSERS /SUPPRESSMSGBOXES",  "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("recuva",          "Recuva Free",             "rcsetup155.exe",           "/S /allusers",                              "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("recuva",          "Recuva Free",             "rcsetup155.exe",           "/S",                                        "", "Manutenção") { RequiresInternet = true, DefaultChecked = false },
             };
             manutencaoList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
@@ -3878,7 +3878,7 @@ namespace InstallerGUI.Forms
 
             var devList = new List<ProgramInfo>
             {
-                new ProgramInfo("antigravity",    "Antigravity",         "Antigravity-x64.exe", "/S /allusers",                                            "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("antigravity",    "Antigravity",         "Antigravity-x64.exe", "/S",                                                      "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("antigravityide", "Antigravity IDE",     "Antigravity_IDE.exe", "/VERYSILENT /NORESTART /ALLUSERS /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("vscode",         "Visual Studio Code",  "VSCodeSetup_x64.exe", "/VERYSILENT /NORESTART /ALLUSERS /MERGETASKS=\"!runcode\"", "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
                 new ProgramInfo("nodejs",         "Node.js LTS",         "node_lts_x64.msi",    "/qn /norestart ALLUSERS=1",                               "", "Desenvolvimento") { RequiresInternet = true, DefaultChecked = false },
@@ -3896,9 +3896,9 @@ namespace InstallerGUI.Forms
             var aiList = new List<ProgramInfo>
             {
                 new ProgramInfo("chatgpt",  "ChatGPT Desktop",  "ChatGPT-x64.msix",             "",                                    "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("claude",   "Claude Desktop",   "Claude-Setup-x64.exe",         "--silent /allusers",                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("deepseek", "DeepSeek Desktop", "deepseek-harness-win-x64.exe", "/S /allusers",                        "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("gemini",   "Gemini Desktop",   "GeminiSetup.exe",              "/S /allusers",                        "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("claude",   "Claude Desktop",   "Claude-Setup-x64.exe",         "--silent",                            "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("deepseek", "DeepSeek Desktop", "deepseek-harness-win-x64.exe", "/S",                                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
+                new ProgramInfo("gemini",   "Gemini Desktop",   "GeminiSetup.exe",              "/S",                                  "", "Inteligência Artificial") { RequiresInternet = true, DefaultChecked = false },
             };
             aiList.Sort((a, b) => string.Compare(a.DisplayName, b.DisplayName, StringComparison.CurrentCultureIgnoreCase));
 
@@ -3910,7 +3910,7 @@ namespace InstallerGUI.Forms
             // 3. Inteligência Artificial
             list.AddRange(aiList);
             // 4. ArtCraft Studio e apps Craft
-            list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S /allusers", "", "ArtCraft") { DefaultChecked = false });
+            list.Add(new ProgramInfo("artcraft", "ArtCraft Studio (Suíte Criativa)", "ArtCraft_setup.exe", "/S", "", "ArtCraft") { DefaultChecked = false });
             list.AddRange(craftList);
             // 5. Desenvolvimento
             list.AddRange(devList);

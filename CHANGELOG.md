@@ -17,6 +17,11 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **Criação Condicional de Conta Admin Baseada no Preenchimento da Senha**:
   - A criação e configuração do usuário "admin" agora só ocorre se o campo *"Senha do Admin"* for preenchido com ao menos um caractere.
   - Se o campo estiver em branco, a conta de admin não é criada nem modificada, alinhando-se estritamente à orientação exibida na interface *"Os campos acima só funcionam caso preenchidos (em branco = não alterar)"*.
+- **Correção da Instalação do DeepSeek Desktop e Ajuste de Argumentos NSIS**:
+  - Identificada a causa do erro de código 2: o instalador do DeepSeek Harness é baseado em Nullsoft (NSIS), que aceita estritamente o parâmetro `/S` e falha se receber parâmetros não suportados como `/allusers`.
+  - Ajustados os parâmetros de linha de comando para `/S` para instaladores NSIS (`deepseek`, `gemini`, `antigravity`, `recuva`, `artcraft`) e `--silent` para `claude`. A compatibilidade com todos os perfis permanece 100% garantida pela rotina de propagação global `EnsureAllProgramsAccessibleForAllProfilesAsync`.
+  - Removido o argumento `--scope machine` da chamada do `winget` para o DeepSeek Harness, permitindo que o Windows Package Manager instale o pacote nativamente sem recusar por incompatibilidade de escopo no manifesto.
+  - Adicionada rotina de recuperação e retry automático com `/S` caso qualquer instalador NSIS retorne código de saída não-zero.
 - **Substituição Visual dos Checkboxes pelo Tema Corporativo Laranja (`DarkCheckBox`)**:
   - Implementada a classe `DarkCheckBox : CheckBox` com renderização personalizada GDI+ nativa:
     - Fundo marcado preenchido no tom laranja corporativo oficial da EXABIT (`CorDestaqueLaranja` / `#FF8C00` / `RGB 255, 140, 0`), o mesmo utilizado na barra de rolagem `DarkScrollBar`.

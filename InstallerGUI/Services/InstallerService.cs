@@ -3430,7 +3430,7 @@ namespace InstallerGUI.Services
                 Log("Instalando DeepSeek Desktop via Windows Package Manager...", ConsoleColor.Cyan);
                 string wingetExe = FindWingetExecutable();
                 int wingetExit = await RunProcessAsync(wingetExe,
-                    "install --id DeepSeek.DeepSeekHarnessDesktop --scope machine -e --silent --accept-source-agreements --accept-package-agreements",
+                    "install --id DeepSeek.DeepSeekHarnessDesktop -e --silent --accept-source-agreements --accept-package-agreements",
                     1200000, null, false);
 
                 if (wingetExit == 0 || IsDeepSeekDesktopInstalled())
@@ -3751,10 +3751,27 @@ namespace InstallerGUI.Services
                         Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
                         return true;
                     }
-                    else if (program.Id == "deepseek" && IsDeepSeekDesktopInstalled())
+                    else if (program.Id == "deepseek")
                     {
-                        Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
-                        return true;
+                        if (IsDeepSeekDesktopInstalled())
+                        {
+                            Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                            return true;
+                        }
+
+                        if (!string.Equals(program.Arguments, "/S", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Log(string.Format("  DeepSeek retornou código {0}. Tentando com parâmetro /S silencioso padrão...", exitCode), ConsoleColor.Yellow);
+                            int retryExit = await RunProcessAsync(fullPath, "/S", timeout, procWorkDir, false);
+                            if (retryExit == 0 || IsDeepSeekDesktopInstalled())
+                            {
+                                Log(string.Format("[ok] {0} instalado com sucesso.", program.DisplayName), ConsoleColor.Green);
+                                return true;
+                            }
+                        }
+
+                        Log(string.Format("X {0} retornou código {1}.", program.DisplayName, exitCode), ConsoleColor.Yellow);
+                        return false;
                     }
                     else if (program.Id == "easeustodo" && IsEaseUSTodoBackupInstalled())
                     {
