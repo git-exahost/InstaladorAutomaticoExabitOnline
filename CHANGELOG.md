@@ -7,6 +7,23 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.100] - 2026-11-21
+
+### Segurança operacional e confiabilidade
+
+- **Cancelamento efetivo**: o botão PARAR aborta downloads em andamento e solicita o encerramento do processo em execução. A interface indica `PARANDO...`; etapas já concluídas não são revertidas.
+- **Proteção na remoção de perfis**: a opção agora mostra contas, perfis e pastas identificados antes da confirmação, preserva contas com perfil carregado e o caminho exato do usuário atual, e registra falhas de exclusão em vez de reportar sucesso silencioso.
+- **Erros de log explícitos**: se o log em arquivo não puder ser criado ou atualizado, a interface recebe um aviso sem interromper a instalação.
+
+### Manutenção e build
+
+- `InstallerService` foi dividido em arquivos parciais para downloads/resolução de instaladores e execução de processos, sem alterar a API pública do serviço.
+- Versão do assembly, versão do arquivo e manifesto alinhados para `2.0.0.100`; `validate-version.ps1` valida a consistência antes do build.
+- O `build.bat` aceita `EXABIT_BUILD_NONINTERACTIVE=1` para compilação sem pausas de console.
+- Adicionado workflow do GitHub Actions para compilar em Windows em pushes e pull requests para `master` e armazenar o executável como artefato.
+
+---
+
 ## [2.0.0.99] - 2026-11-21
 
 ### Segurança — Assinatura Authenticode real e remoção do certificado autoassinado

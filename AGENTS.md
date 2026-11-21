@@ -21,12 +21,15 @@ Instalador Automatico Exabit Online/
 │   ├── Models/
 │   │   └── ProgramInfo.cs    → Modelo de dados dos programas
 │   ├── Services/
-│   │   └── InstallerService.cs → Lógica de instalação e diagnóstico
+│   │   ├── InstallerService.cs → Orquestração, Windows e diagnóstico
+│   │   ├── InstallerService.Downloads.cs → Downloads e resolvedores
+│   │   └── InstallerService.ProcessRunner.cs → Execução/cancelamento de processos
 │   ├── Image/                → Recursos visuais embutidos (logo)
 │   ├── Sound/                → Sons embutidos (R2D2.mp3)
 │   ├── Scripts/              → apply_wallpapers.ps1 (embutido)
 │   ├── Properties/
 │   │   └── AssemblyInfo.cs   → Versão do assembly
+│   ├── validate-version.ps1  → Confere as versões do assembly e manifesto
 │   ├── Program.cs            → Entry point (elevação UAC)
 │   ├── app.manifest          → requireAdministrator + DPI
 │   ├── app.config            → Configuração de DPI
@@ -38,10 +41,15 @@ Instalador Automatico Exabit Online/
 │   ├── Wallpapers/           → Papéis de parede (EXABIT e Nortel)
 │   └── build_info.txt        → Data da última compilação
 ├── archive/                  → Scripts batch antigos (referência)
+├── .github/workflows/build.yml → Build contínuo do executável no Windows
 ├── README.md                 → Documentação principal
 ├── CHANGELOG.md              → Registro de versões
 └── AGENTS.md                 → Este arquivo
 ```
+
+Versão de referência atual: **2.0.0.100** em
+`InstallerGUI/Properties/AssemblyInfo.cs`. O `validate-version.ps1` verifica
+a consistência com `app.manifest` antes do build.
 
 > **Instalação 100% online:** não existe mais a pasta `dist/Programas/`.
 > Cada programa é baixado do site oficial e armazenado em
@@ -51,7 +59,7 @@ Instalador Automatico Exabit Online/
 
 ```
 Forms/MainForm.cs         → VISÃO (UI) - Só se comunica com Services
-Services/InstallerService → LÓGICA - Executa processos, dispara eventos
+Services/InstallerService*.cs → LÓGICA - Orquestra, baixa e executa
 Models/ProgramInfo.cs     → DADOS - Estrutura dos programas
 ```
 
@@ -65,6 +73,17 @@ Models/ProgramInfo.cs     → DADOS - Estrutura dos programas
   - `OnDownloadProgress(string, int, long, long)` → progresso de download
   - `OnInstallationCompleted()` → disparado quando a instalação é concluída com sucesso
 - Para acessar a UI com segurança de thread: `Invoke(new Action(...))`
+- `InstallerService` é uma classe parcial dividida por responsabilidade;
+  os arquivos parciais devem permanecer listados no `.csproj` e no `build.bat`.
+- `InstallerService.Downloads.cs` contém os downloads e resolvedores de
+  instaladores; `InstallerService.ProcessRunner.cs` centraliza execução,
+  timeout, captura de erros e cancelamento de processos.
+- O botão PARAR cancela downloads e tenta encerrar o processo corrente;
+  instalações concluídas não são revertidas e processos auxiliares do instalador
+  podem sobreviver.
+- A remoção de perfis exige confirmação com prévia e preserva contas/perfis
+  carregados e o caminho exato do usuário atual. A limpeza é destrutiva e
+  precisa continuar exibindo a prévia antes de qualquer exclusão.
 
 ## Convenções de Código
 
@@ -113,6 +132,8 @@ Não requer Visual Studio, NuGet, SDKs ou qualquer instalação adicional.
 O .NET Framework 4.8 já está presente no Windows 10/11.
 
 - Saída oficial: `dist/Instalador Automatico Exabit.exe`
+- A versão oficial fica em `Properties/AssemblyInfo.cs`; `validate-version.ps1`
+  verifica a consistência com `app.manifest`.
 - O `InstallerGUI.csproj` serve para edição no Visual Studio e está
   alinhado ao `build.bat` (mesmo nome de saída, referências, manifesto,
   ícone e recursos embutidos)
@@ -120,6 +141,11 @@ O .NET Framework 4.8 já está presente no Windows 10/11.
   (PFX via `EXABIT_SIGN_PFX`/`EXABIT_SIGN_PFX_PASSWORD` ou certificado
   OV/EV instalado no repositório). Sem certificado real, a assinatura é
   ignorada e o build continua.
+- O workflow `.github/workflows/build.yml` compila o projeto no Windows a cada
+  push/pull request para `master` e publica o executável como artefato do job.
+- Para compilação sem `pause` em CI, definir
+  `EXABIT_BUILD_NONINTERACTIVE=1`. O workflow compila, mas não assina sem
+  certificado real nem executa testes automatizados.
 
 ## Logs e Verificação de Integridade
 
@@ -136,7 +162,7 @@ O .NET Framework 4.8 já está presente no Windows 10/11.
 1. Descobrir a URL oficial de download e os argumentos silenciosos
 2. Cadastrar em `GetDefaultProgramList()` (`Forms/MainForm.cs`), com ID,
    nome, arquivo de cache, argumentos e categoria
-3. Implementar o download em `Services/InstallerService.cs`:
+3. Implementar o download em `Services/InstallerService.Downloads.cs`:
    - branch em `ResolveProgramInstallerAsync()`, ou
    - método `Resolve<Id>InstallerAsync()` usando `DownloadFileOnlineAsync`
    - `EnsureProgramDownloadedAsync()` é o wrapper que chama o resolvedor
@@ -220,8 +246,10 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 ### 4. Barras de Consumo / MiniUsageBar
 - Altura de 8px. Deve estar posicionada logo abaixo do texto descritivo (distância de 4px a 6px), nunca no rodapé de um painel esticado.
 
-### 5. Atualizações Periódicas e Timers (5 Segundos)
-- O espaço em disco (Disco C:) e a latência de rede (Ping / Conexão) na tela principal e no diagnóstico completo são atualizados dinamicamente a cada **5 segundos** (`_metricsRefreshTimer.Interval = 5000`), utilizando APIs leves de alta performance (`DriveInfo.GetDrives()`, `GlobalMemoryStatusEx` e `MeasureInternetPingAsync` assíncrono em background), sem chamadas WMI lentas na thread de UI.
+### 5. Atualizações Periódicas e Timers
+- O disco e a RAM são atualizados pelo `_syncMetricsTimer` a cada **3 segundos**, com APIs síncronas leves (`DriveInfo` e `GlobalMemoryStatusEx`).
+- O ping é atualizado pelo `_pingTimer` a cada **5 segundos**, em background, sem bloquear a thread da UI.
+- Não reintroduza WMI lento nem una os timers: a independência evita que uma consulta de rede atrase a atualização de disco e memória.
 
 ### 6. Restrição de Janela (FixedSingle, Sem Maximizar, Otimizada para 720p)
 - **Bloqueio de Redimensionamento**: `FormBorderStyle = FormBorderStyle.FixedSingle` (borda fixa, cursor nunca vira seta de redimensionamento).
@@ -260,8 +288,11 @@ Ao receber tarefas sobre este projeto:
 2. Verifique o `CHANGELOG.md` para entender o histórico
 3. Consulte `AGENTS.md` (este arquivo) para regras e convenções
 4. Para entender o layout: leia `Forms/MainForm.cs` → método `BuildUI()`
-5. Para entender a lógica: leia `Services/InstallerService.cs`
-6. Compile e teste após qualquer alteração
+5. Para entender a lógica, leia `Services/InstallerService.cs` e os parciais
+   `Services/InstallerService.Downloads.cs` e
+   `Services/InstallerService.ProcessRunner.cs`
+6. Compile com `build.bat`; o projeto não tem suíte de testes automatizados,
+   então valide manualmente a funcionalidade alterada em Windows
 7. Se adicionar funcionalidade nova, atualize o `CHANGELOG.md`
 8. Não adicione dependências externas (NuGet, DLLs)
 9. C# 5.0 não suporta string interpolation, pattern matching, null-conditional

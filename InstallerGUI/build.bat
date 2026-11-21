@@ -16,6 +16,15 @@ if not exist %CSC% (
 echo Compilador: %CSC%
 echo.
 
+REM Confere a versão do assembly e do manifesto antes de compilar
+powershell -NoProfile -ExecutionPolicy Bypass -File validate-version.ps1
+if errorlevel 1 (
+    echo.
+    echo  X  As versões do assembly e do manifesto não coincidem.
+    if not defined EXABIT_BUILD_NONINTERACTIVE pause
+    exit /b 1
+)
+
 REM Cria diretÃ³rio de saÃ­da se nÃ£o existir
 if not exist "bin\Release" mkdir "bin\Release"
 
@@ -48,6 +57,8 @@ REM Compila todos os arquivos .cs
       Forms\MainForm.cs ^
       Models\ProgramInfo.cs ^
       Services\InstallerService.cs ^
+      Services\InstallerService.Downloads.cs ^
+      Services\InstallerService.ProcessRunner.cs ^
       Properties\AssemblyInfo.cs
 
 REM Verifica resultado
@@ -81,11 +92,11 @@ if %errorlevel% equ 0 (
     echo.
     echo  X  Erro na compilacao. Verifique os erros acima.
     echo.
-    pause
+    if not defined EXABIT_BUILD_NONINTERACTIVE pause
     exit /b 1
 )
 
 echo.
 echo Para executar: "dist\Instalador Automatico Exabit.exe"
 echo.
-pause
+if not defined EXABIT_BUILD_NONINTERACTIVE pause

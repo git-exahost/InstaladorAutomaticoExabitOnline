@@ -1,0 +1,30 @@
+name: Build Windows installer
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build with .NET Framework compiler
+        shell: cmd
+        run: |
+          cd InstallerGUI
+          set EXABIT_BUILD_NONINTERACTIVE=1
+          call build.bat
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: exabit-installer
+          path: dist/Instalador Automatico Exabit.exe

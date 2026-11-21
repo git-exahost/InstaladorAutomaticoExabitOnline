@@ -293,7 +293,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.98";
+            return "desconhecida";
         }
 
         // ──────────────────────────────────────────────
@@ -2949,6 +2949,28 @@ namespace InstallerGUI.Forms
                     }
                 }
 
+                if (_chkRemoveOtherProfiles != null && _chkRemoveOtherProfiles.Checked)
+                {
+                    string standardUserToKeep = string.IsNullOrWhiteSpace(_txtStandardUserName.Text)
+                        ? null
+                        : _txtStandardUserName.Text.Trim();
+                    string adminUserToKeep = string.IsNullOrWhiteSpace(_txtAdminPass.Text) ? null : "Admin";
+                    string cleanupPreview = await Task.Run(
+                        () => _service.GetUserProfileCleanupPreview(standardUserToKeep, adminUserToKeep));
+                    var cleanupConfirmation = MessageBox.Show(
+                        "A ação abaixo é permanente e apagará as contas/perfis listados. Faça backup dos dados importantes antes de continuar.\n\n" +
+                        cleanupPreview + "\nDeseja prosseguir com a remoção?",
+                        "Confirmar remoção de perfis do Windows",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (cleanupConfirmation != DialogResult.Yes)
+                    {
+                        AppendLog("Remoção de perfis cancelada pelo usuário.", ConsoleColor.Yellow);
+                        return;
+                    }
+                }
+
                 _btnInstall.Text = "INSTALANDO...";
                 SetStopButtonState(true);
 
@@ -3033,7 +3055,8 @@ namespace InstallerGUI.Forms
             if (result == DialogResult.Yes)
             {
                 _service.CancelInstallation();
-                SetStopButtonState(false);
+                _btnStop.Enabled = false;
+                _btnStop.Text = "PARANDO...";
                 AppendLog("Solicitação de parada enviada...", ConsoleColor.Yellow);
             }
         }
@@ -3054,6 +3077,7 @@ namespace InstallerGUI.Forms
             if (active)
             {
                 _btnStop.Enabled = true;
+                _btnStop.Text = "PARAR";
                 _btnStop.BackColor = Color.FromArgb(190, 40, 40);
                 _btnStop.ForeColor = Color.White;
                 _btnStop.Cursor = Cursors.Hand;
@@ -3062,6 +3086,7 @@ namespace InstallerGUI.Forms
             else
             {
                 _btnStop.Enabled = false;
+                _btnStop.Text = "PARAR";
                 _btnStop.BackColor = Color.FromArgb(50, 50, 50);
                 _btnStop.ForeColor = Color.FromArgb(110, 110, 110);
                 _btnStop.Cursor = Cursors.Default;

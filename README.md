@@ -43,11 +43,15 @@ EXABIT), executa em modo silencioso e guarda o cache em
 - **Diagnóstico do sistema** em tempo real: CPU, RAM, discos, rede, ping,
   antivírus, BitLocker, reinicialização pendente e fonte/bateria
 - **Log de sessão em arquivo** em `C:\ProgramData\EXABIT\Logs` (para suporte)
-- **Verificação opcional de SHA-256** dos instaladores baixados
+- **Verificação opcional de SHA-256** quando o hash está configurado no catálogo
 - **Limpeza do sistema**: desinstalar jogos, remover antivírus de
   terceiros, apagar perfis antigos e limpar atalhos do Desktop público
+- **Prévia e confirmação** antes de remover contas e perfis do Windows
+- **Cancelamento** de downloads e do processo de instalação em execução
 - **Atalhos corporativos** (Suporte EXABIT, Exahost, Webmail Nortel, etc.)
 - **Reiniciar** o computador ao concluir (opcional)
+
+Versão atual do código-fonte: **2.0.0.100** (`AssemblyInfo.cs`).
 
 ---
 
@@ -61,7 +65,9 @@ Instalador Automatico Exabit Online/
 │   ├── Models/
 │   │   └── ProgramInfo.cs               # Modelo de dados de cada programa
 │   ├── Services/
-│   │   └── InstallerService.cs          # Lógica de instalação e diagnóstico
+│   │   ├── InstallerService.cs          # Orquestração, Windows e diagnóstico
+│   │   ├── InstallerService.Downloads.cs # Downloads e resolvedores
+│   │   └── InstallerService.ProcessRunner.cs # Execução e cancelamento de processos
 │   ├── Properties/
 │   │   └── AssemblyInfo.cs              # Metadados da versão
 │   ├── Image/
@@ -73,6 +79,7 @@ Instalador Automatico Exabit Online/
 │   ├── app.config                       # Configuração de DPI
 │   ├── app.manifest                     # Requer Administrador
 │   ├── sign.ps1                         # Assinatura Authenticode (opcional)
+│   ├── validate-version.ps1             # Valida a versão do assembly e manifesto
 │   ├── InstallerGUI.csproj              # Projeto MSBuild
 │   ├── build.bat                        # Script oficial de compilação
 │   ├── Program.cs                       # Ponto de entrada
@@ -85,6 +92,7 @@ Instalador Automatico Exabit Online/
 │   └── build_info.txt                   # Data da última compilação
 │
 ├── archive/                             # Scripts batch antigos (referência)
+├── .github/workflows/build.yml          # Build e artefato no GitHub Actions
 ├── README.md                            # Este arquivo
 ├── CHANGELOG.md                         # Registro de versões
 └── AGENTS.md                            # Diretrizes para agentes de IA
@@ -97,7 +105,11 @@ Instalador Automatico Exabit Online/
 | `Program.cs` | Ponto de entrada. Verifica privilégios e eleva para Administrador. |
 | `Forms/MainForm.cs` | Interface gráfica (abas, checkboxes, cards, log). |
 | `Models/ProgramInfo.cs` | Define o que é um "programa" (nome, arquivo, argumentos, flags). |
-| `Services/InstallerService.cs` | Executa cada etapa (contas, wallpaper, downloads, instalação, limpeza). |
+| `Services/InstallerService.cs` | Orquestra a instalação, configuração do Windows e diagnóstico. |
+| `Services/InstallerService.Downloads.cs` | Resolve e baixa instaladores online. |
+| `Services/InstallerService.ProcessRunner.cs` | Executa processos e scripts PowerShell com timeout e cancelamento. |
+| `Properties/AssemblyInfo.cs` | Fonte da versão do produto e metadados do assembly. |
+| `validate-version.ps1` | Falha o build quando AssemblyVersion, AssemblyFileVersion e manifesto divergem. |
 | `Scripts/apply_wallpapers.ps1` | Aplica os wallpapers em todos os temas e perfis. |
 | `sign.ps1` | Assina o executável com um certificado corporativo real. |
 | `build.bat` | Compila o projeto usando o `csc.exe` do próprio Windows. |
@@ -130,6 +142,18 @@ Instalador Automatico Exabit Online/
 > NOTA: A instalação é silenciosa (automática). Os programas são baixados
 > e instalados sem abrir janelas de confirmação.
 
+Se a opção de remoção de perfis estiver marcada, antes da instalação será
+exibida uma prévia das contas, perfis e pastas que serão removidos e
+preservados. A remoção é permanente; faça backup antes de confirmá-la.
+O botão **PARAR** interrompe o download/processo atual quando possível.
+Etapas já concluídas não são revertidas, e processos auxiliares iniciados
+por um instalador podem continuar executando.
+
+O preview de remoção é calculado antes da confirmação. Perfis carregados,
+a conta atual e os perfis especiais do Windows são protegidos. Ainda assim,
+revise a lista com atenção: a operação remove dados e não possui função de
+desfazer.
+
 ---
 
 ## Como Compilar
@@ -146,21 +170,30 @@ build.bat
 O script vai:
 
 1. Localizar o compilador C# do .NET Framework (`csc.exe`)
-2. Compilar todos os arquivos `.cs`
-3. Embutir logo, som e o script de wallpaper como recursos
-4. Gerar `dist\Instalador Automatico Exabit.exe`
-5. Copiar o `app.config` para `dist\`
-6. Executar `sign.ps1` (assinatura opcional — veja abaixo)
+2. Validar que as versões em `AssemblyInfo.cs` e `app.manifest` coincidem
+3. Compilar todos os arquivos `.cs`
+4. Embutir logo, som e o script de wallpaper como recursos
+5. Gerar `dist\Instalador Automatico Exabit.exe`
+6. Copiar o `app.config` para `dist\`
+7. Executar `sign.ps1` (assinatura opcional — veja abaixo)
 
 > O `build.bat` continua sendo o **método oficial** de build (não exige
 > Visual Studio). O `InstallerGUI.csproj` está alinhado a ele e pode ser
 > usado para editar/compilar no Visual Studio, gerando o mesmo executável
 > em `bin\Release\`.
 
+O workflow [build.yml](./.github/workflows/build.yml) compila o projeto em
+Windows a cada push e pull request para `master`, publicando o executável
+como artefato do job. O workflow não assina o arquivo sem um certificado
+real configurado. O repositório não contém uma suíte de testes automatizados;
+o workflow valida a compilação, não o comportamento do instalador em uma
+máquina Windows real.
+
 ### Compilação manual
 
 ```cmd
 cd InstallerGUI
+powershell -NoProfile -ExecutionPolicy Bypass -File validate-version.ps1
 
 "%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" ^
     /target:winexe ^
@@ -187,8 +220,14 @@ cd InstallerGUI
     Forms\MainForm.cs ^
     Models\ProgramInfo.cs ^
     Services\InstallerService.cs ^
+    Services\InstallerService.Downloads.cs ^
+    Services\InstallerService.ProcessRunner.cs ^
     Properties\AssemblyInfo.cs
 ```
+
+`Properties\AssemblyInfo.cs` é a fonte da versão do produto. O script
+`validate-version.ps1` impede compilações quando o manifesto estiver com
+uma versão diferente.
 
 ---
 
@@ -241,13 +280,17 @@ new ProgramInfo("meuprograma", "Meu Programa", "setup.exe", "/S", "", "Geral")
 > release. Prefira preencher o hash quando a URL é versionada e o
 > fabricante publica o checksum oficial.
 
+O campo é opcional e só protege os programas que tenham o hash preenchido;
+o catálogo atual ainda não fornece checksums para todos os instaladores.
+
 ---
 
 ## Adicionar ou Remover Programas
 
 O catálogo de programas fica em `GetDefaultProgramList()` no
-`Forms/MainForm.cs`, e a lógica de download/instalação fica no
-`Services/InstallerService.cs`.
+`Forms/MainForm.cs`. Downloads e resolvedores ficam em
+`Services/InstallerService.Downloads.cs`; tratamentos de instalação e
+orquestração do Windows ficam em `Services/InstallerService.cs`.
 
 ### Adicionar um novo programa
 
@@ -265,7 +308,7 @@ new ProgramInfo(
 ```
 
 2. **Implemente o download** no `InstallerService`:
-   - Adicione um branch em `EnsureProgramDownloadedAsync()` **ou**
+   - Adicione um branch em `ResolveProgramInstallerAsync()` **ou**
    - Crie um método `ResolveMeuProgramaInstallerAsync(ProgramInfo)` que
      chame `DownloadFileOnlineAsync(url, arquivo, nome, tamanhoMinimo)`.
    - Use sempre `https://` e a URL oficial do fabricante.
@@ -291,12 +334,15 @@ new ProgramInfo(
 
 | Propriedade | Efeito |
 |-------------|---------|
+| `Arguments` | Argumentos silenciosos enviados ao instalador |
+| `DownloadUrl` | URL direta alternativa para obter o instalador |
 | `RequiresInternet` | Indica que o programa precisa de download online |
 | `DefaultChecked` | Se aparece marcado por padrão |
 | `TimeoutMs` | Tempo máximo de espera (0 = padrão global) |
 | `FireAndForget` | Inicia o instalador sem aguardar o término |
 | `UseShellExecute` | Usa ShellExecute (necessário em alguns instaladores) |
 | `ProcessWorkingDir` | Diretório de trabalho do processo |
+| `Sha256` | Hash esperado, quando disponível e configurado |
 | `Category` | Agrupa o programa na interface |
 
 ---
@@ -312,11 +358,11 @@ new ProgramInfo(
 │  - Abas, checkboxes, botões, log                │
 │  - Só se comunica com o InstallerService        │
 ├────────────────────────────────────────────────┤
-│  Services/InstallerService.cs (CAMADA DE LÓGICA)│
-│  - Executa processos (netsh, powershell, etc.)  │
-│  - Downloads online e diagnóstico do sistema    │
-│  - Dispara eventos de progresso e log           │
-│  - Não referencia System.Windows.Forms          │
+│  Services/InstallerService*.cs (LÓGICA)         │
+│  - InstallerService.cs: Windows e orquestração  │
+│  - *.Downloads.cs: download/resolução           │
+│  - *.ProcessRunner.cs: processos e scripts      │
+│  - Diagnóstico e eventos sem referência a Forms  │
 ├────────────────────────────────────────────────┤
 │  Models/ProgramInfo.cs       (CAMADA DE DADOS)  │
 │  - Apenas dados (nome, arquivo, argumentos)     │
@@ -331,6 +377,7 @@ Usuário clica "INICIAR INSTALAÇÃO"
         ▼
 MainForm.BtnInstall_Click()
     ├── Monta InstallationOptions com as escolhas do usuário
+    ├── Se necessário, confirma a prévia de remoção de perfis
     ├── Chama InstallerService.RunFullInstallationAsync(options)
     │       │
     │       ▼
@@ -339,7 +386,7 @@ MainForm.BtnInstall_Click()
     │   Fase 2: Criar admin e usuário padrão
     │   Fase 3: Aplicar wallpapers
     │   Fase 4: Baixar e instalar cada programa selecionado
-    │   Fase 5: Atalhos corporativos e limpeza do Desktop
+    │   Fase 5: Propagação de programas, limpeza do Desktop e atalhos
     │       │
     │       ▼ (eventos)
     │   OnProgress          → barra de progresso
@@ -363,6 +410,10 @@ public event Action OnInstallationCompleted;
 ```
 
 Isso permite que a lógica funcione **sem conhecer a interface**.
+
+O cancelamento é cooperativo: interrompe downloads e tenta encerrar o
+processo iniciado pelo serviço. Ele não reverte etapas já concluídas e não
+garante o encerramento de processos-filhos que um instalador tenha iniciado.
 
 ---
 
@@ -440,6 +491,14 @@ Não instale certificados autoassinados na raiz do sistema.
 - Confirme se os argumentos de instalação silenciosa estão corretos
 - Alguns instaladores exigem reinicialização entre instalações
 - Programas via `winget`/MSIX podem depender da versão do Windows
+- Consulte o resumo final do log e valide se o programa instalou apesar de um código de saída não zero
+
+### O cancelamento deixou um instalador aberto
+
+O botão PARAR cancela o download e tenta encerrar o processo principal
+iniciado pelo serviço. Alguns instaladores criam processos-filhos que
+podem continuar ativos; confira o Gerenciador de Tarefas antes de tentar
+instalar o mesmo programa novamente.
 
 ### Erro ao compilar
 
@@ -457,6 +516,7 @@ Não instale certificados autoassinados na raiz do sistema.
 - **Interface:** Windows Forms (controles GDI+ customizados)
 - **Compilador:** `csc.exe` (embutido no Windows)
 - **Ícone:** `install.ico`
+- **CI:** GitHub Actions em Windows, com artefato de build sem assinatura automática
 
 ---
 
