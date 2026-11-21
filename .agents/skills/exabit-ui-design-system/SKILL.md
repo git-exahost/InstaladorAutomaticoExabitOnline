@@ -114,3 +114,15 @@ Todas as abas (Configurações, Atalhos, Opções do Windows, Funcionalidades, o
 - **Bloqueio de Redimensionamento**: `FormBorderStyle = FormBorderStyle.FixedSingle` (borda fixa única, cursor nunca vira seta de redimensionamento).
 - **Sem Botão Maximizar**: `MaximizeBox = false` e `MinimizeBox = true` (apenas botões Minimizar e Fechar na barra de título).
 - **Dimensões Travadas (Compatível com 720p 1280x720)**: Dimensão ideal calculada em `1200 x 650px` (com clamping a `workingArea - 16px` para garantir folga com barra de tarefas do Windows de até 48px), travada com `MinimumSize = MaximumSize = Size = new Size(formWidth, formHeight)`.
+
+---
+
+## 7. Customização de Checkboxes Corporativos (DarkCheckBox em Laranja)
+
+- **Eliminação do Tema Padrão do Windows (UxTheme Azul)**: Todos os checkboxes do sistema usam a classe proprietária `DarkCheckBox : CheckBox` com suporte a `UserPaint` e renderização GDI+.
+- **Preenchimento e Efeitos em Laranja Corporativo**:
+  - **Marcado (Checked)**: Preenchimento na cor oficial `CorDestaqueLaranja` (`#FF8C00` / `RGB 255, 140, 0`), correspondendo exatamente à cor da barra de rolagem `DarkScrollBar` e das abas ativas.
+  - **Hover / Foco**: Borda sutil iluminada em laranja suave (`RGB 255, 165, 40`) indicando interatividade.
+  - **Pressionado (Pressed)**: Tom ligeiramente mais escuro (`RGB 220, 120, 0`) para feedback tátil instantâneo.
+- **Glifo Vetorial Anti-aliased**: O símbolo de *check* (✔) é traçado como um caminho vetorial com espessura de 1.8px em branco puro, com pontas e junções arredondadas (`SmoothingMode.AntiAlias`), enquanto a caixa externa mantém alinhamento de pixel perfeito sem borrões (`SmoothingMode.None`).
+- **Cursor de Navegação**: `Cursor = Cursors.Hand`.

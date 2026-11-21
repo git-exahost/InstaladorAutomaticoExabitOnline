@@ -7,6 +7,25 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.94] - 2026-11-20
+
+### Adicionado / Aprimorado
+- **Nova Opção "Ativar senha nunca expira para todos os perfis" na Aba 3 (Opções do Windows)**:
+  - Adicionado checkbox `_chkPasswordNeverExpiresGlobal` posicionado na linha 2 da Aba 3 (Opções do Windows), logo abaixo de *"Impedir que o usuário altere a senha"*.
+  - Definido como ativado por padrão (`Checked = true`).
+  - Condicionamento da execução: A aplicação da política global do Windows de expiração ilimitada (`net accounts /maxpwage:unlimited`) e a definição de `PasswordNeverExpires = $true` para todos os usuários locais (`Get-LocalUser | Set-LocalUser -PasswordNeverExpires $true`) agora **só é executada** se este checkbox estiver marcado.
+- **Criação Condicional de Conta Admin Baseada no Preenchimento da Senha**:
+  - A criação e configuração do usuário "admin" agora só ocorre se o campo *"Senha do Admin"* for preenchido com ao menos um caractere.
+  - Se o campo estiver em branco, a conta de admin não é criada nem modificada, alinhando-se estritamente à orientação exibida na interface *"Os campos acima só funcionam caso preenchidos (em branco = não alterar)"*.
+- **Substituição Visual dos Checkboxes pelo Tema Corporativo Laranja (`DarkCheckBox`)**:
+  - Implementada a classe `DarkCheckBox : CheckBox` com renderização personalizada GDI+ nativa:
+    - Fundo marcado preenchido no tom laranja corporativo oficial da EXABIT (`CorDestaqueLaranja` / `#FF8C00` / `RGB 255, 140, 0`), o mesmo utilizado na barra de rolagem `DarkScrollBar`.
+    - Glifo de marcação vetorial em branco puro com pontas e junções arredondadas (`SmoothingMode.AntiAlias`).
+    - Caixa com bordas e preenchimento nítidos (`SmoothingMode.None`), eliminando o aspecto embaçado ou dependência de tema do Windows.
+    - Efeito de destaque ao passar o mouse (*hover*) e ao receber foco do teclado na cor laranja.
+    - Cursor do mouse estilizado em formato de mão (`Cursors.Hand`).
+  - Substituição aplicada automaticamente em 100% dos checkboxes do sistema (lista de programas, abas de atalhos, opções do Windows e funcionalidades de limpeza).
+
 ## [2.0.0.93] - 2026-11-20
 
 ### Aprimorado / Corrigido

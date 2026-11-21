@@ -64,6 +64,7 @@ namespace InstallerGUI.Forms
         private TextBox _txtStandardUserPass;
         private CheckBox _chkEnableLocation;
         private CheckBox _chkStandardUserNoPwdChange;
+        private CheckBox _chkPasswordNeverExpiresGlobal;
         private CheckBox _chkCleanDesktop;
         private CheckBox _chkWallpaper;
         private CheckBox _chkWallpaperNortel;
@@ -252,7 +253,7 @@ namespace InstallerGUI.Forms
             catch
             {
             }
-            return "2.0.0.93";
+            return "2.0.0.94";
         }
 
         // ──────────────────────────────────────────────
@@ -914,7 +915,7 @@ namespace InstallerGUI.Forms
 
             var lblHint = new Label
             {
-                Text = "Os campos acima só funcionam caso preenchidos (em branco = não alterar).",
+                Text = "Campos em branco serão ignorados.",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
                 ForeColor = Color.FromArgb(160, 160, 160),
                 Dock = DockStyle.Fill,
@@ -1156,12 +1157,13 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 7,
+                RowCount = 8,
                 BackColor = CorPainel,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
@@ -1175,6 +1177,9 @@ namespace InstallerGUI.Forms
 
             _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
             tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 1);
+
+            _chkPasswordNeverExpiresGlobal = CreateCheckBox("Ativar senha nunca expira para todos os perfis", true);
+            tbl.Controls.Add(_chkPasswordNeverExpiresGlobal, 0, 2);
 
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
             _chkWallpaperNortel = CreateCheckBox("Aplicar papel de parede Nortel", false);
@@ -1200,9 +1205,9 @@ namespace InstallerGUI.Forms
                 }
             };
 
-            tbl.Controls.Add(_chkWallpaper, 0, 2);
-            tbl.Controls.Add(_chkWallpaperNortel, 0, 3);
-            tbl.Controls.Add(_chkPreventWallpaperChange, 0, 4);
+            tbl.Controls.Add(_chkWallpaper, 0, 3);
+            tbl.Controls.Add(_chkWallpaperNortel, 0, 4);
+            tbl.Controls.Add(_chkPreventWallpaperChange, 0, 5);
 
             var lblHint = new Label
             {
@@ -1212,7 +1217,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
             };
-            tbl.Controls.Add(lblHint, 0, 5);
+            tbl.Controls.Add(lblHint, 0, 6);
 
             pnl.Controls.Add(tbl);
             return pnl;
@@ -2516,7 +2521,7 @@ namespace InstallerGUI.Forms
                 }
                 lastCategory = cat;
 
-                var chk = new CheckBox
+                var chk = new DarkCheckBox
                 {
                     Text = prog.DisplayName,
                     Checked = prog.DefaultChecked,
@@ -2900,8 +2905,9 @@ namespace InstallerGUI.Forms
                 options.RenameComputer = !string.IsNullOrWhiteSpace(_txtComputerName.Text);
                 options.ComputerName = _txtComputerName.Text.Trim();
 
-                options.CreateAdmin = true;
-                options.AdminPassword = _txtAdminPass.Text;
+                bool criarAdmin = !string.IsNullOrWhiteSpace(_txtAdminPass.Text);
+                options.CreateAdmin = criarAdmin;
+                options.AdminPassword = criarAdmin ? _txtAdminPass.Text : null;
 
                 string stdName = _txtStandardUserName.Text.Trim();
                 bool criarUsuarioPadrao = !string.IsNullOrWhiteSpace(stdName);
@@ -2910,6 +2916,8 @@ namespace InstallerGUI.Forms
                 options.StandardUserName = criarUsuarioPadrao ? stdName : null;
                 options.StandardUserPassword = criarUsuarioPadrao ? _txtStandardUserPass.Text : null;
                 options.StandardUserCannotChangePassword = criarUsuarioPadrao && _chkStandardUserNoPwdChange.Checked;
+
+                options.PasswordNeverExpiresGlobal = _chkPasswordNeverExpiresGlobal != null && _chkPasswordNeverExpiresGlobal.Checked;
 
                 options.EnableLocationServices = _chkEnableLocation.Checked;
                 options.CleanDesktopShortcuts = _chkCleanDesktop.Checked;
@@ -3785,11 +3793,11 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Cria um CheckBox no padrão do tema escuro com fonte e margens otimizadas contra corte de texto.
+        /// Cria um CheckBox no padrão do tema escuro com visual corporativo laranja EXABIT.
         /// </summary>
         private static CheckBox CreateCheckBox(string text, bool checkedState)
         {
-            return new CheckBox
+            return new DarkCheckBox
             {
                 Text = text,
                 Checked = checkedState,
@@ -4019,6 +4027,188 @@ namespace InstallerGUI.Forms
                     }
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// CheckBox personalizado com tema escuro e destaque corporativo laranja EXABIT.
+    /// Substitui o controle nativo do Windows Forms com renderização customizada GDI+,
+    /// caixa com cantos nítidos, efeito hover e glifo de marcação vetorial anti-aliased.
+    /// </summary>
+    public class DarkCheckBox : CheckBox
+    {
+        private bool _isHovered = false;
+        private bool _isPressed = false;
+
+        private static readonly Color CorLaranjaPadrao = Color.FromArgb(255, 140, 0);
+        private static readonly Color CorLaranjaHover = Color.FromArgb(255, 165, 40);
+        private static readonly Color CorLaranjaPressed = Color.FromArgb(220, 120, 0);
+        private static readonly Color CorBordaNormal = Color.FromArgb(100, 100, 100);
+        private static readonly Color CorFundoNormal = Color.FromArgb(42, 42, 42);
+
+        public DarkCheckBox()
+        {
+            SetStyle(
+                ControlStyles.UserPaint |
+                ControlStyles.AllPaintingInWmPaint |
+                ControlStyles.OptimizedDoubleBuffer |
+                ControlStyles.ResizeRedraw |
+                ControlStyles.SupportsTransparentBackColor,
+                true);
+            DoubleBuffered = true;
+            BackColor = Color.Transparent;
+            ForeColor = Color.White;
+            Cursor = Cursors.Hand;
+        }
+
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            base.OnMouseEnter(e);
+            _isHovered = true;
+            Invalidate();
+        }
+
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            _isHovered = false;
+            _isPressed = false;
+            Invalidate();
+        }
+
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button == MouseButtons.Left)
+            {
+                _isPressed = true;
+                Invalidate();
+            }
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            _isPressed = false;
+            Invalidate();
+        }
+
+        protected override void OnGotFocus(EventArgs e)
+        {
+            base.OnGotFocus(e);
+            Invalidate();
+        }
+
+        protected override void OnLostFocus(EventArgs e)
+        {
+            base.OnLostFocus(e);
+            Invalidate();
+        }
+
+        protected override void OnCheckedChanged(EventArgs e)
+        {
+            base.OnCheckedChanged(e);
+            Invalidate();
+        }
+
+        public override Size GetPreferredSize(Size proposedSize)
+        {
+            Size textSize = TextRenderer.MeasureText(Text, Font);
+            int boxSize = (int)Math.Round(14 * (Font.SizeInPoints / 9.5f));
+            if (boxSize < 13) boxSize = 13;
+            int spacing = 7;
+            return new Size(
+                Padding.Left + boxSize + spacing + textSize.Width + Padding.Right + 4,
+                Math.Max(boxSize + 4, textSize.Height + 2));
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+
+            // Se o fundo não for transparente, limpa com a cor definida
+            if (BackColor != Color.Transparent)
+            {
+                using (var bgBrush = new SolidBrush(BackColor))
+                {
+                    g.FillRectangle(bgBrush, ClientRectangle);
+                }
+            }
+
+            int boxSize = (int)Math.Round(14 * (Font.SizeInPoints / 9.5f));
+            if (boxSize < 13) boxSize = 13;
+            int boxX = Padding.Left + 1;
+            int boxY = (Height - boxSize) / 2;
+            if (boxY < 0) boxY = 0;
+
+            var boxRect = new Rectangle(boxX, boxY, boxSize, boxSize);
+
+            Color fillColor;
+            Color borderColor;
+
+            if (Checked)
+            {
+                fillColor = _isPressed ? CorLaranjaPressed : (_isHovered ? CorLaranjaHover : CorLaranjaPadrao);
+                borderColor = _isPressed ? CorLaranjaPressed : (_isHovered || Focused ? CorLaranjaHover : CorLaranjaPadrao);
+            }
+            else
+            {
+                fillColor = _isPressed ? Color.FromArgb(55, 55, 55) : CorFundoNormal;
+                borderColor = (_isHovered || Focused) ? CorLaranjaHover : CorBordaNormal;
+            }
+
+            // Desenho nítido da caixa (SmoothingMode.None para bordas retas perfeitas sem blur)
+            g.SmoothingMode = SmoothingMode.None;
+
+            using (var fillBrush = new SolidBrush(fillColor))
+            {
+                g.FillRectangle(fillBrush, boxRect);
+            }
+
+            using (var borderPen = new Pen(borderColor, 1f))
+            {
+                g.DrawRectangle(borderPen, boxRect.X, boxRect.Y, boxRect.Width - 1, boxRect.Height - 1);
+            }
+
+            // Glifo de marcação vetorial suave (SmoothingMode.AntiAlias para linhas diagonais)
+            if (Checked)
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+
+                using (var checkPen = new Pen(Color.White, 1.8f))
+                {
+                    checkPen.StartCap = LineCap.Round;
+                    checkPen.EndCap = LineCap.Round;
+                    checkPen.LineJoin = LineJoin.Round;
+
+                    float p1x = boxRect.Left + boxSize * 0.22f;
+                    float p1y = boxRect.Top + boxSize * 0.50f;
+                    float p2x = boxRect.Left + boxSize * 0.44f;
+                    float p2y = boxRect.Top + boxSize * 0.72f;
+                    float p3x = boxRect.Left + boxSize * 0.78f;
+                    float p3y = boxRect.Top + boxSize * 0.26f;
+
+                    g.DrawLines(checkPen, new[]
+                    {
+                        new PointF(p1x, p1y),
+                        new PointF(p2x, p2y),
+                        new PointF(p3x, p3y)
+                    });
+                }
+            }
+
+            // Renderização do texto
+            int textX = boxX + boxSize + 7;
+            int textWidth = Math.Max(0, Width - textX - Padding.Right);
+            var textRect = new Rectangle(textX, 0, textWidth, Height);
+
+            TextRenderer.DrawText(
+                g,
+                Text,
+                Font,
+                textRect,
+                Enabled ? ForeColor : Color.FromArgb(120, 120, 120),
+                TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
         }
     }
 

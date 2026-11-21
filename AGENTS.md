@@ -183,6 +183,11 @@ O usuário deste projeto é **Designer Gráfico**. A interface gráfica deve seg
 - **Largura da Coluna de Rótulos (Coluna 0)**: Ajustada entre 95px e 102px conforme o tamanho do maior rótulo (`Computador:`, `Número de Série:`, `Memória RAM:`), garantindo que termos de valores longos (como RAM com uso e porcentagem) tenham espaço suficiente na Coluna 1 sem quebrar linhas ou cortar com reticências.
 - **Legendas de Orientações**: Linhas informativas e de advertência (ex: "Os campos acima só funcionam caso preenchidos...") devem seguir rigorosamente o padrão `Segoe UI`, 8.5pt, Itálico, `#A0A0A0`, com altura de 24px e espaçador flexível abaixo.
 
+### 8. Customização de Checkboxes Corporativos (DarkCheckBox em Laranja)
+- **Eliminação do Tema Padrão do Windows**: Checkboxes utilizam a classe customizada `DarkCheckBox : CheckBox` com desenho GDI+ próprio (`ControlStyles.UserPaint`).
+- **Cor Corporativa Oficial**: Quando marcado (`Checked = true`), o preenchimento da caixa utiliza rigorosamente o laranja corporativo da EXABIT (`CorDestaqueLaranja` = `Color.FromArgb(255, 140, 0)` / `#FF8C00`), em perfeita sintonia visual com o `DarkScrollBar` e as abas ativas.
+- **Geometria e Glifo**: Caixa com bordas nítidas sem blur (`SmoothingMode.None`), glifo de seleção vetorial em branco puro com cantos arredondados (`SmoothingMode.AntiAlias`), borda com iluminação laranja em hover/focus e cursor em formato de mão (`Cursors.Hand`).
+
 ## Regras Críticas de Operação
 
 - **NUNCA fazer `git push` sem ordem do usuário**: Qualquer alteração, commit ou build deve permanecer estritamente local. O envio de atualizações para o repositório remoto (GitHub) **só pode ser feito quando o usuário mandar explicitamente**.

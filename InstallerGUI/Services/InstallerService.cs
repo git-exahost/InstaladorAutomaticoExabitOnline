@@ -150,8 +150,6 @@ namespace InstallerGUI.Services
         {
             try
             {
-                await EnsureGlobalPasswordNeverExpiresPolicyAsync();
-
                 bool exists = await UserExistsAsync("admin");
                 if (exists)
                     await UpdateExistingAdminPasswordAsync(password);
@@ -237,6 +235,8 @@ namespace InstallerGUI.Services
         /// <summary>
         /// Define a política global de segurança do Windows para que a duração máxima de senhas
         /// seja ILIMITADA em toda a máquina (net accounts /maxpwage:unlimited).
+        /// Também garante que a flag 'A senha nunca expira' (PasswordNeverExpires) esteja ativa
+        /// em todas as contas de usuário locais do sistema via PowerShell.
         /// </summary>
         private async Task EnsureGlobalPasswordNeverExpiresPolicyAsync()
         {
@@ -246,6 +246,13 @@ namespace InstallerGUI.Services
                 if (code == 0)
                 {
                     Log("[ok] Política global do Windows: expiração de senhas definida como NUNCA (ilimitada).", ConsoleColor.Green);
+                }
+
+                string psCmd = "Get-LocalUser -ErrorAction SilentlyContinue | Set-LocalUser -PasswordNeverExpires $true -ErrorAction SilentlyContinue";
+                int psCode = await RunPowerShellScriptWithLoggingAsync(psCmd, 15000);
+                if (psCode == 0)
+                {
+                    Log("[ok] Senha definida como 'nunca expira' para todos os perfis locais.", ConsoleColor.Green);
                 }
             }
             catch
@@ -6209,7 +6216,10 @@ namespace InstallerGUI.Services
 
             try
             {
-                await EnsureGlobalPasswordNeverExpiresPolicyAsync();
+                if (options != null && options.PasswordNeverExpiresGlobal)
+                {
+                    await EnsureGlobalPasswordNeverExpiresPolicyAsync();
+                }
 
                 // ─── FASE 0: Funcionalidades Preliminares de Limpeza e Preparação do Sistema ───
 
@@ -7056,6 +7066,12 @@ namespace InstallerGUI.Services
         public bool EnableLocationServices { get; set; }
 
         /// <summary>
+        /// Se true, define a expiração de senha como NUNCA (ilimitada) na política global do Windows
+        /// e ativa PasswordNeverExpires para todos os perfis locais existentes.
+        /// </summary>
+        public bool PasswordNeverExpiresGlobal { get; set; }
+
+        /// <summary>
         /// Se true, desinstala silenciosamente todos os jogos do computador (Xbox, Solitaire, etc.) antes das instalações.
         /// </summary>
         public bool UninstallGames { get; set; }
@@ -7125,6 +7141,7 @@ namespace InstallerGUI.Services
         {
             EnableLocationServices = true;
             CleanDesktopShortcuts = true;
+            PasswordNeverExpiresGlobal = true;
             SelectedPrograms = new List<ProgramInfo>();
         }
     }
