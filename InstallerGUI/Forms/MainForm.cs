@@ -1810,7 +1810,7 @@ namespace InstallerGUI.Forms
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(115 * scale))); // 115px suficiente para "Número de Série:" sem quebra ou corte
+            content.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(115 * scale)));
             content.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             content.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
@@ -1825,8 +1825,10 @@ namespace InstallerGUI.Forms
             _lblExpModel = CreateDiagValueLabel("Identificando...");
             content.Controls.Add(_lblExpModel, 1, 1);
 
-            content.Controls.Add(CreateDiagHeaderLabel("Número de Série:"), 0, 2);
+            content.Controls.Add(CreateDiagHeaderLabel("S/N"), 0, 2);
             _lblExpSerial = CreateDiagValueLabel("Identificando...");
+            _lblExpSerial.Cursor = Cursors.Hand;
+            _lblExpSerial.Click += (s, e) => CopySerialToClipboard();
             content.Controls.Add(_lblExpSerial, 1, 2);
 
             return CreateCardContainer("Dispositivo e Garantia", content, scale);
@@ -2119,6 +2121,33 @@ namespace InstallerGUI.Forms
                 }
             }
             catch { }
+        }
+
+        private void CopySerialToClipboard()
+        {
+            if (_lblExpSerial == null || string.IsNullOrEmpty(_lblExpSerial.Text)
+                || _lblExpSerial.Text == "Identificando..." || _lblExpSerial.Text == "Não informado")
+            {
+                return;
+            }
+
+            try
+            {
+                Clipboard.SetText(_lblExpSerial.Text);
+                MessageBox.Show(
+                    "Número de série copiado para a área de transferência com sucesso!",
+                    "S/N Copiado",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    string.Format("Não foi possível copiar o número de série: {0}", ex.Message),
+                    "Falha ao Copiar S/N",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
         }
 
         /// <summary>
