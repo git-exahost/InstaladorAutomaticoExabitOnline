@@ -1178,7 +1178,7 @@ namespace InstallerGUI.Forms
             _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
             tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 1);
 
-            _chkPasswordNeverExpiresGlobal = CreateCheckBox("Ativar senha nunca expira para todos os perfis", true);
+            _chkPasswordNeverExpiresGlobal = CreateCheckBox("Ativar (senha nunca expira) para todos os perfis", true);
             tbl.Controls.Add(_chkPasswordNeverExpiresGlobal, 0, 2);
 
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
@@ -2512,6 +2512,7 @@ namespace InstallerGUI.Forms
                         Text = cat,
                         Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                         ForeColor = CorDestaque,
+                        BackColor = CorPainel,
                         Location = new Point(leftMargin, top),
                         AutoSize = true,
                     };
@@ -2528,7 +2529,7 @@ namespace InstallerGUI.Forms
                     Tag = prog,
                     Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
                     ForeColor = CorTexto,
-                    BackColor = Color.Transparent,
+                    BackColor = CorPainel,
                     UseVisualStyleBackColor = false,
                     AutoSize = true,
                     Location = new Point(leftMargin, top),
@@ -2578,12 +2579,14 @@ namespace InstallerGUI.Forms
                 }
 
                 _pnlPrograms.Top = -_scrollBarPrograms.Value;
+                _pnlPrograms.Invalidate(true);
             };
 
             pnlViewport.Resize += (s, e) => _updateProgramListLayout();
             _scrollBarPrograms.ValueChanged += (s, e) =>
             {
                 _pnlPrograms.Top = -_scrollBarPrograms.Value;
+                _pnlPrograms.Invalidate(true);
             };
 
             pnlViewport.Controls.Add(_pnlPrograms);
@@ -3803,7 +3806,7 @@ namespace InstallerGUI.Forms
                 Checked = checkedState,
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Regular),
                 ForeColor = CorTexto,
-                BackColor = Color.Transparent,
+                BackColor = CorPainel,
                 UseVisualStyleBackColor = false,
                 AutoSize = true,
                 Anchor = AnchorStyles.Left,
@@ -4052,11 +4055,10 @@ namespace InstallerGUI.Forms
                 ControlStyles.UserPaint |
                 ControlStyles.AllPaintingInWmPaint |
                 ControlStyles.OptimizedDoubleBuffer |
-                ControlStyles.ResizeRedraw |
-                ControlStyles.SupportsTransparentBackColor,
+                ControlStyles.ResizeRedraw,
                 true);
             DoubleBuffered = true;
-            BackColor = Color.Transparent;
+            BackColor = Color.FromArgb(40, 40, 40);
             ForeColor = Color.White;
             Cursor = Cursors.Hand;
         }
@@ -4126,13 +4128,17 @@ namespace InstallerGUI.Forms
         {
             var g = e.Graphics;
 
-            // Se o fundo não for transparente, limpa com a cor definida
-            if (BackColor != Color.Transparent)
+            Color bg = BackColor;
+            if (bg == Color.Transparent || bg.A < 255)
             {
-                using (var bgBrush = new SolidBrush(BackColor))
-                {
-                    g.FillRectangle(bgBrush, ClientRectangle);
-                }
+                bg = (Parent != null && Parent.BackColor != Color.Transparent && Parent.BackColor.A == 255)
+                    ? Parent.BackColor
+                    : Color.FromArgb(40, 40, 40);
+            }
+
+            using (var bgBrush = new SolidBrush(bg))
+            {
+                g.FillRectangle(bgBrush, ClientRectangle);
             }
 
             int boxSize = (int)Math.Round(14 * (Font.SizeInPoints / 9.5f));
