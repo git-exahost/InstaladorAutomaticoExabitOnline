@@ -10,6 +10,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -58,6 +59,9 @@ namespace InstallerGUI.Forms
         private TextBox _txtAdminPass;
         private TextBox _txtStandardUserName;
         private TextBox _txtStandardUserPass;
+        private CheckBox _chkPresetStandard;
+        private CheckBox _chkPresetNortel;
+        private bool _isApplyingPreset;
         private CheckBox _chkEnableLocation;
         private CheckBox _chkStandardUserNoPwdChange;
         private CheckBox _chkPasswordNeverExpiresGlobal;
@@ -66,8 +70,17 @@ namespace InstallerGUI.Forms
         private CheckBox _chkWallpaperNortel;
         private CheckBox _chkPreventWallpaperChange;
         private CheckBox _chkUninstallGames;
-        private CheckBox _chkRemoveOtherProfiles;
         private CheckBox _chkUninstallThirdPartyAntivirus;
+        private Panel _pnlFeaturesMain;
+        private Panel _pnlProfilesManagerView;
+        private Button _btnStartProfileCleanup;
+        private Button _btnBackFromProfiles;
+        private Button _btnExecuteProfileDelete;
+        private Panel _pnlProfilesViewport;
+        private Panel _pnlProfilesListContent;
+        private DarkScrollBar _scrollBarProfiles;
+        private Button _btnToggleSelectAllProfiles;
+        private List<KeyValuePair<WindowsUserProfileItem, DarkCheckBox>> _profileCheckboxes;
         private CheckBox _chkShortcutSuporteExabit;
         private CheckBox _chkShortcutExabit;
         private CheckBox _chkShortcutExahost;
@@ -197,6 +210,8 @@ namespace InstallerGUI.Forms
             _service.OnProgress += UpdateProgress;
             _service.OnInstallationCompleted += HandleInstallationCompleted;
             _service.OnDownloadProgress += HandleDownloadProgress;
+
+            _profileCheckboxes = new List<KeyValuePair<WindowsUserProfileItem, DarkCheckBox>>();
 
             // Monta todos os controles na tela
             BuildUI();
@@ -808,7 +823,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 BackColor = Color.FromArgb(32, 32, 32),
                 Margin = new Padding((int)(2 * scale), (int)(2 * scale), (int)(4 * scale), (int)(2 * scale)),
-                Padding = new Padding((int)(12 * scale), (int)(10 * scale), (int)(12 * scale), (int)(10 * scale)),
+                Padding = new Padding((int)(12 * scale), (int)(8 * scale), (int)(12 * scale), (int)(6 * scale)),
             };
             pnlCard.Paint += (s, e) =>
             {
@@ -822,16 +837,17 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 7,
                 BackColor = Color.Transparent,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(26 * scale))); // Título com respiro
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Nome do computador (Label + Input)
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Senha do Admin (Label + Input)
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(50 * scale))); // Usuário padrão e Senha (Labels + Inputs)
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale))); // Dica informativa (padrão idêntico às demais abas)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale))); // Título com respiro
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(48 * scale))); // Nome do computador (Label + Input)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(48 * scale))); // Senha do Admin (Label + Input)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(48 * scale))); // Usuário padrão e Senha (Labels + Inputs)
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(28 * scale))); // Seleção de perfil: Padrão / Nortel
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(20 * scale))); // Dica informativa
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));                // Espaçador inferior flexível
 
             var lblTitle = new Label
@@ -953,6 +969,57 @@ namespace InstallerGUI.Forms
 
             layout.Controls.Add(tblUsers, 0, 3);
 
+            // 4. Seleção de perfil de configuração (Padrão / Nortel)
+            var pnlPresets = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Margin = Padding.Empty,
+                Padding = new Padding(0, (int)(4 * scale), 0, 0),
+            };
+
+            _chkPresetStandard = CreateCheckBox("Padrão", true);
+            _chkPresetStandard.BackColor = Color.FromArgb(32, 32, 32);
+            _chkPresetStandard.Margin = new Padding(0, 0, (int)(18 * scale), 0);
+
+            _chkPresetNortel = CreateCheckBox("Nortel/Neoenergia", false);
+            _chkPresetNortel.BackColor = Color.FromArgb(32, 32, 32);
+            _chkPresetNortel.Margin = Padding.Empty;
+
+            _chkPresetStandard.CheckedChanged += (s, e) =>
+            {
+                if (_isApplyingPreset) return;
+                if (_chkPresetStandard.Checked)
+                {
+                    ApplyConfigurationPreset(false);
+                }
+                else if (!_chkPresetNortel.Checked)
+                {
+                    _isApplyingPreset = true;
+                    _chkPresetStandard.Checked = true;
+                    _isApplyingPreset = false;
+                }
+            };
+
+            _chkPresetNortel.CheckedChanged += (s, e) =>
+            {
+                if (_isApplyingPreset) return;
+                if (_chkPresetNortel.Checked)
+                {
+                    ApplyConfigurationPreset(true);
+                }
+                else
+                {
+                    ApplyConfigurationPreset(false);
+                }
+            };
+
+            pnlPresets.Controls.Add(_chkPresetStandard);
+            pnlPresets.Controls.Add(_chkPresetNortel);
+            layout.Controls.Add(pnlPresets, 0, 4);
+
             var lblHint = new Label
             {
                 Text = "Campos em branco serão ignorados.",
@@ -962,7 +1029,7 @@ namespace InstallerGUI.Forms
                 TextAlign = ContentAlignment.MiddleLeft,
                 Margin = Padding.Empty,
             };
-            layout.Controls.Add(lblHint, 0, 4);
+            layout.Controls.Add(lblHint, 0, 5);
 
             pnlCard.Controls.Add(layout);
             return pnlCard;
@@ -1179,7 +1246,7 @@ namespace InstallerGUI.Forms
             _chkShortcutWebmailTerceirizacao = CreateCheckBox("Atalho Webmail Nortel Terceirização", false);
             tbl.Controls.Add(_chkShortcutWebmailTerceirizacao, 1, 1);
 
-            _chkCleanDesktop = CreateCheckBox("Limpar atalhos da Área de Trabalho", true);
+            _chkCleanDesktop = CreateCheckBox("Limpar atalhos da Área de Trabalho", false);
             tbl.Controls.Add(_chkCleanDesktop, 1, 2);
 
             pnl.Controls.Add(tbl);
@@ -1218,13 +1285,13 @@ namespace InstallerGUI.Forms
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Espaçador inferior flexível
 
-            _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", true);
+            _chkEnableLocation = CreateCheckBox("Ativar serviços de localização do Windows", false);
             tbl.Controls.Add(_chkEnableLocation, 0, 0);
 
             _chkStandardUserNoPwdChange = CreateCheckBox("Impedir que o usuário altere a senha", false);
             tbl.Controls.Add(_chkStandardUserNoPwdChange, 0, 1);
 
-            _chkPasswordNeverExpiresGlobal = CreateCheckBox("Ativar (senha nunca expira) para todos os perfis", true);
+            _chkPasswordNeverExpiresGlobal = CreateCheckBox("Ativar (senha nunca expira) para todos os perfis", false);
             tbl.Controls.Add(_chkPasswordNeverExpiresGlobal, 0, 2);
 
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
@@ -1270,12 +1337,92 @@ namespace InstallerGUI.Forms
         }
 
         /// <summary>
-        /// Conteúdo da Aba 4: Funcionalidades (Remoção de jogos, limpeza de perfis e remoção de antivírus).
-        /// Espaçamento rigorosamente padronizado em 30px por linha de checkbox.
+        /// Aplica o conjunto de configurações do perfil Padrão (tudo em branco e desmarcado)
+        /// ou do perfil corporativo Nortel em todas as abas e lista de programas.
+        /// </summary>
+        private void ApplyConfigurationPreset(bool useNortel)
+        {
+            if (_isApplyingPreset) return;
+            _isApplyingPreset = true;
+
+            try
+            {
+                if (_chkPresetStandard != null) _chkPresetStandard.Checked = !useNortel;
+                if (_chkPresetNortel != null) _chkPresetNortel.Checked = useNortel;
+
+                if (_txtComputerName != null) _txtComputerName.Text = useNortel ? "NT-" : "";
+                if (_txtAdminPass != null) _txtAdminPass.Text = useNortel ? "NT@admin#" : "";
+                if (_txtStandardUserName != null) _txtStandardUserName.Text = "";
+                if (_txtStandardUserPass != null) _txtStandardUserPass.Text = useNortel ? "Nortel#" : "";
+
+                var nortelProgramIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    "7zip",
+                    "adobereader",
+                    "dwgtrueview",
+                    "brave",
+                    "citrix",
+                    "chrome",
+                    "googleearth",
+                    "java",
+                    "powerbi",
+                    "firefox",
+                    "rustdesk"
+                };
+
+                if (_pnlPrograms != null)
+                {
+                    foreach (Control c in _pnlPrograms.Controls)
+                    {
+                        var chk = c as CheckBox;
+                        if (chk == null) continue;
+                        var prog = chk.Tag as ProgramInfo;
+                        chk.Checked = useNortel && prog != null && nortelProgramIds.Contains(prog.Id);
+                    }
+                }
+
+                // Aba Atalhos
+                if (_chkShortcutSuporteExabit != null) _chkShortcutSuporteExabit.Checked = useNortel;
+                if (_chkShortcutExabit != null) _chkShortcutExabit.Checked = false;
+                if (_chkShortcutExahost != null) _chkShortcutExahost.Checked = false;
+                if (_chkShortcutRemoteNeoenergia != null) _chkShortcutRemoteNeoenergia.Checked = useNortel;
+                if (_chkShortcutWebmailNortel != null) _chkShortcutWebmailNortel.Checked = false;
+                if (_chkShortcutWebmailTerceirizacao != null) _chkShortcutWebmailTerceirizacao.Checked = useNortel;
+                if (_chkCleanDesktop != null) _chkCleanDesktop.Checked = useNortel;
+
+                // Aba Opções
+                if (_chkEnableLocation != null) _chkEnableLocation.Checked = useNortel;
+                if (_chkStandardUserNoPwdChange != null) _chkStandardUserNoPwdChange.Checked = useNortel;
+                if (_chkPasswordNeverExpiresGlobal != null) _chkPasswordNeverExpiresGlobal.Checked = useNortel;
+                if (_chkWallpaper != null) _chkWallpaper.Checked = false;
+                if (_chkWallpaperNortel != null) _chkWallpaperNortel.Checked = useNortel;
+                if (_chkPreventWallpaperChange != null) _chkPreventWallpaperChange.Checked = useNortel;
+
+                // Aba Funcionalidades
+                if (_chkUninstallGames != null) _chkUninstallGames.Checked = useNortel;
+                if (_chkUninstallThirdPartyAntivirus != null) _chkUninstallThirdPartyAntivirus.Checked = useNortel;
+            }
+            finally
+            {
+                _isApplyingPreset = false;
+            }
+        }
+
+        /// <summary>
+        /// Conteúdo da Aba 4: Funcionalidades (Remoção de jogos, remoção de antivírus e Apagar Perfis do Windows).
         /// </summary>
         private Panel BuildTabFeaturesContent(float scale)
         {
-            var pnl = new Panel
+            var pnlContainer = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            // Painel Principal da Aba 4 (Visão Padrão)
+            _pnlFeaturesMain = new Panel
             {
                 Dock = DockStyle.Fill,
                 BackColor = CorPainel,
@@ -1294,30 +1441,492 @@ namespace InstallerGUI.Forms
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
-            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(24 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(16 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(56 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Percent, 100f)); // Espaçador inferior flexível
 
             _chkUninstallGames = CreateCheckBox("Desinstalar todos os jogos deste computador", false);
-            _chkRemoveOtherProfiles = CreateCheckBox("Remover e apagar todos os perfis do Windows", false);
             _chkUninstallThirdPartyAntivirus = CreateCheckBox("Desinstalar todo e qualquer antivírus de terceiros", false);
 
             tbl.Controls.Add(_chkUninstallGames, 0, 0);
-            tbl.Controls.Add(_chkRemoveOtherProfiles, 0, 1);
-            tbl.Controls.Add(_chkUninstallThirdPartyAntivirus, 0, 2);
+            tbl.Controls.Add(_chkUninstallThirdPartyAntivirus, 0, 1);
 
-            var lblHint = new Label
+            // Divisória sutil separando as opções acima da seção de Apagar Perfis
+            var pnlDivider = new Panel
             {
-                Text = "Estas ações preliminares serão executadas primeiro, antes de qualquer instalação.",
-                Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
+                Dock = DockStyle.Fill,
+                BackColor = Color.Transparent,
+                Margin = Padding.Empty,
+            };
+            var dividerLine = new Panel
+            {
+                Height = 1,
+                Dock = DockStyle.Top,
+                BackColor = Color.FromArgb(55, 55, 55),
+                Margin = new Padding(0, (int)(7 * scale), 0, (int)(8 * scale)),
+            };
+            pnlDivider.Controls.Add(dividerLine);
+            tbl.Controls.Add(pnlDivider, 0, 2);
+
+            // Seção de Apagar Perfis do Windows
+            var pnlProfileSection = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 2,
+                BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            pnlProfileSection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            pnlProfileSection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(200 * scale)));
+            pnlProfileSection.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(22 * scale)));
+            pnlProfileSection.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(32 * scale)));
+
+            var lblProfileTitle = new Label
+            {
+                Text = "Apagar Perfis do Windows",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = CorDestaqueLaranja,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.BottomLeft,
+                Margin = Padding.Empty,
+            };
+            pnlProfileSection.Controls.Add(lblProfileTitle, 0, 0);
+            pnlProfileSection.SetColumnSpan(lblProfileTitle, 2);
+
+            var lblProfileDesc = new Label
+            {
+                Text = "Verifica contas e perfis de usuários no Windows para exclusão seletiva.",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(170, 170, 170),
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
+            };
+            pnlProfileSection.Controls.Add(lblProfileDesc, 0, 1);
+
+            _btnStartProfileCleanup = new Button
+            {
+                Text = "Apagar Perfis do Windows",
+                Font = new Font("Segoe UI", 9.0f, FontStyle.Bold),
+                ForeColor = CorDestaqueLaranja,
+                BackColor = Color.FromArgb(24, 24, 24),
+                FlatStyle = FlatStyle.Flat,
+                Height = (int)(28 * scale),
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Fill,
+                Margin = new Padding((int)(4 * scale), (int)(2 * scale), 0, (int)(2 * scale)),
+            };
+            _btnStartProfileCleanup.FlatAppearance.BorderColor = CorDestaqueLaranja;
+            _btnStartProfileCleanup.FlatAppearance.BorderSize = 1;
+            _btnStartProfileCleanup.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 30, 15);
+            _btnStartProfileCleanup.Click += BtnStartProfileCleanup_Click;
+            pnlProfileSection.Controls.Add(_btnStartProfileCleanup, 1, 1);
+
+            tbl.Controls.Add(pnlProfileSection, 0, 3);
+            _pnlFeaturesMain.Controls.Add(tbl);
+
+            // Painel da Visão de Perfis Encontrados (Na Mesma Tela)
+            _pnlProfilesManagerView = BuildProfilesManagerView(scale);
+            _pnlProfilesManagerView.Visible = false;
+
+            pnlContainer.Controls.Add(_pnlFeaturesMain);
+            pnlContainer.Controls.Add(_pnlProfilesManagerView);
+
+            return pnlContainer;
+        }
+
+        /// <summary>
+        /// Constrói o painel de seleção e gerenciamento de perfis do Windows exibido na mesma tela da aba Funcionalidades.
+        /// </summary>
+        private Panel BuildProfilesManagerView(float scale)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = CorPainel,
+                Padding = new Padding((int)(16 * scale), (int)(8 * scale), (int)(16 * scale), (int)(6 * scale)),
+            };
+
+            var mainLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(26 * scale)));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(18 * scale)));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(32 * scale)));
+
+            // 1. Cabeçalho
+            var headerTable = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            headerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            headerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(90 * scale)));
+            headerTable.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            var lblHeaderTitle = new Label
+            {
+                Text = "Perfis do Windows Encontrados",
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
+                ForeColor = CorDestaqueLaranja,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
+            };
+            headerTable.Controls.Add(lblHeaderTitle, 0, 0);
+
+            _btnBackFromProfiles = new Button
+            {
+                Text = "← Voltar",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = CorDestaqueLaranja,
+                BackColor = Color.FromArgb(24, 24, 24),
+                FlatStyle = FlatStyle.Flat,
+                Height = (int)(24 * scale),
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Fill,
+                Margin = Padding.Empty,
+            };
+            _btnBackFromProfiles.FlatAppearance.BorderColor = CorDestaqueLaranja;
+            _btnBackFromProfiles.FlatAppearance.BorderSize = 1;
+            _btnBackFromProfiles.FlatAppearance.MouseOverBackColor = Color.FromArgb(45, 30, 15);
+            _btnBackFromProfiles.Click += (s, e) =>
+            {
+                _pnlProfilesManagerView.Visible = false;
+                _pnlFeaturesMain.Visible = true;
+                _pnlFeaturesMain.BringToFront();
+            };
+            headerTable.Controls.Add(_btnBackFromProfiles, 1, 0);
+            mainLayout.Controls.Add(headerTable, 0, 0);
+
+            // 2. Legenda explicativa
+            var lblInstruction = new Label
+            {
+                Text = "Selecione os perfis que deseja excluir. Perfis em uso e contas do sistema estão protegidos:",
+                Font = new Font("Segoe UI", 8.0f, FontStyle.Italic),
                 ForeColor = Color.FromArgb(160, 160, 160),
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
+                Margin = Padding.Empty,
             };
-            tbl.Controls.Add(lblHint, 0, 3);
+            mainLayout.Controls.Add(lblInstruction, 0, 1);
 
-            pnl.Controls.Add(tbl);
+            // 3. Viewport rolável com lista de perfis e DarkScrollBar
+            var pnlViewportContainer = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Margin = new Padding(0, (int)(2 * scale), 0, (int)(4 * scale)),
+                Padding = Padding.Empty,
+            };
+            pnlViewportContainer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            pnlViewportContainer.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(8 * scale)));
+            pnlViewportContainer.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            _pnlProfilesViewport = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+
+            _pnlProfilesListContent = new Panel
+            {
+                Location = new Point(0, 0),
+                Width = Math.Max(100, _pnlProfilesViewport.Width),
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                BackColor = Color.FromArgb(32, 32, 32),
+                Padding = new Padding((int)(6 * scale), (int)(4 * scale), (int)(6 * scale), (int)(4 * scale)),
+            };
+            _pnlProfilesViewport.Controls.Add(_pnlProfilesListContent);
+
+            _scrollBarProfiles = new DarkScrollBar
+            {
+                Dock = DockStyle.Fill,
+                Width = (int)(8 * scale),
+                Visible = false,
+            };
+            _scrollBarProfiles.ValueChanged += (s, e) =>
+            {
+                _pnlProfilesListContent.Top = -_scrollBarProfiles.Value;
+            };
+
+            _pnlProfilesViewport.Resize += (s, e) =>
+            {
+                _pnlProfilesListContent.Width = _pnlProfilesViewport.ClientSize.Width;
+                UpdateProfilesScrollBar();
+            };
+
+            _pnlProfilesViewport.MouseWheel += (s, e) =>
+            {
+                if (!_scrollBarProfiles.Visible) return;
+                int delta = (e.Delta / 120) * (int)(30 * scale);
+                _scrollBarProfiles.Value = Math.Max(0, Math.Min(_scrollBarProfiles.Maximum, _scrollBarProfiles.Value - delta));
+                _pnlProfilesListContent.Top = -_scrollBarProfiles.Value;
+            };
+
+            pnlViewportContainer.Controls.Add(_pnlProfilesViewport, 0, 0);
+            pnlViewportContainer.Controls.Add(_scrollBarProfiles, 1, 0);
+            mainLayout.Controls.Add(pnlViewportContainer, 0, 2);
+
+            // 4. Rodapé com ações
+            var footerTable = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = CorPainel,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            footerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            footerTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, (int)(250 * scale)));
+            footerTable.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+            _btnToggleSelectAllProfiles = new Button
+            {
+                Text = "Marcar Todos",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Regular),
+                ForeColor = Color.FromArgb(180, 180, 180),
+                BackColor = Color.Transparent,
+                FlatStyle = FlatStyle.Flat,
+                FlatAppearance = { BorderSize = 0 },
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Left,
+                AutoSize = true,
+                Margin = Padding.Empty,
+            };
+            _btnToggleSelectAllProfiles.Click += BtnToggleSelectAllProfiles_Click;
+            footerTable.Controls.Add(_btnToggleSelectAllProfiles, 0, 0);
+
+            _btnExecuteProfileDelete = new Button
+            {
+                Text = "APAGAR PERFIS SELECIONADOS",
+                Font = new Font("Segoe UI", 9.0f, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(190, 50, 40),
+                FlatStyle = FlatStyle.Flat,
+                FlatAppearance = { BorderSize = 0 },
+                Cursor = Cursors.Hand,
+                Dock = DockStyle.Fill,
+                Height = (int)(28 * scale),
+                Margin = Padding.Empty,
+            };
+            _btnExecuteProfileDelete.FlatAppearance.MouseOverBackColor = Color.FromArgb(220, 60, 50);
+            _btnExecuteProfileDelete.Click += BtnExecuteProfileDelete_Click;
+            footerTable.Controls.Add(_btnExecuteProfileDelete, 1, 0);
+
+            mainLayout.Controls.Add(footerTable, 0, 3);
+            pnl.Controls.Add(mainLayout);
+
             return pnl;
+        }
+
+        private async void BtnStartProfileCleanup_Click(object sender, EventArgs e)
+        {
+            if (_installing)
+            {
+                MessageBox.Show("Uma instalação já está em andamento. Aguarde a conclusão.",
+                    "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            _btnStartProfileCleanup.Enabled = false;
+            _btnStartProfileCleanup.Text = "Buscando perfis...";
+
+            try
+            {
+                string standardUserToKeep = string.IsNullOrWhiteSpace(_txtStandardUserName.Text)
+                    ? null
+                    : _txtStandardUserName.Text.Trim();
+                string adminUserToKeep = string.IsNullOrWhiteSpace(_txtAdminPass.Text) ? null : "Admin";
+
+                var profiles = await Task.Run(new Func<List<WindowsUserProfileItem>>(() =>
+                {
+                    return _service.GetDetectedUserProfiles(standardUserToKeep, adminUserToKeep);
+                }));
+
+                PopulateDetectedProfilesList(profiles);
+
+                _pnlFeaturesMain.Visible = false;
+                _pnlProfilesManagerView.Visible = true;
+                _pnlProfilesManagerView.BringToFront();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(string.Format("Erro ao buscar perfis do Windows:\n{0}", ex.Message),
+                    "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                _btnStartProfileCleanup.Enabled = true;
+                _btnStartProfileCleanup.Text = "Apagar Perfis do Windows";
+            }
+        }
+
+        private void PopulateDetectedProfilesList(List<WindowsUserProfileItem> profiles)
+        {
+            float scale = GetDpiScale();
+            _pnlProfilesListContent.SuspendLayout();
+            _pnlProfilesListContent.Controls.Clear();
+            _profileCheckboxes.Clear();
+
+            int top = 0;
+            int itemHeight = (int)(28 * scale);
+
+            if (profiles == null || profiles.Count == 0)
+            {
+                var lblEmpty = new Label
+                {
+                    Text = "Nenhum perfil de usuário adicional foi localizado no sistema.",
+                    Font = new Font("Segoe UI", 9.0f, FontStyle.Italic),
+                    ForeColor = Color.FromArgb(160, 160, 160),
+                    Location = new Point((int)(8 * scale), (int)(8 * scale)),
+                    AutoSize = true,
+                };
+                _pnlProfilesListContent.Controls.Add(lblEmpty);
+            }
+            else
+            {
+                foreach (var item in profiles)
+                {
+                    var chk = new DarkCheckBox
+                    {
+                        Text = item.DisplayText,
+                        Checked = false,
+                        Font = new Font("Segoe UI", 9.0f, FontStyle.Regular),
+                        ForeColor = item.IsProtected ? Color.FromArgb(130, 130, 130) : CorTexto,
+                        BackColor = Color.FromArgb(32, 32, 32),
+                        Location = new Point((int)(6 * scale), top),
+                        Width = Math.Max(200, _pnlProfilesViewport.ClientSize.Width - (int)(16 * scale)),
+                        Height = itemHeight,
+                        Cursor = item.IsProtected ? Cursors.Default : Cursors.Hand,
+                        Enabled = !item.IsProtected,
+                    };
+
+                    _pnlProfilesListContent.Controls.Add(chk);
+                    _profileCheckboxes.Add(new KeyValuePair<WindowsUserProfileItem, DarkCheckBox>(item, chk));
+                    top += itemHeight;
+                }
+            }
+
+            _pnlProfilesListContent.Height = Math.Max(top + (int)(8 * scale), _pnlProfilesViewport.ClientSize.Height);
+            _pnlProfilesListContent.ResumeLayout(true);
+            UpdateProfilesScrollBar();
+        }
+
+        private void UpdateProfilesScrollBar()
+        {
+            if (_pnlProfilesViewport == null || _pnlProfilesListContent == null || _scrollBarProfiles == null) return;
+            int viewHeight = _pnlProfilesViewport.ClientSize.Height;
+            int contentHeight = _pnlProfilesListContent.Height;
+
+            if (contentHeight > viewHeight && viewHeight > 0)
+            {
+                _scrollBarProfiles.Visible = true;
+                _scrollBarProfiles.Maximum = contentHeight - viewHeight;
+                _scrollBarProfiles.LargeChange = viewHeight;
+            }
+            else
+            {
+                _scrollBarProfiles.Visible = false;
+                _pnlProfilesListContent.Top = 0;
+            }
+        }
+
+        private void BtnToggleSelectAllProfiles_Click(object sender, EventArgs e)
+        {
+            bool anyUnchecked = false;
+            foreach (var kvp in _profileCheckboxes)
+            {
+                if (kvp.Key != null && !kvp.Key.IsProtected && !kvp.Value.Checked)
+                {
+                    anyUnchecked = true;
+                    break;
+                }
+            }
+
+            bool newState = anyUnchecked;
+            foreach (var kvp in _profileCheckboxes)
+            {
+                if (kvp.Key != null && !kvp.Key.IsProtected)
+                {
+                    kvp.Value.Checked = newState;
+                }
+            }
+
+            _btnToggleSelectAllProfiles.Text = newState ? "Desmarcar Todos" : "Marcar Todos";
+        }
+
+        private async void BtnExecuteProfileDelete_Click(object sender, EventArgs e)
+        {
+            var selected = new List<WindowsUserProfileItem>();
+            foreach (var kvp in _profileCheckboxes)
+            {
+                if (kvp.Value.Checked && !kvp.Key.IsProtected)
+                {
+                    selected.Add(kvp.Key);
+                }
+            }
+
+            if (selected.Count == 0)
+            {
+                AppendLog("Aviso: Selecione ao menos um perfil para apagar.", ConsoleColor.Yellow);
+                return;
+            }
+
+            _btnExecuteProfileDelete.Enabled = false;
+            _btnBackFromProfiles.Enabled = false;
+            _btnToggleSelectAllProfiles.Enabled = false;
+            _btnExecuteProfileDelete.Text = "APAGANDO PERFIS...";
+
+            try
+            {
+                _service.StartInstallation();
+                bool success = await _service.DeleteSelectedUserProfilesAsync(selected);
+
+                // Recarrega a lista de perfis para refletir o estado atual
+                string standardUserToKeep = string.IsNullOrWhiteSpace(_txtStandardUserName.Text)
+                    ? null
+                    : _txtStandardUserName.Text.Trim();
+                string adminUserToKeep = string.IsNullOrWhiteSpace(_txtAdminPass.Text) ? null : "Admin";
+
+                var refreshedProfiles = await Task.Run(new Func<List<WindowsUserProfileItem>>(() =>
+                {
+                    return _service.GetDetectedUserProfiles(standardUserToKeep, adminUserToKeep);
+                }));
+
+                PopulateDetectedProfilesList(refreshedProfiles);
+            }
+            catch (Exception ex)
+            {
+                AppendLog(string.Format("X Falha ao apagar perfis: {0}", ex.Message), ConsoleColor.Red);
+            }
+            finally
+            {
+                _btnExecuteProfileDelete.Enabled = true;
+                _btnBackFromProfiles.Enabled = true;
+                _btnToggleSelectAllProfiles.Enabled = true;
+                _btnExecuteProfileDelete.Text = "APAGAR PERFIS SELECIONADOS";
+            }
         }
 
         /// <summary>
@@ -2978,28 +3587,6 @@ namespace InstallerGUI.Forms
                     }
                 }
 
-                if (_chkRemoveOtherProfiles != null && _chkRemoveOtherProfiles.Checked)
-                {
-                    string standardUserToKeep = string.IsNullOrWhiteSpace(_txtStandardUserName.Text)
-                        ? null
-                        : _txtStandardUserName.Text.Trim();
-                    string adminUserToKeep = string.IsNullOrWhiteSpace(_txtAdminPass.Text) ? null : "Admin";
-                    string cleanupPreview = await Task.Run(
-                        () => _service.GetUserProfileCleanupPreview(standardUserToKeep, adminUserToKeep));
-                    var cleanupConfirmation = MessageBox.Show(
-                        "A ação abaixo é permanente e apagará as contas/perfis listados. Faça backup dos dados importantes antes de continuar.\n\n" +
-                        cleanupPreview + "\nDeseja prosseguir com a remoção?",
-                        "Confirmar remoção de perfis do Windows",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Warning);
-
-                    if (cleanupConfirmation != DialogResult.Yes)
-                    {
-                        AppendLog("Remoção de perfis cancelada pelo usuário.", ConsoleColor.Yellow);
-                        return;
-                    }
-                }
-
                 _btnInstall.Text = "INSTALANDO...";
                 SetStopButtonState(true);
 
@@ -3032,7 +3619,7 @@ namespace InstallerGUI.Forms
                 options.SetWallpaperNortel = _chkWallpaperNortel.Checked;
                 options.PreventWallpaperChange = _chkPreventWallpaperChange != null && _chkPreventWallpaperChange.Checked;
                 options.UninstallGames = _chkUninstallGames != null && _chkUninstallGames.Checked;
-                options.RemoveOtherUserProfiles = _chkRemoveOtherProfiles != null && _chkRemoveOtherProfiles.Checked;
+                options.RemoveOtherUserProfiles = false;
                 options.UninstallThirdPartyAntivirus = _chkUninstallThirdPartyAntivirus != null && _chkUninstallThirdPartyAntivirus.Checked;
 
                 // ─── Atalhos corporativos ───
@@ -3991,7 +4578,7 @@ namespace InstallerGUI.Forms
                 new ProgramInfo("googleearth", "Google Earth Pro",               "googleearthprowin.exe",                "OMAHA=1", "", "Geral"),
                 new ProgramInfo("java",        "Java JRE 8",                     "jre-windows-x64.exe",                  "/s", "", "Geral"),
                 new ProgramInfo("office365",   "Microsoft Office 365",           "setup.exe",                            "/configure configuration_o365.xml", "", "Geral") { UseShellExecute = false, TimeoutMs = 1800000, RequiresInternet = true, DefaultChecked = false },
-                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",     "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1", "", "Geral") { UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = true },
+                new ProgramInfo("powerbi",     "Microsoft Power BI Desktop",     "PBIDesktopSetup_x64.exe",              "-quiet -norestart ACCEPT_EULA=1", "", "Geral") { UseShellExecute = true, TimeoutMs = 600000, DefaultChecked = false },
                 new ProgramInfo("firefox",     "Mozilla Firefox",                "Firefox_Setup.msi",                    "/qn /norestart", "", "Geral"),
                 new ProgramInfo("radmin",      "Radmin VPN",                     "Radmin_VPN.exe",                       "/VERYSILENT /NORESTART", "", "Geral") { DefaultChecked = false },
                 new ProgramInfo("rustdesk",    "RustDesk",                       "rustdesk_x86_64.exe",                  "--silent-install", "", "Geral") { FireAndForget = true },

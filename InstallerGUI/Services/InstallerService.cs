@@ -163,13 +163,23 @@ namespace InstallerGUI.Services
         /// <param name="newName">Novo nome do computador</param>
         public async Task RenameComputerAsync(string newName)
         {
-            Log(string.Format("Alterando nome do computador para \"{0}\"...", newName), ConsoleColor.Yellow);
+            string targetName = (newName ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(targetName))
+                return;
+
+            if (string.Equals(Environment.MachineName, targetName, StringComparison.OrdinalIgnoreCase))
+            {
+                Log(string.Format("[ok] O computador já possui o nome \"{0}\".", targetName), ConsoleColor.Green);
+                return;
+            }
+
+            Log(string.Format("Alterando nome do computador para \"{0}\"...", targetName), ConsoleColor.Yellow);
 
             try
             {
-                string safeName = newName.Replace("'", "''");
+                string safeName = targetName.Replace("'", "''");
                 int exitCode = await RunProcessAsync("powershell",
-                    string.Format("-Command \"Rename-Computer -NewName '{0}' -Force\"", safeName),
+                    string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Rename-Computer -NewName '{0}' -Force\"", safeName),
                     30000);
 
                 if (exitCode == 0)
@@ -186,7 +196,6 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// <summary>
         /// Cria o usuário administrador "admin" com a senha fornecida e o adiciona
         /// ao grupo de administradores locais, ou apenas altera sua senha caso já exista.
         /// </summary>
@@ -196,11 +205,7 @@ namespace InstallerGUI.Services
         {
             try
             {
-                bool exists = await UserExistsAsync("admin");
-                if (exists)
-                    await UpdateExistingAdminPasswordAsync(password, passwordNeverExpires);
-                else
-                    await CreateNewAdminUserAsync(password, passwordNeverExpires);
+                await ConfigureLocalAccountAsync("admin", password, true, false, passwordNeverExpires);
             }
             catch (Exception ex)
             {
@@ -208,74 +213,6 @@ namespace InstallerGUI.Services
             }
 
             await Task.Delay(500);
-        }
-
-        private async Task<bool> UserExistsAsync(string username)
-        {
-            int code = await RunProcessAsync(
-                "net",
-                string.Format("user {0}", QuoteProcessArgument(username)),
-                10000,
-                null,
-                false,
-                true);
-            return code == 0;
-        }
-
-        private async Task UpdateExistingAdminPasswordAsync(string password, bool passwordNeverExpires)
-        {
-            if (!string.IsNullOrWhiteSpace(password))
-            {
-                Log("Usuário 'admin' já existe. Alterando a senha...", ConsoleColor.Yellow);
-
-                int code = await RunProcessAsync(
-                    "net",
-                    string.Format("user admin {0}", QuoteProcessArgument(password)),
-                    10000);
-
-                if (code == 0)
-                    Log("[ok] Senha do usuário 'admin' alterada com sucesso.", ConsoleColor.Green);
-                else
-                    Log("X Não foi possível alterar a senha do usuário 'admin'.", ConsoleColor.Red);
-            }
-            else
-            {
-                Log("Usuário 'admin' já existe e nenhuma senha foi informada. Mantendo senha atual.", ConsoleColor.Yellow);
-            }
-
-            await ConfigureUserPasswordPolicyAsync("admin", false, passwordNeverExpires);
-        }
-
-        private async Task CreateNewAdminUserAsync(string password, bool passwordNeverExpires)
-        {
-            Log("Criando usuário 'admin'...", ConsoleColor.Yellow);
-
-            string passwordArg = string.IsNullOrWhiteSpace(password)
-                ? "\"\""
-                : QuoteProcessArgument(password);
-
-            int code = await RunProcessAsync(
-                "net",
-                string.Format("user admin {0} /add", passwordArg),
-                10000);
-
-            if (code != 0)
-            {
-                Log("X Não foi possível criar o usuário 'admin'.", ConsoleColor.Red);
-                return;
-            }
-
-            Log("[ok] Usuário 'admin' criado.", ConsoleColor.Green);
-
-            Log("Adicionando 'admin' aos administradores...", ConsoleColor.Yellow);
-            code = await RunProcessAsync("net", "localgroup Administradores admin /add", 600000, null, false, true);
-            if (code != 0)
-                code = await RunProcessAsync("net", "localgroup Administrators admin /add");
-
-            if (code != 0)
-                Log("X Aviso: Não foi possível adicionar 'admin' ao grupo de administradores.", ConsoleColor.Yellow);
-
-            await ConfigureUserPasswordPolicyAsync("admin", false, passwordNeverExpires);
         }
 
         /// <summary>
@@ -318,47 +255,6 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Configura a política da conta de usuário informada: se a senha nunca expira e se pode alterar a senha,
-        /// utilizando o cmdlet nativo Set-LocalUser do Windows PowerShell.
-        /// </summary>
-        /// <param name="username">Nome da conta local de usuário</param>
-        /// <param name="cannotChangePassword">Se true, impede alteração da senha pelo usuário</param>
-        /// <param name="passwordNeverExpires">Se true, define PasswordNeverExpires como $true; se false, define como $false</param>
-        private async Task ConfigureUserPasswordPolicyAsync(string username, bool cannotChangePassword = false, bool passwordNeverExpires = true)
-        {
-            if (string.IsNullOrWhiteSpace(username)) return;
-
-            string safeUser = username.Replace("'", "''");
-            bool mayChangePassword = !cannotChangePassword;
-            string psMayChange = mayChangePassword ? "true" : "false";
-            string psNeverExpires = passwordNeverExpires ? "true" : "false";
-
-            int psCode = await RunProcessAsync("powershell",
-                string.Format("-NoProfile -ExecutionPolicy Bypass -Command \"Set-LocalUser -Name '{0}' -PasswordNeverExpires ${1} -UserMayChangePassword ${2}\"",
-                safeUser, psNeverExpires, psMayChange), 15000);
-
-            if (psCode == 0)
-            {
-                if (passwordNeverExpires)
-                    Log(string.Format("[ok] Senha do usuário \"{0}\" configurada para NUNCA expirar.", username), ConsoleColor.Green);
-                else
-                    Log(string.Format("[ok] Senha do usuário \"{0}\": expiração padrão (nunca expirar: desmarcado).", username), ConsoleColor.Yellow);
-
-                if (cannotChangePassword)
-                    Log("[ok] Restrição aplicada: usuário impedido de alterar a senha.", ConsoleColor.Green);
-                else if (!string.Equals(username, "admin", StringComparison.OrdinalIgnoreCase))
-                    Log("[ok] Permissão de senha: usuário poderá alterar a própria senha.", ConsoleColor.Green);
-            }
-            else
-            {
-                if (passwordNeverExpires)
-                    Log(string.Format("[ok] Senha do usuário \"{0}\" protegida contra expiração via política do sistema.", username), ConsoleColor.Green);
-                else
-                    Log(string.Format("Aviso: Não foi possível atualizar política de expiração para \"{0}\".", username), ConsoleColor.Yellow);
-            }
-        }
-
-        /// <summary>
         /// Cria um usuário padrão com nome e senha fornecidos (ou atualiza caso já exista),
         /// aplicando a política de expiração e alteração de senha conforme configurado.
         /// </summary>
@@ -376,11 +272,7 @@ namespace InstallerGUI.Services
 
             try
             {
-                bool exists = await UserExistsAsync(username);
-                if (exists)
-                    await UpdateExistingStandardUserAsync(username, password, cannotChangePassword, passwordNeverExpires);
-                else
-                    await CreateNewStandardUserAsync(username, password, cannotChangePassword, passwordNeverExpires);
+                await ConfigureLocalAccountAsync(username, password, false, cannotChangePassword, passwordNeverExpires);
             }
             catch (Exception ex)
             {
@@ -391,72 +283,156 @@ namespace InstallerGUI.Services
             await Task.Delay(500);
         }
 
-        private async Task CreateNewStandardUserAsync(string username, string password, bool cannotChangePassword, bool passwordNeverExpires)
+        /// <summary>
+        /// Cria ou atualiza uma conta local do Windows usando PowerShell LocalAccounts (com fallback ADSI),
+        /// evitando bloqueios interativos de stdin e limitações de 14 caracteres do comando legado 'net user'.
+        /// </summary>
+        private async Task ConfigureLocalAccountAsync(string username, string password, bool isAdmin,
+            bool cannotChangePassword, bool passwordNeverExpires)
         {
-            Log(string.Format("Criando usuário \"{0}\"...", username), ConsoleColor.Yellow);
-
-            string pwdChg = cannotChangePassword ? "/passwordchg:no" : "/passwordchg:yes";
-            int code;
-            if (string.IsNullOrWhiteSpace(password))
-                code = await RunProcessAsync("net",
-                    string.Format("user {0} /add {1}", QuoteProcessArgument(username), pwdChg));
-            else
-                code = await RunProcessAsync("net",
-                    string.Format("user {0} {1} /add {2}", QuoteProcessArgument(username), QuoteProcessArgument(password), pwdChg));
-
-            if (code != 0)
+            string fullName = username.Trim();
+            string samName = fullName;
+            if (samName.Length > 20)
             {
-                Log(string.Format("X Não foi possível criar o usuário \"{0}\".", username), ConsoleColor.Red);
-                return;
+                samName = samName.Substring(0, 20).Trim();
+                Log(string.Format("  Aviso: Nome de logon ajustado para 20 caracteres (\"{0}\"); Nome completo mantido.", samName),
+                    ConsoleColor.Yellow);
             }
 
-            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword, passwordNeverExpires);
+            bool hasPassword = !string.IsNullOrWhiteSpace(password);
 
-            Log(string.Format("[ok] Usuário \"{0}\" criado.", username), ConsoleColor.Green);
-        }
+            var envVars = new Dictionary<string, string>(StringComparer.Ordinal);
+            envVars["EXABIT_USER_PWD"] = hasPassword ? password : string.Empty;
 
-        private async Task UpdateExistingStandardUserAsync(string username, string password, bool cannotChangePassword, bool passwordNeverExpires)
-        {
-            string pwdChg = cannotChangePassword ? "/passwordchg:no" : "/passwordchg:yes";
+            var sb = new StringBuilder();
+            sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+            sb.AppendLine(string.Format("$samName = '{0}'", samName.Replace("'", "''")));
+            sb.AppendLine(string.Format("$fullName = '{0}'", fullName.Replace("'", "''")));
+            sb.AppendLine(string.Format("$isAdmin = ${0}", isAdmin ? "true" : "false"));
+            sb.AppendLine(string.Format("$hasPwd = ${0}", hasPassword ? "true" : "false"));
+            sb.AppendLine(string.Format("$cannotChange = ${0}", cannotChangePassword ? "true" : "false"));
+            sb.AppendLine(string.Format("$mayChange = ${0}", !cannotChangePassword ? "true" : "false"));
+            sb.AppendLine(string.Format("$neverExpires = ${0}", passwordNeverExpires ? "true" : "false"));
+            sb.AppendLine("$pwdPlain = $env:EXABIT_USER_PWD");
+            sb.AppendLine("Import-Module Microsoft.PowerShell.LocalAccounts -ErrorAction SilentlyContinue");
+            sb.AppendLine("$useLocalAccounts = [bool](Get-Command New-LocalUser -ErrorAction SilentlyContinue)");
+            sb.AppendLine("$exists = $false");
+            sb.AppendLine("if ($useLocalAccounts) {");
+            sb.AppendLine("    $existing = Get-LocalUser -Name $samName -ErrorAction SilentlyContinue");
+            sb.AppendLine("    if ($existing) { $exists = $true }");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    $adsiCheck = ([ADSI]\"WinNT://$env:COMPUTERNAME,computer\").Children | Where-Object { $_.SchemaClassName -eq 'User' -and $_.Name -ieq $samName }");
+            sb.AppendLine("    if ($adsiCheck) { $exists = $true }");
+            sb.AppendLine("}");
+            sb.AppendLine("try {");
+            sb.AppendLine("    if ($exists) {");
+            sb.AppendLine("        if ($hasPwd) {");
+            sb.AppendLine("            Write-Host ('Usuário \"' + $samName + '\" já existe. Alterando a senha...')");
+            sb.AppendLine("            if ($useLocalAccounts) {");
+            sb.AppendLine("                $secPwd = ConvertTo-SecureString -String $pwdPlain -AsPlainText -Force");
+            sb.AppendLine("                Set-LocalUser -Name $samName -Password $secPwd -PasswordNeverExpires $neverExpires -UserMayChangePassword $mayChange -ErrorAction Stop");
+            sb.AppendLine("            } else {");
+            sb.AppendLine("                $u = [ADSI]\"WinNT://$env:COMPUTERNAME/$samName,user\"");
+            sb.AppendLine("                $u.SetPassword($pwdPlain)");
+            sb.AppendLine("                $flags = [int]$u.UserFlags.Value -band (-bnot (0x0040 -bor 0x10000))");
+            sb.AppendLine("                if ($cannotChange) { $flags = $flags -bor 0x0040 }");
+            sb.AppendLine("                if ($neverExpires) { $flags = $flags -bor 0x10000 }");
+            sb.AppendLine("                $u.UserFlags = $flags");
+            sb.AppendLine("                $u.SetInfo()");
+            sb.AppendLine("            }");
+            sb.AppendLine("            Write-Host ('[ok] Senha do usuário \"' + $samName + '\" alterada com sucesso.')");
+            sb.AppendLine("        } else {");
+            sb.AppendLine("            Write-Host ('Usuário \"' + $samName + '\" já existe e nenhuma senha foi informada. Mantendo senha atual.')");
+            sb.AppendLine("            if ($useLocalAccounts) {");
+            sb.AppendLine("                Set-LocalUser -Name $samName -PasswordNeverExpires $neverExpires -UserMayChangePassword $mayChange -ErrorAction Stop");
+            sb.AppendLine("            } else {");
+            sb.AppendLine("                $u = [ADSI]\"WinNT://$env:COMPUTERNAME/$samName,user\"");
+            sb.AppendLine("                $flags = [int]$u.UserFlags.Value -band (-bnot (0x0040 -bor 0x10000))");
+            sb.AppendLine("                if ($cannotChange) { $flags = $flags -bor 0x0040 }");
+            sb.AppendLine("                if ($neverExpires) { $flags = $flags -bor 0x10000 }");
+            sb.AppendLine("                $u.UserFlags = $flags");
+            sb.AppendLine("                $u.SetInfo()");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    } else {");
+            sb.AppendLine("        Write-Host ('Criando usuário \"' + $samName + '\"...')");
+            sb.AppendLine("        if ($useLocalAccounts) {");
+            sb.AppendLine("            if ($hasPwd) {");
+            sb.AppendLine("                $secPwd = ConvertTo-SecureString -String $pwdPlain -AsPlainText -Force");
+            sb.AppendLine("                New-LocalUser -Name $samName -FullName $fullName -Password $secPwd -PasswordNeverExpires:$neverExpires -UserMayNotChangePassword:$cannotChange -ErrorAction Stop | Out-Null");
+            sb.AppendLine("            } else {");
+            sb.AppendLine("                New-LocalUser -Name $samName -FullName $fullName -NoPassword -UserMayNotChangePassword:$cannotChange -ErrorAction Stop | Out-Null");
+            sb.AppendLine("                Set-LocalUser -Name $samName -PasswordNeverExpires $neverExpires -ErrorAction SilentlyContinue");
+            sb.AppendLine("            }");
+            sb.AppendLine("        } else {");
+            sb.AppendLine("            $comp = [ADSI]\"WinNT://$env:COMPUTERNAME,computer\"");
+            sb.AppendLine("            $u = $comp.Create('User', $samName)");
+            sb.AppendLine("            if ($hasPwd) { $u.SetPassword($pwdPlain) } else { $u.SetPassword('') }");
+            sb.AppendLine("            $u.Put('FullName', $fullName)");
+            sb.AppendLine("            $u.SetInfo()");
+            sb.AppendLine("            $flags = [int]$u.UserFlags.Value -band (-bnot (0x0040 -bor 0x10000))");
+            sb.AppendLine("            if ($cannotChange) { $flags = $flags -bor 0x0040 }");
+            sb.AppendLine("            if ($neverExpires) { $flags = $flags -bor 0x10000 }");
+            sb.AppendLine("            $u.UserFlags = $flags");
+            sb.AppendLine("            $u.SetInfo()");
+            sb.AppendLine("        }");
+            sb.AppendLine("        Write-Host ('[ok] Usuário \"' + $samName + '\" criado.')");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {");
+            sb.AppendLine("    Write-Host ('X Não foi possível configurar o usuário \"' + $samName + '\": ' + $_.Exception.Message)");
+            sb.AppendLine("    exit 1");
+            sb.AppendLine("}");
+            sb.AppendLine("if ($useLocalAccounts) {");
+            sb.AppendLine("    Enable-LocalUser -Name $samName -ErrorAction SilentlyContinue");
+            sb.AppendLine("}");
+            sb.AppendLine("if ($neverExpires) {");
+            sb.AppendLine("    Write-Host ('[ok] Senha do usuário \"' + $samName + '\" configurada para NUNCA expirar.')");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    Write-Host ('[ok] Senha do usuário \"' + $samName + '\": expiração padrão (nunca expirar: desmarcado).')");
+            sb.AppendLine("}");
+            sb.AppendLine("if ($cannotChange) {");
+            sb.AppendLine("    Write-Host '[ok] Restrição aplicada: usuário impedido de alterar a senha.'");
+            sb.AppendLine("} elseif (-not $isAdmin) {");
+            sb.AppendLine("    Write-Host '[ok] Permissão de senha: usuário poderá alterar a própria senha.'");
+            sb.AppendLine("}");
+            sb.AppendLine("function Add-UserToLocalGroupBySid([string]$sidStr, [string]$user, [string]$label, [bool]$optional) {");
+            sb.AppendLine("    Write-Host ('Adicionando \"' + $user + '\" ao grupo ' + $label + '...')");
+            sb.AppendLine("    try {");
+            sb.AppendLine("        $sidObj = New-Object System.Security.Principal.SecurityIdentifier($sidStr)");
+            sb.AppendLine("        $grpObj = $null");
+            sb.AppendLine("        if ($useLocalAccounts) {");
+            sb.AppendLine("            $grpObj = Get-LocalGroup -SID $sidObj -ErrorAction SilentlyContinue");
+            sb.AppendLine("        }");
+            sb.AppendLine("        if ($grpObj) {");
+            sb.AppendLine("            $alreadyMember = Get-LocalGroupMember -Group $grpObj -ErrorAction SilentlyContinue | Where-Object { $_.Name -match ('(^|\\\\)' + [regex]::Escape($user) + '$') }");
+            sb.AppendLine("            if (-not $alreadyMember) {");
+            sb.AppendLine("                Add-LocalGroupMember -Group $grpObj -Member $user -ErrorAction Stop");
+            sb.AppendLine("            }");
+            sb.AppendLine("        } else {");
+            sb.AppendLine("            $grpName = ($sidObj.Translate([System.Security.Principal.NTAccount]).Value -split '\\\\')[-1]");
+            sb.AppendLine("            $grp = [ADSI]\"WinNT://$env:COMPUTERNAME/$grpName,group\"");
+            sb.AppendLine("            $grp.Add(\"WinNT://$env:COMPUTERNAME/$user,user\")");
+            sb.AppendLine("        }");
+            sb.AppendLine("        Write-Host ('[ok] Usuário adicionado ao grupo ' + $label + '.')");
+            sb.AppendLine("    } catch {");
+            sb.AppendLine("        if ($_.Exception.Message -match 'already|já é membro|1378|MemberExists') {");
+            sb.AppendLine("            Write-Host ('[ok] Usuário já faz parte do grupo ' + $label + '.')");
+            sb.AppendLine("        } elseif ($optional) {");
+            sb.AppendLine("            Write-Host ('  Aviso: Grupo ' + $label + ' indisponível nesta edição do Windows ou não aplicado: ' + $_.Exception.Message)");
+            sb.AppendLine("        } else {");
+            sb.AppendLine("            Write-Host ('X Aviso: Não foi possível adicionar ao grupo ' + $label + ': ' + $_.Exception.Message)");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine("Add-UserToLocalGroupBySid 'S-1-5-32-545' $samName 'Usuários' $false");
+            sb.AppendLine("if ($isAdmin) {");
+            sb.AppendLine("    Add-UserToLocalGroupBySid 'S-1-5-32-544' $samName 'Administradores' $false");
+            sb.AppendLine("} else {");
+            sb.AppendLine("    Add-UserToLocalGroupBySid 'S-1-5-32-555' $samName 'Área de Trabalho Remota' $true");
+            sb.AppendLine("}");
+            sb.AppendLine("exit 0");
 
-            if (!string.IsNullOrWhiteSpace(password))
-            {
-                Log(string.Format("Usuário \"{0}\" já existe. Alterando a senha...", username), ConsoleColor.Yellow);
-                int code = await RunProcessAsync("net",
-                    string.Format("user {0} {1} {2}", QuoteProcessArgument(username), QuoteProcessArgument(password), pwdChg));
-
-                if (code == 0)
-                    Log(string.Format("[ok] Senha do usuário \"{0}\" alterada com sucesso.", username), ConsoleColor.Green);
-                else
-                    Log(string.Format("X Não foi possível alterar a senha do usuário \"{0}\".", username), ConsoleColor.Red);
-            }
-            else
-            {
-                Log(string.Format("Usuário \"{0}\" já existe e nenhuma senha foi informada. Mantendo senha atual.", username), ConsoleColor.Yellow);
-                await RunProcessAsync("net",
-                    string.Format("user {0} {1}", QuoteProcessArgument(username), pwdChg));
-            }
-
-            await ConfigureStandardUserSettingsAsync(username, cannotChangePassword, passwordNeverExpires);
-        }
-
-        private async Task ConfigureStandardUserSettingsAsync(string username, bool cannotChangePassword, bool passwordNeverExpires)
-        {
-            await ConfigureUserPasswordPolicyAsync(username, cannotChangePassword, passwordNeverExpires);
-
-            Log("Adicionando ao grupo de área de trabalho remota...", ConsoleColor.Yellow);
-            int rdpCode = await RunProcessAsync("net",
-                string.Format("localgroup \"Usuários da Área de Trabalho Remota\" {0} /add", QuoteProcessArgument(username)),
-                600000, null, false, true);
-            if (rdpCode != 0)
-                rdpCode = await RunProcessAsync("net",
-                    string.Format("localgroup \"Remote Desktop Users\" {0} /add", QuoteProcessArgument(username)),
-                    600000, null, false, true);
-
-            if (rdpCode == 0)
-                Log("[ok] Usuário adicionado ao grupo de área de trabalho remota.", ConsoleColor.Green);
-            else
-                Log("X Aviso: Não foi possível adicionar ao grupo de área de trabalho remota.", ConsoleColor.Yellow);
+            await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 30000, envVars);
         }
 
         /// <summary>
@@ -742,15 +718,10 @@ namespace InstallerGUI.Services
         /// </summary>
         private string GetApplyWallpapersScriptPath()
         {
+            string tempScript = Path.Combine(Path.GetTempPath(), "apply_wallpapers.ps1");
+
             try
             {
-                string localScript = Path.Combine(_basePath, "Scripts", "apply_wallpapers.ps1");
-                if (File.Exists(localScript))
-                {
-                    return localScript;
-                }
-
-                string tempScript = Path.Combine(Path.GetTempPath(), "apply_wallpapers.ps1");
                 var assembly = Assembly.GetExecutingAssembly();
                 using (var stream = assembly.GetManifestResourceStream("InstallerGUI.apply_wallpapers.ps1"))
                 {
@@ -762,6 +733,18 @@ namespace InstallerGUI.Services
                         }
                         return tempScript;
                     }
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                string localScript = Path.Combine(_basePath, "Scripts", "apply_wallpapers.ps1");
+                if (File.Exists(localScript))
+                {
+                    return localScript;
                 }
 
                 if (File.Exists(tempScript))
@@ -3355,6 +3338,331 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Detecta e lista todos os perfis de usuário e contas locais do Windows,
+        /// classificando quais são protegidos pelo sistema e quais podem ser apagados.
+        /// </summary>
+        /// <param name="keepUser1">Primeiro usuário adicional que deve ser preservado.</param>
+        /// <param name="keepUser2">Segundo usuário adicional que deve ser preservado.</param>
+        /// <returns>Lista de perfis identificados com status de proteção.</returns>
+        public List<WindowsUserProfileItem> GetDetectedUserProfiles(string keepUser1 = null, string keepUser2 = null)
+        {
+            var keepNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                Environment.UserName,
+                "Administrator",
+                "Administrador",
+                "DefaultAccount",
+                "Guest",
+                "Convidado",
+                "WDAGUtilityAccount"
+            };
+            if (!string.IsNullOrWhiteSpace(keepUser1))
+                keepNames.Add(keepUser1.Trim());
+            if (!string.IsNullOrWhiteSpace(keepUser2))
+                keepNames.Add(keepUser2.Trim());
+
+            string currentProfilePath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var loadedProfileSids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT SID, Loaded FROM Win32_UserProfile WHERE Loaded = True"))
+                using (var profiles = searcher.Get())
+                {
+                    foreach (ManagementObject profile in profiles)
+                    {
+                        string sid = Convert.ToString(profile["SID"]);
+                        if (!string.IsNullOrWhiteSpace(sid))
+                            loadedProfileSids.Add(sid);
+                    }
+                }
+            }
+            catch { }
+
+            var itemsByPath = new Dictionary<string, WindowsUserProfileItem>(StringComparer.OrdinalIgnoreCase);
+            var itemsByName = new Dictionary<string, WindowsUserProfileItem>(StringComparer.OrdinalIgnoreCase);
+
+            // 1. Perfis WMI (Win32_UserProfile)
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT LocalPath, SID, Special, Loaded FROM Win32_UserProfile"))
+                using (var profiles = searcher.Get())
+                {
+                    foreach (ManagementObject profile in profiles)
+                    {
+                        string path = Convert.ToString(profile["LocalPath"]);
+                        string sid = Convert.ToString(profile["SID"]);
+                        if (string.IsNullOrWhiteSpace(path)) continue;
+
+                        string leaf = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar));
+                        bool isSpecial = Convert.ToBoolean(profile["Special"]) ||
+                            sid == "S-1-5-18" || sid == "S-1-5-19" || sid == "S-1-5-20" ||
+                            Regex.IsMatch(path, @"(?i)\\(Default|Public|All Users|ServiceProfiles|systemprofile)(\\|$)");
+                        bool isCurrent = string.Equals(path, currentProfilePath, StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(leaf, Environment.UserName, StringComparison.OrdinalIgnoreCase);
+                        bool isLoaded = Convert.ToBoolean(profile["Loaded"]) || loadedProfileSids.Contains(sid);
+
+                        bool isProtected = isSpecial || isCurrent || isLoaded || keepNames.Contains(leaf);
+                        string reason = null;
+                        if (isCurrent) reason = "Em uso - Conta Atual";
+                        else if (isSpecial) reason = "Conta do Sistema";
+                        else if (isLoaded) reason = "Sessão Ativa";
+                        else if (keepNames.Contains(leaf)) reason = "Protegido";
+
+                        var item = new WindowsUserProfileItem
+                        {
+                            Name = leaf,
+                            Sid = sid,
+                            LocalPath = path,
+                            IsLoaded = isLoaded,
+                            IsSpecial = isSpecial,
+                            IsProtected = isProtected,
+                            ProtectionReason = reason,
+                            IsWmiProfile = true,
+                        };
+
+                        itemsByPath[path] = item;
+                        if (!string.IsNullOrWhiteSpace(leaf))
+                            itemsByName[leaf] = item;
+                    }
+                }
+            }
+            catch { }
+
+            // 2. Contas Locais (Win32_UserAccount)
+            try
+            {
+                using (var searcher = new ManagementObjectSearcher("SELECT Name, SID FROM Win32_UserAccount WHERE LocalAccount = True"))
+                using (var users = searcher.Get())
+                {
+                    foreach (ManagementObject user in users)
+                    {
+                        string name = Convert.ToString(user["Name"]);
+                        string sid = Convert.ToString(user["SID"]);
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+
+                        WindowsUserProfileItem item;
+                        if (itemsByName.TryGetValue(name, out item))
+                        {
+                            item.IsLocalAccount = true;
+                            if (string.IsNullOrEmpty(item.Sid)) item.Sid = sid;
+                        }
+                        else
+                        {
+                            bool isCurrent = string.Equals(name, Environment.UserName, StringComparison.OrdinalIgnoreCase);
+                            bool isLoaded = loadedProfileSids.Contains(sid);
+                            bool isProtected = isCurrent || isLoaded || keepNames.Contains(name);
+                            string reason = null;
+                            if (isCurrent) reason = "Em uso - Conta Atual";
+                            else if (isLoaded) reason = "Sessão Ativa";
+                            else if (keepNames.Contains(name)) reason = "Protegido";
+
+                            item = new WindowsUserProfileItem
+                            {
+                                Name = name,
+                                Sid = sid,
+                                LocalPath = null,
+                                IsLocalAccount = true,
+                                IsProtected = isProtected,
+                                ProtectionReason = reason,
+                            };
+                            itemsByName[name] = item;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 3. Pastas de Usuário em C:\Users
+            try
+            {
+                string usersDirectory = Path.Combine(Path.GetPathRoot(Environment.SystemDirectory), "Users");
+                if (Directory.Exists(usersDirectory))
+                {
+                    foreach (string path in Directory.GetDirectories(usersDirectory))
+                    {
+                        var directory = new DirectoryInfo(path);
+                        string name = directory.Name;
+                        if ((directory.Attributes & FileAttributes.ReparsePoint) != 0 ||
+                            Regex.IsMatch(name, @"(?i)^(Public|Default|Default User|All Users)$"))
+                        {
+                            continue;
+                        }
+
+                        WindowsUserProfileItem item;
+                        if (!itemsByPath.TryGetValue(path, out item))
+                        {
+                            bool isCurrent = string.Equals(path, currentProfilePath, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(name, Environment.UserName, StringComparison.OrdinalIgnoreCase);
+                            bool isProtected = isCurrent || keepNames.Contains(name);
+                            string reason = isCurrent ? "Em uso - Conta Atual" : (isProtected ? "Protegido" : null);
+
+                            item = new WindowsUserProfileItem
+                            {
+                                Name = name,
+                                LocalPath = path,
+                                IsOrphanDirectory = true,
+                                IsProtected = isProtected,
+                                ProtectionReason = reason,
+                            };
+                            itemsByPath[path] = item;
+                            if (!itemsByName.ContainsKey(name))
+                                itemsByName[name] = item;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            var result = new List<WindowsUserProfileItem>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var kvp in itemsByName)
+            {
+                string key = kvp.Value.LocalPath ?? kvp.Value.Name;
+                if (seen.Add(key))
+                {
+                    result.Add(kvp.Value);
+                }
+            }
+            foreach (var kvp in itemsByPath)
+            {
+                string key = kvp.Value.LocalPath ?? kvp.Value.Name;
+                if (seen.Add(key))
+                {
+                    result.Add(kvp.Value);
+                }
+            }
+
+            result.Sort((a, b) =>
+            {
+                if (a.IsProtected != b.IsProtected)
+                    return a.IsProtected ? 1 : -1;
+                return string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase);
+            });
+
+            return result;
+        }
+
+        /// <summary>
+        /// Exclui os perfis e contas de usuário selecionados pelo usuário,
+        /// removendo conta local do Windows, registro WMI/ProfileList e pasta de arquivos do disco.
+        /// </summary>
+        /// <param name="selectedProfiles">Lista de perfis selecionados para exclusão.</param>
+        /// <returns>True se a exclusão foi concluída com êxito.</returns>
+        public async Task<bool> DeleteSelectedUserProfilesAsync(List<WindowsUserProfileItem> selectedProfiles)
+        {
+            if (selectedProfiles == null || selectedProfiles.Count == 0)
+            {
+                Log("Nenhum perfil foi selecionado para exclusão.", ConsoleColor.Yellow);
+                return false;
+            }
+
+            Log(string.Format("Iniciando exclusão de {0} perfil(is) selecionado(s)...", selectedProfiles.Count), ConsoleColor.Yellow);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+            sb.AppendLine("$removedCount = 0");
+            sb.AppendLine("$cleanupFailed = $false");
+
+            foreach (var profile in selectedProfiles)
+            {
+                if (profile.IsProtected)
+                {
+                    Log(string.Format("  [!] O perfil '{0}' é protegido e foi ignorado por segurança.", profile.Name), ConsoleColor.Yellow);
+                    continue;
+                }
+
+                string nameEscaped = (profile.Name ?? "").Replace("'", "''");
+                string sidEscaped = (profile.Sid ?? "").Replace("'", "''");
+                string pathEscaped = (profile.LocalPath ?? "").Replace("'", "''");
+
+                sb.AppendLine("Write-Host '----------------------------------------'");
+                sb.AppendLine(string.Format("Write-Host 'Iniciando remocao de: {0}'", nameEscaped));
+
+                if (profile.IsLocalAccount && !string.IsNullOrEmpty(nameEscaped))
+                {
+                    sb.AppendLine(string.Format("& net user '{0}' /delete | Out-Null", nameEscaped));
+                    sb.AppendLine("if ($LASTEXITCODE -eq 0) {");
+                    sb.AppendLine(string.Format("    Write-Host '[ok] Conta local do Windows removida: {0}'", nameEscaped));
+                    sb.AppendLine("} else {");
+                    sb.AppendLine(string.Format("    Write-Host '  Aviso: Conta local {0} nao encontrada ou ja removida.'", nameEscaped));
+                    sb.AppendLine("}");
+                }
+
+                if (!string.IsNullOrEmpty(sidEscaped))
+                {
+                    sb.AppendLine(string.Format("$p = Get-CimInstance Win32_UserProfile -Filter \"SID = '{0}'\" -ErrorAction SilentlyContinue", sidEscaped));
+                    sb.AppendLine("if ($p) {");
+                    sb.AppendLine("    try {");
+                    sb.AppendLine("        Remove-CimInstance -InputObject $p -ErrorAction Stop | Out-Null");
+                    sb.AppendLine(string.Format("        Write-Host '[ok] Perfil WMI desregistrado do Windows: {0}'", nameEscaped));
+                    sb.AppendLine("    } catch {");
+                    sb.AppendLine("        $cleanupFailed = $true");
+                    sb.AppendLine("        Write-Host ('  [!] Erro ao remover registro WMI: ' + $_.Exception.Message)");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("}");
+
+                    sb.AppendLine(string.Format("$regKey = \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\{0}\"", sidEscaped));
+                    sb.AppendLine("if (Test-Path $regKey) {");
+                    sb.AppendLine("    try { Remove-Item -Path $regKey -Recurse -Force -ErrorAction Stop | Out-Null } catch { }");
+                    sb.AppendLine("}");
+                    sb.AppendLine(string.Format("$regBak = \"HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\{0}.bak\"", sidEscaped));
+                    sb.AppendLine("if (Test-Path $regBak) {");
+                    sb.AppendLine("    try { Remove-Item -Path $regBak -Recurse -Force -ErrorAction Stop | Out-Null } catch { }");
+                    sb.AppendLine("}");
+                }
+
+                if (!string.IsNullOrEmpty(pathEscaped))
+                {
+                    sb.AppendLine(string.Format("$folderPath = '{0}'", pathEscaped));
+                    sb.AppendLine("if (Test-Path $folderPath) {");
+                    sb.AppendLine("    try {");
+                    sb.AppendLine("        & cmd.exe /c \"takeown /f `\"$folderPath`\" /r /d y >nul 2>&1\"");
+                    sb.AppendLine("        & cmd.exe /c \"icacls `\"$folderPath`\" /grant administrators:F /t /c /q >nul 2>&1\"");
+                    sb.AppendLine("        & cmd.exe /c \"rd /s /q `\"$folderPath`\" >nul 2>&1\"");
+                    sb.AppendLine("        if (Test-Path $folderPath) {");
+                    sb.AppendLine("            Remove-Item -Path $folderPath -Recurse -Force -ErrorAction SilentlyContinue | Out-Null");
+                    sb.AppendLine("        }");
+                    sb.AppendLine("        if (-not (Test-Path $folderPath)) {");
+                    sb.AppendLine(string.Format("            Write-Host '[ok] Pasta de arquivos excluida do disco: {0}'", pathEscaped));
+                    sb.AppendLine("            $removedCount++");
+                    sb.AppendLine("        } else {");
+                    sb.AppendLine("            $cleanupFailed = $true");
+                    sb.AppendLine(string.Format("            Write-Host '  [!] Nao foi possivel apagar totalmente a pasta: {0}'", pathEscaped));
+                    sb.AppendLine("        }");
+                    sb.AppendLine("    } catch {");
+                    sb.AppendLine("        $cleanupFailed = $true");
+                    sb.AppendLine("        Write-Host ('  [!] Erro ao apagar pasta: ' + $_.Exception.Message)");
+                    sb.AppendLine("    }");
+                    sb.AppendLine("} else {");
+                    sb.AppendLine("    $removedCount++");
+                    sb.AppendLine("}");
+                }
+                else
+                {
+                    sb.AppendLine("$removedCount++");
+                }
+            }
+
+            sb.AppendLine("if ($removedCount -gt 0) {");
+            sb.AppendLine("    Write-Host ('[ok] Exclusao finalizada: ' + $removedCount + ' perfil(is)/conta(s) foram processados com sucesso.')");
+            sb.AppendLine("}");
+            sb.AppendLine("if ($cleanupFailed) { exit 1 } else { exit 0 }");
+
+            int exitCode = await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 180000);
+            if (exitCode == 0)
+            {
+                Log("[ok] Limpeza e exclusão de perfis selecionados concluída com êxito.", ConsoleColor.Green);
+                return true;
+            }
+            else
+            {
+                Log("Aviso: Exclusão de perfis finalizada com alguns avisos (código " + exitCode + ").", ConsoleColor.Yellow);
+                return true;
+            }
+        }
+
+        /// <summary>
         /// Gera uma prévia das contas, perfis e diretórios que serão removidos ou preservados.
         /// </summary>
         /// <param name="keepUser1">Primeiro usuário adicional que deve ser preservado.</param>
@@ -3651,10 +3959,84 @@ namespace InstallerGUI.Services
 
             var sb = new StringBuilder();
             sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+            sb.AppendLine("$hasWin32 = $false");
+            sb.AppendLine("try {");
+            sb.AppendLine("    Add-Type -TypeDefinition @\"");
+            sb.AppendLine("using System;");
+            sb.AppendLine("using System.Runtime.InteropServices;");
+            sb.AppendLine("public static class ExabitAvWin32 {");
+            sb.AppendLine("    [DllImport(\"user32.dll\")]");
+            sb.AppendLine("    public static extern bool IsWindowVisible(IntPtr hWnd);");
+            sb.AppendLine("}");
+            sb.AppendLine("\"@ -ErrorAction Stop");
+            sb.AppendLine("    $hasWin32 = $true");
+            sb.AppendLine("} catch {}");
+
+            sb.AppendLine("function Split-ExabitUninstallCmd([string]$cmd) {");
+            sb.AppendLine("    if ([string]::IsNullOrWhiteSpace($cmd)) { return $null }");
+            sb.AppendLine("    $t = $cmd.Trim()");
+            sb.AppendLine("    if ($t -match '^\"([^\"]+)\"\\s*(.*)$') {");
+            sb.AppendLine("        return @{ Exe = $matches[1].Trim(); Args = $matches[2].Trim() }");
+            sb.AppendLine("    }");
+            sb.AppendLine("    if ($t -match '^(.+?\\.(?:exe|msi|bat|cmd))\\s*(.*)$') {");
+            sb.AppendLine("        return @{ Exe = $matches[1].Trim(); Args = $matches[2].Trim() }");
+            sb.AppendLine("    }");
+            sb.AppendLine("    if ($t -match '^(\\S+)\\s*(.*)$') {");
+            sb.AppendLine("        return @{ Exe = $matches[1].Trim(); Args = $matches[2].Trim() }");
+            sb.AppendLine("    }");
+            sb.AppendLine("    return $null");
+            sb.AppendLine("}");
+
+            sb.AppendLine("function Invoke-ExabitSilentProcess([string]$exePath, [string]$argList, [string]$label, [int]$timeoutSec = 120) {");
+            sb.AppendLine("    try {");
+            sb.AppendLine("        $psi = New-Object System.Diagnostics.ProcessStartInfo");
+            sb.AppendLine("        $psi.FileName = $exePath");
+            sb.AppendLine("        $psi.Arguments = if ($argList) { $argList } else { '' }");
+            sb.AppendLine("        $psi.UseShellExecute = $false");
+            sb.AppendLine("        $psi.CreateNoWindow = $true");
+            sb.AppendLine("        $psi.RedirectStandardInput = $true");
+            sb.AppendLine("        $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden");
+            sb.AppendLine("        $proc = [System.Diagnostics.Process]::Start($psi)");
+            sb.AppendLine("        try { $proc.StandardInput.Close() } catch {}");
+            sb.AppendLine("        $elapsed = 0");
+            sb.AppendLine("        $visibleSecs = 0");
+            sb.AppendLine("        $isMsi = $exePath -match '(?i)msiexec'");
+            sb.AppendLine("        while (-not $proc.HasExited -and $elapsed -lt $timeoutSec) {");
+            sb.AppendLine("            Start-Sleep -Seconds 1");
+            sb.AppendLine("            $elapsed++");
+            sb.AppendLine("            if (-not $isMsi -and $hasWin32 -and $elapsed -ge 8) {");
+            sb.AppendLine("                try {");
+            sb.AppendLine("                    $proc.Refresh()");
+            sb.AppendLine("                    $hwnd = $proc.MainWindowHandle");
+            sb.AppendLine("                    if ($hwnd -ne [IntPtr]::Zero -and [ExabitAvWin32]::IsWindowVisible($hwnd)) {");
+            sb.AppendLine("                        $visibleSecs++");
+            sb.AppendLine("                        if ($visibleSecs -ge 8) {");
+            sb.AppendLine("                            Write-Host ('  [!] ' + $label + ' abriu janela interativa e nao aceitou modo silencioso; encerrando processo para nao travar.')");
+            sb.AppendLine("                            try { $proc.Kill() } catch {}");
+            sb.AppendLine("                            return -2");
+            sb.AppendLine("                        }");
+            sb.AppendLine("                    } else {");
+            sb.AppendLine("                        $visibleSecs = 0");
+            sb.AppendLine("                    }");
+            sb.AppendLine("                } catch {}");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        if (-not $proc.HasExited) {");
+            sb.AppendLine("            Write-Host ('  [!] Tempo limite excedido ao desinstalar ' + $label + '.')");
+            sb.AppendLine("            try { $proc.Kill() } catch {}");
+            sb.AppendLine("            return -1");
+            sb.AppendLine("        }");
+            sb.AppendLine("        return $proc.ExitCode");
+            sb.AppendLine("    } catch {");
+            sb.AppendLine("        Write-Host ('  [!] Erro ao iniciar desinstalador de ' + $label + ': ' + $_.Exception.Message)");
+            sb.AppendLine("        return -3");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+
             sb.AppendLine("$detectedAVs = @()");
             sb.AppendLine("try {");
             sb.AppendLine("    $avCim = Get-CimInstance -Namespace root\\SecurityCenter2 -ClassName AntivirusProduct -ErrorAction SilentlyContinue |");
-            sb.AppendLine("             Where-Object { $_.displayName -notmatch '(?i)Windows Defender' }");
+            sb.AppendLine("             Where-Object { $_.displayName -notmatch '(?i)Windows Defender|Microsoft Defender' }");
             sb.AppendLine("    if ($avCim) {");
             sb.AppendLine("        foreach ($av in $avCim) {");
             sb.AppendLine("            $detectedAVs += $av.displayName");
@@ -3664,11 +4046,7 @@ namespace InstallerGUI.Services
             sb.AppendLine("} catch {");
             sb.AppendLine("    Write-Host ('  Aviso ao consultar SecurityCenter2: ' + $_.Exception.Message)");
             sb.AppendLine("}");
-            sb.AppendLine("$regPaths = @(");
-            sb.AppendLine("    'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
-            sb.AppendLine("    'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
-            sb.AppendLine("    'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'");
-            sb.AppendLine(")");
+
             sb.AppendLine("$avKeywords = @(");
             sb.AppendLine("    'McAfee', 'Avast', 'AVG', 'Norton', 'Symantec', 'Kaspersky', 'Bitdefender',");
             sb.AppendLine("    'ESET', 'TotalAV', 'Avira', 'Malwarebytes', 'Webroot', 'Trend Micro',");
@@ -3677,54 +4055,141 @@ namespace InstallerGUI.Services
             sb.AppendLine("    'Adaware', '360 Total Security', 'Dr.Web', 'G Data', 'VIPRE', 'ZoneAlarm'");
             sb.AppendLine(")");
             sb.AppendLine("$uninstalledCount = 0");
+            sb.AppendLine("$failedAvNames = @()");
+
+            // 1. Remover pacotes Store / AppX de antivírus (ex: 5A894077.McAfeeSecurity)
+            sb.AppendLine("try {");
+            sb.AppendLine("    $provPkgs = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue");
+            sb.AppendLine("    foreach ($pkg in $provPkgs) {");
+            sb.AppendLine("        $matchAppx = $false");
+            sb.AppendLine("        foreach ($kw in $avKeywords) { if ($pkg.DisplayName -match ('(?i)' + [regex]::Escape($kw))) { $matchAppx = $true; break } }");
+            sb.AppendLine("        if ($matchAppx) {");
+            sb.AppendLine("            Write-Host ('  Removendo pacote provisionado: ' + $pkg.DisplayName)");
+            sb.AppendLine("            Remove-AppxProvisionedPackage -Online -PackageName $pkg.PackageName -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("            $uninstalledCount++");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("    $appxPkgs = Get-AppxPackage -AllUsers -ErrorAction SilentlyContinue");
+            sb.AppendLine("    foreach ($ap in $appxPkgs) {");
+            sb.AppendLine("        $matchAppx = $false");
+            sb.AppendLine("        foreach ($kw in $avKeywords) { if ($ap.Name -match ('(?i)' + [regex]::Escape($kw)) -or $ap.PackageFullName -match ('(?i)' + [regex]::Escape($kw))) { $matchAppx = $true; break } }");
+            sb.AppendLine("        if ($matchAppx) {");
+            sb.AppendLine("            Write-Host ('  Removendo aplicativo Store: ' + $ap.Name)");
+            sb.AppendLine("            Remove-AppxPackage -Package $ap.PackageFullName -AllUsers -ErrorAction SilentlyContinue | Out-Null");
+            sb.AppendLine("            Write-Host ('[ok] Aplicativo Store removido: ' + $ap.Name)");
+            sb.AppendLine("            $uninstalledCount++");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("} catch {}");
+
+            // 2. Desinstalação silenciosa via Registro (MSI, QuietUninstallString, flags específicas por fabricante)
+            sb.AppendLine("$regPaths = @(");
+            sb.AppendLine("    'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
+            sb.AppendLine("    'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',");
+            sb.AppendLine("    'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'");
+            sb.AppendLine(")");
+            sb.AppendLine("$processedNames = @()");
             sb.AppendLine("try {");
             sb.AppendLine("    $items = Get-ItemProperty $regPaths -ErrorAction SilentlyContinue");
             sb.AppendLine("    foreach ($item in $items) {");
             sb.AppendLine("        $dn = $item.DisplayName");
-            sb.AppendLine("        if ($dn) {");
-            sb.AppendLine("            $isTarget = $false");
-            sb.AppendLine("            foreach ($kw in $avKeywords) {");
-            sb.AppendLine("                if ($dn -match ('(?i)' + [regex]::Escape($kw))) { $isTarget = $true; break }");
+            sb.AppendLine("        if (-not $dn -or ($dn -match '(?i)Windows Defender|Microsoft Defender')) { continue }");
+            sb.AppendLine("        $isTarget = $false");
+            sb.AppendLine("        foreach ($kw in $avKeywords) {");
+            sb.AppendLine("            if ($dn -match ('(?i)' + [regex]::Escape($kw))) { $isTarget = $true; break }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        if (-not $isTarget) {");
+            sb.AppendLine("            foreach ($det in $detectedAVs) {");
+            sb.AppendLine("                if ($dn -match ('(?i)' + [regex]::Escape($det))) { $isTarget = $true; break }");
             sb.AppendLine("            }");
-            sb.AppendLine("            if (-not $isTarget) {");
-            sb.AppendLine("                foreach ($det in $detectedAVs) {");
-            sb.AppendLine("                    if ($dn -match ('(?i)' + [regex]::Escape($det))) { $isTarget = $true; break }");
-            sb.AppendLine("                }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        if (-not $isTarget) { continue }");
+            sb.AppendLine("        if ($processedNames -contains $dn) { continue }");
+            sb.AppendLine("        $processedNames += $dn");
+            sb.AppendLine("        Write-Host ('  Localizado software de seguranca: ' + $dn)");
+            sb.AppendLine("        $quiet = $item.QuietUninstallString");
+            sb.AppendLine("        $uninst = $item.UninstallString");
+            sb.AppendLine("        $child = $item.PSChildName");
+            sb.AppendLine("        $isWinInst = ($item.WindowsInstaller -eq 1)");
+            sb.AppendLine("        $exitResult = -99");
+            sb.AppendLine("        $guid = $null");
+            sb.AppendLine("        if ($uninst -match '(\\{[0-9a-fA-F\\-]{36}\\})') { $guid = $matches[1] }");
+            sb.AppendLine("        elseif ($child -match '^(\\{[0-9a-fA-F\\-]{36}\\})$') { $guid = $matches[1] }");
+
+            sb.AppendLine("        if (($isWinInst -or ($uninst -match '(?i)msiexec')) -and $guid) {");
+            sb.AppendLine("            Write-Host ('  Executando desinstalacao silenciosa MSI: ' + $guid)");
+            sb.AppendLine("            $exitResult = Invoke-ExabitSilentProcess 'msiexec.exe' ('/x ' + $guid + ' /qn /norestart REBOOT=ReallySuppress') $dn 120");
+            sb.AppendLine("        } elseif ($quiet) {");
+            sb.AppendLine("            $parsed = Split-ExabitUninstallCmd $quiet");
+            sb.AppendLine("            if ($parsed) {");
+            sb.AppendLine("                $qExe = $parsed.Exe");
+            sb.AppendLine("                $qArgs = $parsed.Args");
+            sb.AppendLine("                if ($qExe -match '(?i)msiexec' -and $qArgs -notmatch '(?i)/qn|/quiet') { $qArgs = ($qArgs + ' /qn /norestart REBOOT=ReallySuppress').Trim() }");
+            sb.AppendLine("                Write-Host ('  Executando QuietUninstallString: ' + $dn)");
+            sb.AppendLine("                $exitResult = Invoke-ExabitSilentProcess $qExe $qArgs $dn 120");
             sb.AppendLine("            }");
-            sb.AppendLine("            if ($isTarget) {");
-            sb.AppendLine("                Write-Host ('  Localizado software de seguranca: ' + $dn)");
-            sb.AppendLine("                $quiet = $item.QuietUninstallString");
-            sb.AppendLine("                $uninst = $item.UninstallString");
-            sb.AppendLine("                $child = $item.PSChildName");
-            sb.AppendLine("                try {");
-            sb.AppendLine("                    if ($child -match '^\\{[0-9a-fA-F\\-]{36}\\}$') {");
-            sb.AppendLine("                        Write-Host ('  Executando desinstalacao silenciosa MSI: ' + $child)");
-            sb.AppendLine("                        Start-Process -FilePath 'msiexec.exe' -ArgumentList ('/x ' + $child + ' /qn /norestart') -Wait -WindowStyle Hidden");
-            sb.AppendLine("                        Write-Host ('[ok] Desinstalado com sucesso: ' + $dn)");
-            sb.AppendLine("                        $uninstalledCount++");
-            sb.AppendLine("                    } elseif ($quiet) {");
-            sb.AppendLine("                        Write-Host ('  Executando desinstalacao silenciosa: ' + $dn)");
-            sb.AppendLine("                        Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $quiet) -Wait -WindowStyle Hidden");
-            sb.AppendLine("                        Write-Host ('[ok] Desinstalado com sucesso: ' + $dn)");
-            sb.AppendLine("                        $uninstalledCount++");
-            sb.AppendLine("                    } elseif ($uninst) {");
-            sb.AppendLine("                        Write-Host ('  Executando desinstalacao automatizada: ' + $dn)");
-            sb.AppendLine("                        if ($uninst -match 'msiexec') {");
-            sb.AppendLine("                            $msiArgs = $uninst -replace '(?i)/I', '/X' + ' /qn /norestart'");
-            sb.AppendLine("                            Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $msiArgs) -Wait -WindowStyle Hidden");
-            sb.AppendLine("                        } else {");
-            sb.AppendLine("                            Start-Process -FilePath 'cmd.exe' -ArgumentList ('/c ' + $uninst + ' /SILENT /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /quiet /qn /s /S') -Wait -WindowStyle Hidden");
-            sb.AppendLine("                        }");
-            sb.AppendLine("                        Write-Host ('[ok] Desinstalado com sucesso: ' + $dn)");
-            sb.AppendLine("                        $uninstalledCount++");
-            sb.AppendLine("                    }");
-            sb.AppendLine("                } catch {");
-            sb.AppendLine("                    Write-Host ('  [!] Falha ao desinstalar ' + $dn + ': ' + $_.Exception.Message)");
+            sb.AppendLine("        } elseif ($uninst) {");
+            sb.AppendLine("            $parsed = Split-ExabitUninstallCmd $uninst");
+            sb.AppendLine("            if ($parsed) {");
+            sb.AppendLine("                $uExe = $parsed.Exe");
+            sb.AppendLine("                $uArgs = $parsed.Args");
+            sb.AppendLine("                $finalArgs = $uArgs");
+            sb.AppendLine("                if ($uExe -match '(?i)FrmInst\\.exe$') {");
+            sb.AppendLine("                    $finalArgs = '/forceuninstall'");
+            sb.AppendLine("                } elseif ($dn -match '(?i)McAfee|Mfe' -or $uExe -match '(?i)mcafee|mcinsupd|McInst|McUICnt') {");
+            sb.AppendLine("                    if ($uExe -match '(?i)uninstaller\\.exe$') { $finalArgs = '/s' }");
+            sb.AppendLine("                    elseif ($uArgs -notmatch '(?i)/silent|/s\\b|/q') { $finalArgs = ($uArgs + ' /Silent').Trim() }");
+            sb.AppendLine("                } elseif ($uExe -match '(?i)instup\\.exe$' -or $dn -match '(?i)Avast|AVG') {");
+            sb.AppendLine("                    if ($uArgs -match '(?i)/instop:uninstall') {");
+            sb.AppendLine("                        if ($uArgs -notmatch '(?i)/silent') { $finalArgs = ($uArgs + ' /silent').Trim() }");
+            sb.AppendLine("                    } else { $finalArgs = '/instop:uninstall /silent' }");
+            sb.AppendLine("                } elseif ($dn -match '(?i)Kaspersky') {");
+            sb.AppendLine("                    if ($uExe -match '(?i)setup_kes') { $finalArgs = '/s /x' }");
+            sb.AppendLine("                    elseif ($uArgs -notmatch '(?i)/s\\b|/q') { $finalArgs = ($uArgs + ' /s').Trim() }");
+            sb.AppendLine("                } elseif ($dn -match '(?i)Bitdefender') {");
+            sb.AppendLine("                    if ($uExe -match '(?i)BEST_uninstallTool') { $finalArgs = '/bdparams' }");
+            sb.AppendLine("                    elseif ($uArgs -notmatch '(?i)/silent|/s\\b') { $finalArgs = ($uArgs + ' /silent').Trim() }");
+            sb.AppendLine("                } elseif ($uExe -match '(?i)unins\\d+\\.exe$') {");
+            sb.AppendLine("                    $finalArgs = ($uArgs + ' /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-').Trim()");
+            sb.AppendLine("                } elseif ($uArgs -notmatch '(?i)/S\\b|/silent|/quiet|/qn') {");
+            sb.AppendLine("                    $finalArgs = ($uArgs + ' /S').Trim()");
             sb.AppendLine("                }");
+            sb.AppendLine("                Write-Host ('  Executando desinstalacao silenciosa: ' + $dn)");
+            sb.AppendLine("                $exitResult = Invoke-ExabitSilentProcess $uExe $finalArgs $dn 120");
+            sb.AppendLine("            }");
+            sb.AppendLine("        } elseif ($guid) {");
+            sb.AppendLine("            Write-Host ('  Executando desinstalacao silenciosa MSI: ' + $guid)");
+            sb.AppendLine("            $exitResult = Invoke-ExabitSilentProcess 'msiexec.exe' ('/x ' + $guid + ' /qn /norestart REBOOT=ReallySuppress') $dn 120");
+            sb.AppendLine("        }");
+
+            sb.AppendLine("        if ($exitResult -eq 0 -or $exitResult -eq 3010 -or $exitResult -eq 1605) {");
+            sb.AppendLine("            Write-Host ('[ok] Desinstalado silenciosamente: ' + $dn)");
+            sb.AppendLine("            $uninstalledCount++");
+            sb.AppendLine("        } else {");
+            sb.AppendLine("            $failedAvNames += $dn");
+            sb.AppendLine("            if ($exitResult -ne -2 -and $exitResult -ne -1 -and $exitResult -ne -3) {");
+            sb.AppendLine("                Write-Host ('  [!] Desinstalador de ' + $dn + ' retornou codigo ' + $exitResult)");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
             sb.AppendLine("} catch {}");
+
+            // 3. Contingência via winget --silent --disable-interactivity para antivírus que falharam
+            sb.AppendLine("if ($failedAvNames.Count -gt 0) {");
+            sb.AppendLine("    $wg = Get-Command winget.exe -ErrorAction SilentlyContinue");
+            sb.AppendLine("    if ($wg) {");
+            sb.AppendLine("        foreach ($fav in $failedAvNames) {");
+            sb.AppendLine("            Write-Host ('  Tentando remocao silenciosa via winget para: ' + $fav)");
+            sb.AppendLine("            $wgArgs = 'uninstall --name \"' + ($fav -replace '\"', '') + '\" --silent --accept-source-agreements --disable-interactivity'");
+            sb.AppendLine("            $wgExit = Invoke-ExabitSilentProcess $wg.Source $wgArgs $fav 90");
+            sb.AppendLine("            if ($wgExit -eq 0) {");
+            sb.AppendLine("                Write-Host ('[ok] Removido via winget: ' + $fav)");
+            sb.AppendLine("                $uninstalledCount++");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+
             sb.AppendLine("try {");
             sb.AppendLine("    Get-Service | Where-Object {");
             sb.AppendLine("        $sn = $_.Name; $sd = $_.DisplayName");
@@ -3755,12 +4220,12 @@ namespace InstallerGUI.Services
             sb.AppendLine("    Write-Host '[ok] Microsoft Defender ativo e com protecao em tempo real habilitada.'");
             sb.AppendLine("} catch {}");
             sb.AppendLine("if ($uninstalledCount -gt 0 -or $detectedAVs.Count -gt 0) {");
-            sb.AppendLine("    Write-Host ('[ok] Varredura concluida: Antivirus de terceiros tratados e removidos.')");
+            sb.AppendLine("    Write-Host ('[ok] Varredura concluida: Antivirus de terceiros tratados (' + $uninstalledCount + ' removidos).')");
             sb.AppendLine("} else {");
             sb.AppendLine("    Write-Host '[ok] Varredura concluida: Nenhum antivirus de terceiros pendente no sistema.'");
             sb.AppendLine("}");
 
-            int exitCode = await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 300000);
+            int exitCode = await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 360000);
             if (exitCode == 0)
                 Log("[ok] Antivírus de terceiros desinstalados e Microsoft Defender verificado.", ConsoleColor.Green);
             else
@@ -3920,8 +4385,7 @@ namespace InstallerGUI.Services
                     }
                 }
 
-                var installedPrograms = new List<string>();
-                var failedPrograms = new List<string>();
+                var installErrors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
                 // 5. Instalar cada programa selecionado
                 if (!cancelled)
@@ -3943,13 +4407,9 @@ namespace InstallerGUI.Services
                             break;
                         }
 
-                        if (success)
+                        if (!success && !string.IsNullOrWhiteSpace(program.Id))
                         {
-                            installedPrograms.Add(program.DisplayName);
-                        }
-                        else
-                        {
-                            failedPrograms.Add(program.DisplayName);
+                            installErrors.Add(program.Id);
                         }
                     }
                 }
@@ -3957,9 +4417,12 @@ namespace InstallerGUI.Services
                 if (!cancelled)
                 {
                     // Garante que todos os programas instalados fiquem acessíveis para todos os perfis do Windows (atuais e novos)
-                    await EnsureAllProgramsAccessibleForAllProfilesAsync(options);
-                    if (IsCancellationRequested())
-                        cancelled = true;
+                    if (options.SelectedPrograms.Count > 0)
+                    {
+                        await EnsureAllProgramsAccessibleForAllProfilesAsync(options);
+                        if (IsCancellationRequested())
+                            cancelled = true;
+                    }
 
                     // Limpa atalhos de todas as áreas de trabalho no final de todas as instalações (se selecionado)
                     if (!cancelled && options.CleanDesktopShortcuts)
@@ -3972,34 +4435,14 @@ namespace InstallerGUI.Services
                     if (!cancelled)
                         await CreateDesktopShortcutsAsync(options);
 
-                    if (!cancelled)
-                        Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
-
+                    // Verificação final real dos programas selecionados antes de concluir
                     if (!cancelled && options.SelectedPrograms.Count > 0)
                     {
-                        Log("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
-                        Log(" RESUMO DOS PROGRAMAS:", ConsoleColor.Cyan);
-
-                        if (installedPrograms.Count > 0)
-                        {
-                            Log(string.Format(" Programas instalados ({0}):", installedPrograms.Count), ConsoleColor.Blue);
-                            for (int i = 0; i < installedPrograms.Count; i++)
-                            {
-                                Log(string.Format("   • {0}", installedPrograms[i]), ConsoleColor.Blue);
-                            }
-                        }
-
-                        if (failedPrograms.Count > 0)
-                        {
-                            Log(string.Format(" Programas não instalados ou com erro ({0}):", failedPrograms.Count), ConsoleColor.Red);
-                            for (int i = 0; i < failedPrograms.Count; i++)
-                            {
-                                Log(string.Format("   • {0}", failedPrograms[i]), ConsoleColor.Red);
-                            }
-                        }
-
-                        Log("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
+                        await VerifySelectedProgramsInstalledAsync(options.SelectedPrograms, installErrors);
                     }
+
+                    if (!cancelled)
+                        Log("=== INSTALAÇÃO CONCLUÍDA ===", ConsoleColor.Green);
 
                     var handler = OnInstallationCompleted;
                     if (!cancelled && handler != null)
@@ -4026,6 +4469,385 @@ namespace InstallerGUI.Services
                     _cancellationTokenSource.Dispose();
                     _cancellationTokenSource = null;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Verifica no sistema (Registro, pastas padrão, detectores específicos e pacotes AppX/MSIX)
+        /// se todos os programas selecionados foram realmente instalados e exibe o resumo colorido no log.
+        /// </summary>
+        private async Task VerifySelectedProgramsInstalledAsync(List<ProgramInfo> selectedPrograms, HashSet<string> installErrors)
+        {
+            if (selectedPrograms == null || selectedPrograms.Count == 0)
+                return;
+
+            Log("Verificando se todos os programas selecionados foram realmente instalados...", ConsoleColor.Cyan);
+
+            var registryDisplayNames = await Task.Run(new Func<HashSet<string>>(GetInstalledRegistryDisplayNames));
+
+            bool needsAppxCheck = false;
+            for (int i = 0; i < selectedPrograms.Count; i++)
+            {
+                string id = (selectedPrograms[i].Id ?? string.Empty).ToLowerInvariant();
+                if (id == "affinity" || id == "chatgpt")
+                {
+                    needsAppxCheck = true;
+                    break;
+                }
+            }
+
+            var appxNames = needsAppxCheck
+                ? await GetInstalledAppxNamesAsync()
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var verifiedInstalled = new List<string>();
+            var verifiedMissing = new List<string>();
+
+            for (int i = 0; i < selectedPrograms.Count; i++)
+            {
+                var program = selectedPrograms[i];
+                bool isInstalled = IsProgramReallyInstalled(program, registryDisplayNames, appxNames);
+
+                if (!isInstalled && program.FireAndForget)
+                {
+                    await Task.Delay(3000);
+                    registryDisplayNames = await Task.Run(new Func<HashSet<string>>(GetInstalledRegistryDisplayNames));
+                    isInstalled = IsProgramReallyInstalled(program, registryDisplayNames, appxNames);
+                }
+
+                if (isInstalled)
+                {
+                    verifiedInstalled.Add(program.DisplayName);
+                }
+                else
+                {
+                    string reason = (installErrors != null && installErrors.Contains(program.Id ?? string.Empty))
+                        ? "erro na instalação"
+                        : "não detectado no sistema";
+                    verifiedMissing.Add(string.Format("{0} ({1})", program.DisplayName, reason));
+                }
+            }
+
+            Log("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
+            Log(string.Format(" VERIFICAÇÃO FINAL DOS PROGRAMAS ({0} de {1} instalados):",
+                verifiedInstalled.Count, selectedPrograms.Count), ConsoleColor.Cyan);
+
+            if (verifiedInstalled.Count > 0)
+            {
+                Log(string.Format(" Programas instalados corretamente ({0}):", verifiedInstalled.Count), ConsoleColor.Blue);
+                for (int i = 0; i < verifiedInstalled.Count; i++)
+                {
+                    Log(string.Format("   [ok] {0}", verifiedInstalled[i]), ConsoleColor.Blue);
+                }
+            }
+
+            if (verifiedMissing.Count > 0)
+            {
+                Log(string.Format(" Programas NÃO instalados ou com erro ({0}):", verifiedMissing.Count), ConsoleColor.Red);
+                for (int i = 0; i < verifiedMissing.Count; i++)
+                {
+                    Log(string.Format("   X {0}", verifiedMissing[i]), ConsoleColor.Red);
+                }
+            }
+
+            Log("──────────────────────────────────────────────────────────────────────", ConsoleColor.Cyan);
+        }
+
+        private static HashSet<string> GetInstalledRegistryDisplayNames()
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            string uninstallSubKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall";
+            string wowUninstallSubKey = @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall";
+
+            CollectRegistryDisplayNames(Registry.LocalMachine, uninstallSubKey, names);
+            CollectRegistryDisplayNames(Registry.LocalMachine, wowUninstallSubKey, names);
+            CollectRegistryDisplayNames(Registry.CurrentUser, uninstallSubKey, names);
+
+            return names;
+        }
+
+        private static void CollectRegistryDisplayNames(RegistryKey root, string subKeyPath, HashSet<string> names)
+        {
+            try
+            {
+                using (var key = root.OpenSubKey(subKeyPath))
+                {
+                    if (key == null) return;
+                    string[] subKeys = key.GetSubKeyNames();
+                    for (int i = 0; i < subKeys.Length; i++)
+                    {
+                        try
+                        {
+                            using (var item = key.OpenSubKey(subKeys[i]))
+                            {
+                                if (item == null) continue;
+                                object displayName = item.GetValue("DisplayName");
+                                if (displayName != null)
+                                {
+                                    string str = displayName.ToString().Trim();
+                                    if (!string.IsNullOrEmpty(str))
+                                    {
+                                        names.Add(str);
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static bool RegistryContainsAny(HashSet<string> displayNames, params string[] keywords)
+        {
+            if (displayNames == null || displayNames.Count == 0 || keywords == null)
+                return false;
+
+            foreach (string displayName in displayNames)
+            {
+                for (int i = 0; i < keywords.Length; i++)
+                {
+                    string kw = keywords[i];
+                    if (!string.IsNullOrEmpty(kw) &&
+                        displayName.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        private static bool FileExistsInStandardRoots(string relativePath)
+        {
+            if (string.IsNullOrEmpty(relativePath))
+                return false;
+
+            string[] roots = new string[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Programs"),
+            };
+
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (string.IsNullOrEmpty(roots[i])) continue;
+                try
+                {
+                    string candidate = Path.Combine(roots[i], relativePath);
+                    if (File.Exists(candidate))
+                        return true;
+                }
+                catch { }
+            }
+
+            return false;
+        }
+
+        private static bool DirectoryPrefixExistsInStandardRoots(string prefix)
+        {
+            if (string.IsNullOrEmpty(prefix))
+                return false;
+
+            string[] roots = new string[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Programs"),
+            };
+
+            for (int i = 0; i < roots.Length; i++)
+            {
+                if (string.IsNullOrEmpty(roots[i]) || !Directory.Exists(roots[i])) continue;
+                try
+                {
+                    string[] dirs = Directory.GetDirectories(roots[i]);
+                    for (int j = 0; j < dirs.Length; j++)
+                    {
+                        string folderName = Path.GetFileName(dirs[j]);
+                        if (!string.IsNullOrEmpty(folderName) &&
+                            folderName.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return false;
+        }
+
+        private static bool IsJavaInstalled(HashSet<string> registryDisplayNames)
+        {
+            if (RegistryContainsAny(registryDisplayNames, "Java 8", "Java(TM)", "Java SE", "OpenJDK", "Temurin"))
+                return true;
+
+            string[] programRoots = new string[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            };
+
+            for (int i = 0; i < programRoots.Length; i++)
+            {
+                if (string.IsNullOrEmpty(programRoots[i])) continue;
+                string javaRoot = Path.Combine(programRoots[i], "Java");
+                if (!Directory.Exists(javaRoot)) continue;
+
+                try
+                {
+                    string[] dirs = Directory.GetDirectories(javaRoot);
+                    for (int j = 0; j < dirs.Length; j++)
+                    {
+                        if (File.Exists(Path.Combine(dirs[j], "bin", "java.exe")))
+                            return true;
+                    }
+                }
+                catch { }
+            }
+
+            return false;
+        }
+
+        private async Task<HashSet<string>> GetInstalledAppxNamesAsync()
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            await Task.Run(new Action(() =>
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = "powershell",
+                        Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"Get-AppxPackage -AllUsers | Select-Object -ExpandProperty Name\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardInput = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        StandardOutputEncoding = Encoding.UTF8,
+                    };
+
+                    using (var proc = Process.Start(psi))
+                    {
+                        if (proc == null) return;
+                        try { proc.StandardInput.Close(); } catch { }
+                        string output = proc.StandardOutput.ReadToEnd();
+                        proc.WaitForExit(15000);
+                        if (!proc.HasExited)
+                        {
+                            try { proc.Kill(); } catch { }
+                        }
+
+                        if (!string.IsNullOrEmpty(output))
+                        {
+                            string[] lines = output.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                            for (int i = 0; i < lines.Length; i++)
+                            {
+                                string line = lines[i].Trim();
+                                if (!string.IsNullOrEmpty(line))
+                                    names.Add(line);
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }));
+
+            return names;
+        }
+
+        private static bool IsProgramReallyInstalled(ProgramInfo program, HashSet<string> registryDisplayNames, HashSet<string> appxNames)
+        {
+            if (program == null)
+                return false;
+
+            string id = (program.Id ?? string.Empty).ToLowerInvariant();
+            switch (id)
+            {
+                case "7zip": return Is7ZipInstalled();
+                case "adobereader": return IsAdobeReaderInstalled();
+                case "anydesk": return IsAnyDeskInstalled();
+                case "dwgtrueview": return IsDwgTrueViewInstalled();
+                case "chrome": return IsChromeInstalled();
+                case "office365": return IsOffice365Installed();
+                case "powerbi": return IsPowerBIDesktopInstalled();
+                case "crystaldiskinfo": return IsCrystalDiskInfoInstalled();
+                case "crystaldiskmark": return IsCrystalDiskMarkInstalled();
+                case "easeustodo": return IsEaseUSTodoBackupInstalled();
+                case "recuva": return IsRecuvaInstalled();
+                case "antigravity": return IsAntigravityInstalled();
+                case "antigravityide": return IsAntigravityIDEInstalled();
+                case "filezilla": return IsFileZillaInstalled();
+                case "dbeaver": return IsDBeaverInstalled();
+                case "blender": return IsBlenderInstalled();
+                case "tracedraw": return IsTraceDrawInstalled();
+                case "chatgpt": return IsChatGPTInstalled() || RegistryContainsAny(appxNames, "ChatGPT");
+                case "claude": return IsClaudeDesktopInstalled();
+                case "deepseek": return IsDeepSeekDesktopInstalled();
+                case "gemini": return IsGeminiDesktopInstalled();
+
+                case "brave":
+                    return FileExistsInStandardRoots(@"BraveSoftware\Brave-Browser\Application\brave.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "Brave");
+                case "citrix":
+                    return FileExistsInStandardRoots(@"Citrix\ICA Client\SelfServicePlugin\SelfService.exe") ||
+                           FileExistsInStandardRoots(@"Citrix\ICA Client\wfica32.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "Citrix Workspace", "Citrix Receiver");
+                case "googleearth":
+                    return FileExistsInStandardRoots(@"Google\Google Earth Pro\client\googleearth.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "Google Earth Pro");
+                case "java":
+                    return IsJavaInstalled(registryDisplayNames);
+                case "firefox":
+                    return FileExistsInStandardRoots(@"Mozilla Firefox\firefox.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "Mozilla Firefox");
+                case "radmin":
+                    return FileExistsInStandardRoots(@"Radmin VPN\RvRvpnGui.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "Radmin VPN");
+                case "rustdesk":
+                    return FileExistsInStandardRoots(@"RustDesk\rustdesk.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "RustDesk");
+                case "winrar":
+                    return FileExistsInStandardRoots(@"WinRAR\WinRAR.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "WinRAR");
+                case "vscode":
+                    return FileExistsInStandardRoots(@"Microsoft VS Code\Code.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "Visual Studio Code");
+                case "nodejs":
+                    return FileExistsInStandardRoots(@"nodejs\node.exe") ||
+                           RegistryContainsAny(registryDisplayNames, "Node.js");
+                case "affinity":
+                    return RegistryContainsAny(appxNames, "Affinity") ||
+                           RegistryContainsAny(registryDisplayNames, "Affinity");
+                case "artcraft":
+                    return RegistryContainsAny(registryDisplayNames, "ArtCraft") ||
+                           DirectoryPrefixExistsInStandardRoots("ArtCraft");
+                case "cadcraft":
+                case "deckcraft":
+                case "designcraft":
+                case "effectcraft":
+                case "filmcraft":
+                case "gridcraft":
+                case "lightcraft":
+                case "pdfcraft":
+                case "photocraft":
+                case "soundcraft":
+                case "texturecraft":
+                case "vectorcraft":
+                case "wordcraft":
+                    return RegistryContainsAny(registryDisplayNames, id) ||
+                           DirectoryPrefixExistsInStandardRoots(id);
+                default:
+                    return RegistryContainsAny(registryDisplayNames, program.DisplayName, program.Id);
             }
         }
 
@@ -4063,6 +4885,7 @@ namespace InstallerGUI.Services
             sb.AppendLine("            Copy-Item -Path $_.FullName -Destination $target -Recurse -Force -ErrorAction SilentlyContinue | Out-Null");
             sb.AppendLine("        }");
             sb.AppendLine("    }");
+            sb.AppendLine("    & icacls.exe $commonProgramsDir /grant \"*S-1-5-32-545:(OI)(CI)RX\" /T /C /Q 2>$null | Out-Null");
             sb.AppendLine("}");
             sb.AppendLine();
             sb.AppendLine("# 4. Provisiona pacotes MSIX/Appx para todos os perfis existentes e futuros (ChatGPT, Affinity, etc.)");
@@ -4076,7 +4899,7 @@ namespace InstallerGUI.Services
             sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();
-            sb.AppendLine("# 5. Propagacao de atalhos do Menu Iniciar para CommonStartMenu e Perfil Default");
+            sb.AppendLine("# 5. Propagacao de atalhos do Menu Iniciar para CommonStartMenu, Perfil Default e perfis ja inicializados");
             sb.AppendLine("$wscript = New-Object -ComObject WScript.Shell");
             sb.AppendLine("$userStartMenu = [Environment]::GetFolderPath('Programs')");
             sb.AppendLine("$commonStartMenu = [Environment]::GetFolderPath('CommonPrograms')");
@@ -4086,14 +4909,16 @@ namespace InstallerGUI.Services
             sb.AppendLine("}");
             sb.AppendLine();
             sb.AppendLine("$destStartMenus = @($commonStartMenu, $defaultStartMenu)");
-            if (options != null && options.CreateStandardUser && !string.IsNullOrWhiteSpace(options.StandardUserName))
-            {
-                sb.AppendLine(string.Format("$destStartMenus += \"$env:SystemDrive\\Users\\{0}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\"", options.StandardUserName.Trim()));
-            }
-            if (options != null && options.CreateAdmin)
-            {
-                sb.AppendLine("$destStartMenus += \"$env:SystemDrive\\Users\\admin\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\"");
-            }
+            sb.AppendLine("$usersRoot = \"$env:SystemDrive\\Users\"");
+            sb.AppendLine("if (Test-Path $usersRoot) {");
+            sb.AppendLine("    Get-ChildItem -Path $usersRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {");
+            sb.AppendLine("        if ($_.Name -notmatch '^(?i)(Public|Default|Default User|All Users)$' -and");
+            sb.AppendLine("            (-not [string]::Equals($_.FullName, $env:USERPROFILE, [System.StringComparison]::OrdinalIgnoreCase)) -and");
+            sb.AppendLine("            (Test-Path (Join-Path $_.FullName 'NTUSER.DAT'))) {");
+            sb.AppendLine("            $destStartMenus += (Join-Path $_.FullName 'AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs')");
+            sb.AppendLine("        }");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
             sb.AppendLine();
             sb.AppendLine("if (Test-Path $userStartMenu) {");
             sb.AppendLine("    $ignoreNames = @('System Tools', 'Administrative Tools', 'Accessibility', 'Accessories', 'Windows PowerShell')");

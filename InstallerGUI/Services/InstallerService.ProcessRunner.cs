@@ -44,6 +44,7 @@ namespace InstallerGUI.Services
                 Arguments = arguments,
                 UseShellExecute = useShell,
                 CreateNoWindow = !useShell,
+                RedirectStandardInput = !useShell,
                 RedirectStandardOutput = false,
                 RedirectStandardError = !useShell,
                 WorkingDirectory = workingDirectory ?? string.Empty,
@@ -77,6 +78,7 @@ namespace InstallerGUI.Services
 
                 if (!useShell)
                 {
+                    try { process.StandardInput.Close(); } catch { }
                     process.BeginErrorReadLine();
                 }
 
@@ -118,7 +120,8 @@ namespace InstallerGUI.Services
         /// Executa um processo redirecionando e capturando a saída em tempo real linha a linha para o log da aplicação.
         /// </summary>
         private async Task<int> RunProcessWithLoggingAsync(string fileName, string arguments,
-            int timeoutMs = 600000, string workingDirectory = null)
+            int timeoutMs = 600000, string workingDirectory = null,
+            IDictionary<string, string> environmentVariables = null)
         {
             ThrowIfCancellationRequested();
 
@@ -128,12 +131,21 @@ namespace InstallerGUI.Services
                 Arguments = arguments,
                 UseShellExecute = false,
                 CreateNoWindow = true,
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 WorkingDirectory = workingDirectory ?? string.Empty,
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8
             };
+
+            if (environmentVariables != null)
+            {
+                foreach (var kvp in environmentVariables)
+                {
+                    psi.EnvironmentVariables[kvp.Key] = kvp.Value ?? string.Empty;
+                }
+            }
 
             var tcs = new TaskCompletionSource<int>();
 
@@ -170,6 +182,7 @@ namespace InstallerGUI.Services
                 };
 
                 process.Start();
+                try { process.StandardInput.Close(); } catch { }
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
 
@@ -207,6 +220,7 @@ namespace InstallerGUI.Services
                     }
                 }
 
+                process.WaitForExit();
                 return process.ExitCode;
             }
         }
@@ -214,14 +228,15 @@ namespace InstallerGUI.Services
         /// <summary>
         /// Salva um script PowerShell temporário codificado em UTF-8 e o executa com captura de saída em tempo real.
         /// </summary>
-        private async Task<int> RunPowerShellScriptWithLoggingAsync(string scriptContent, int timeoutMs = 600000)
+        private async Task<int> RunPowerShellScriptWithLoggingAsync(string scriptContent, int timeoutMs = 600000,
+            IDictionary<string, string> environmentVariables = null)
         {
             string tempScript = Path.Combine(Path.GetTempPath(), string.Format("exabit_ps_{0}.ps1", Guid.NewGuid().ToString("N")));
             try
             {
                 File.WriteAllText(tempScript, scriptContent, Encoding.UTF8);
                 string args = string.Format("-NoProfile -ExecutionPolicy Bypass -File \"{0}\"", tempScript);
-                return await RunProcessWithLoggingAsync("powershell", args, timeoutMs);
+                return await RunProcessWithLoggingAsync("powershell", args, timeoutMs, null, environmentVariables);
             }
             finally
             {

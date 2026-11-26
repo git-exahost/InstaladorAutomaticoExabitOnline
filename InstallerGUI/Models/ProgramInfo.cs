@@ -107,7 +107,7 @@ namespace InstallerGUI.Models
             WorkingDirectory = workingDir;
             Category = category;
             RequiresInternet = true;
-            DefaultChecked = true;
+            DefaultChecked = false;
         }
 
         /// <summary>
@@ -120,6 +120,39 @@ namespace InstallerGUI.Models
             if (string.IsNullOrEmpty(WorkingDirectory))
                 return System.IO.Path.Combine(basePath, FileName);
             return System.IO.Path.Combine(basePath, WorkingDirectory, FileName);
+        }
+    }
+
+    /// <summary>
+    /// Representa um perfil ou conta de usuário detectado no Windows para gerenciamento e exclusão.
+    /// </summary>
+    public class WindowsUserProfileItem
+    {
+        public string Name { get; set; }
+        public string Sid { get; set; }
+        public string LocalPath { get; set; }
+        public bool IsLoaded { get; set; }
+        public bool IsSpecial { get; set; }
+        public bool IsProtected { get; set; }
+        public string ProtectionReason { get; set; }
+        public bool IsLocalAccount { get; set; }
+        public bool IsWmiProfile { get; set; }
+        public bool IsOrphanDirectory { get; set; }
+
+        /// <summary>
+        /// Texto formatado para exibição no checkbox.
+        /// </summary>
+        public string DisplayText
+        {
+            get
+            {
+                string pathDesc = !string.IsNullOrEmpty(LocalPath) ? LocalPath : "Conta Local";
+                if (IsProtected)
+                {
+                    return string.Format("{0}  ({1})  [{2}]", Name, pathDesc, ProtectionReason ?? "Protegido");
+                }
+                return string.Format("{0}  ({1})", Name, pathDesc);
+            }
         }
     }
 }

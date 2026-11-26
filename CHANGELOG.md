@@ -7,6 +7,115 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.109] - 2026-11-26
+
+### Corrigido — Aplicação Efetiva do Papel de Parede Antes do Bloqueio + Modo Preencher
+- **Reordenação da aplicação ao vivo em `Scripts\apply_wallpapers.ps1`**:
+  - A troca do papel de parede agora ocorre **antes** da gravação das políticas de bloqueio (`NoChangingWallPaper` e `Policies\System\Wallpaper`) nos perfis `Default`, carregados (`HKEY_USERS\S-1-5-21-*`) e offline, removendo temporariamente bloqueios prévios no `HKCU` para que o Windows não impeça a troca.
+  - `NativeWallpaper.ApplyFill` executa `SystemParametersInfo(20, 0, path, 3)` primeiro para forçar o recarregamento da imagem mesmo quando o caminho (`img0.jpg`) não muda, seguido de `IDesktopWallpaper::SetPosition(Fill)` e aplicação explícita em todos os monitores detectados via `GetMonitorDevicePathAt`.
+
+---
+
+## [2.0.0.108] - 2026-11-26
+
+### Corrigido — Garantia Real do Modo "Preencher" (Fill) no Windows 11
+- **Ordem correta em `IDesktopWallpaper` e remoção de corrida com API legada (`Scripts\apply_wallpapers.ps1`)**:
+  - `NativeWallpaper.ApplyFill` agora define a imagem primeiro (`SetWallpaper(null, path)`) e aplica `SetPosition(DesktopWallpaperPosition.Fill)` em seguida, validando via `GetPosition()` e eliminando a chamada concorrente a `SystemParametersInfo(20, ...)` no caminho principal (mantida apenas como fallback em exceção).
+  - Adicionada estrutura `RECT` correta na assinatura COM de `GetMonitorRECT`.
+- **Atualização de hives carregados (`HKEY_USERS\S-1-5-21-*`) e saneamento de políticas legadas**:
+  - Perfis de usuários já logados cujo `NTUSER.DAT` está bloqueado para `reg load` agora têm `Control Panel\Desktop` e `Policies\System` atualizados diretamente via `Registry::HKEY_USERS\<SID>`.
+  - Chaves pré-existentes de `Policies\System\WallpaperStyle` (que versões antigas gravavam como `10`, interpretado como *Estender* em `Desktop.admx`) são corrigidas para `4` (*Preencher*) nos perfis carregados, offline e `Default`, mesmo quando o bloqueio de alteração não está marcado.
+- **Reparo de arquivos `.theme` e prioridade de recurso embutido**:
+  - Limpa linhas órfãs (`$10`/`$110`) e garante a presença explícita de `Wallpaper`, `TileWallpaper=0` e `WallpaperStyle=10` em `[Control Panel\Desktop]` dos `.theme`.
+  - `GetApplyWallpapersScriptPath()` em `Services\InstallerService.cs` agora extrai prioritariamente o script embutido no executável antes de recorrer a eventual cópia local em disco.
+
+---
+
+## [2.0.0.107] - 2026-11-26
+
+### Corrigido — Eliminação de Barras Pretas em Telas Fora do Padrão 16:9 (Modo Preencher Real)
+- **Uso da API COM `IDesktopWallpaper::SetPosition(Fill)` + limpeza de `TranscodedWallpaper`**:
+  - Removida a cópia direta da imagem 16:9 sobre `TranscodedWallpaper` (que impedia o Windows de gerar o recorte proporcional para telas 16:10, 3:2 ou 4:3, causando barras pretas em cima e embaixo). Agora o script limpa `TranscodedWallpaper`, `CachedFiles\*` e `TranscodedImageCache`.
+  - Adicionada chamada nativa `IDesktopWallpaper::SetPosition(DesktopWallpaperPosition.Fill)` e `SetWallpaper(null, path)` aplicada em todos os monitores.
+  - Substituído `%SystemRoot%` pelo caminho expandido real nas chaves `REG_SZ` dos perfis `Default` e existentes, garantindo carregamento correto e escala *Preencher* sem faixas pretas.
+
+---
+
+## [2.0.0.106] - 2026-11-26
+
+### Corrigido — Ajuste do Papel de Parede para Modo Preencher (Fill)
+- **Correção de `WallpaperStyle` em `Scripts\apply_wallpapers.ps1`**:
+  - Corrigida a substituição por regex em arquivos `.theme`, utilizando `${1}0` e `${1}10` para evitar ambiguidade de grupo de captura (`$10`/`$110`) e garantir `TileWallpaper=0` e `WallpaperStyle=10` (Preencher).
+  - Corrigido o valor da política `Policies\System\WallpaperStyle` para `4` (enumeração oficial do Windows para *Preencher* em políticas de sistema) no perfil `Default` e nos perfis de usuários existentes (em vez de `10`, que fazia o Windows reverter para *Ampliar*).
+  - Aplicados `WallpaperStyle=10` e `TileWallpaper=0` em `Control Panel\Desktop` também nos perfis de usuários existentes e removido o bloco de assinatura legado expirado do script embutido.
+
+---
+
+## [2.0.0.105] - 2026-11-26
+
+### Corrigido — Visibilidade do Usuário Padrão na Tela de Login do Windows
+- **Adição obrigatória ao grupo `Usuários` (`S-1-5-32-545`) em `ConfigureLocalAccountAsync`**:
+  - `New-LocalUser` cria contas sem associação a nenhum grupo por padrão, fazendo com que o Windows oculte a conta na tela de login. Toda conta criada ou atualizada passa a ser habilitada (`Enable-LocalUser`) e adicionada ao grupo `Usuários` (`S-1-5-32-545`), além de `Administradores` (`S-1-5-32-544`) ou `Área de Trabalho Remota` (`S-1-5-32-555`, opcional em edições Home).
+  - Corrigida a resolução de grupos locais usando objeto `SecurityIdentifier` com `Get-LocalGroup -SID $sidObj` e `Add-LocalGroupMember -Group $grpObj` (com fallback `[ADSI]`), eliminando o erro `O grupo S-1-5-32-555 não foi encontrado`.
+
+---
+
+## [2.0.0.104] - 2026-11-26
+
+### Adicionado / Aprimorado — Verificação Final de Programas Instalados e Perfis Recém-Criados
+- **Verificador Final de Instalação (`VerifySelectedProgramsInstalledAsync`)**:
+  - Antes de concluir a instalação, verifica diretamente no Registro do Windows, caminhos padrão de instalação, detectores específicos e pacotes AppX/MSIX se cada programa selecionado foi realmente instalado.
+  - Exibe no log o resultado final colorido: em **azul** os programas instalados corretamente (`[ok]`) e em **vermelho** os que não foram instalados ou apresentaram erro (`X`).
+- **Propagação Segura para Perfis Recém-Criados (`EnsureAllProgramsAccessibleForAllProfilesAsync`)**:
+  - Evita pré-criar pastas de perfil antes do primeiro logon de contas recém-criadas, propagando atalhos para o Menu Iniciar Comum (`CommonPrograms`), perfil modelo `Default` (herdado automaticamente por qualquer perfil novo no primeiro logon) e perfis já inicializados (`NTUSER.DAT`).
+
+---
+
+## [2.0.0.103] - 2026-11-26
+
+### Adicionado / Alterado — Perfis de Configuração Padrão e Nortel
+- **Inicialização Limpa ("Padrão")**:
+  - Ao abrir o instalador, o modo **Padrão** inicia selecionado, com todos os programas, atalhos, opções do Windows e funcionalidades desmarcados e campos de texto em branco.
+- **Seleção de Perfil `Padrão` / `Nortel`**:
+  - Adicionados os checkboxes `Padrão` e `Nortel` na aba **Configurações** (card *DADOS DA MÁQUINA E CONTAS*), abaixo de *Usuário padrão* e *Senha do usuário*.
+  - Ao marcar **Nortel**, preenche automaticamente `NT-` (computador), `NT@admin#` (senha admin), usuário padrão em branco, `Nortel#` (senha do usuário) e marca os 11 programas corporativos, atalhos (Remote Neoenergia, Webmail Nortel Terceirização, Suporte Exabit e Limpar atalhos da Área de Trabalho), opções (localização, restrição de alteração de senha, senha nunca expira, papel de parede Nortel e bloqueio de papel de parede) e funcionalidades (desinstalar jogos e antivírus).
+
+---
+
+## [2.0.0.102] - 2026-11-26
+
+### Corrigido — Criação de Usuários, Renomeação do PC e Remoção Silenciosa de Antivírus
+- **Criação e Atualização de Usuários Locais (`ConfigureLocalAccountAsync`)**:
+  - Corrigido travamento indefinido ao criar usuários padrão (ex: com espaços no nome ou senhas acima de 14 caracteres), substituindo chamadas legadas ao `net user` que aguardavam confirmação `(S/N)` na entrada padrão.
+  - Passagem segura da senha via variável de ambiente efêmera do processo (`EXABIT_USER_PWD`), utilizando `Microsoft.PowerShell.LocalAccounts` (`New-LocalUser` / `Set-LocalUser` / `Add-LocalGroupMember` por SID) com fallback `[ADSI]`.
+  - Fechamento imediato de `StandardInput` em `RunProcessAsync` e `RunProcessWithLoggingAsync` para impedir bloqueios de processos filhos em prompts interativos.
+- **Desinstalação Silenciosa de Antivírus de Terceiros (`UninstallThirdPartyAntivirusAsync`)**:
+  - Corrigido bug de precedência no `-replace` de `msiexec` que impedia a injeção de `/qn /norestart` em strings `/X{GUID}`.
+  - Adicionada remoção silenciosa de pacotes Store/AppX (ex: McAfee Personal Security).
+  - Priorização correta de `WindowsInstaller`/MSI e `QuietUninstallString`, com parsing direto de executável/argumentos e flags silenciosas específicas por fabricante (McAfee, Avast, AVG, Kaspersky, Bitdefender, Inno Setup, NSIS) em vez de parâmetros conflitantes via `cmd /c`.
+  - Adicionado watchdog de janela interativa (`IsWindowVisible`) + fallback via `winget uninstall --silent --disable-interactivity` e verificação real de `ExitCode` para evitar janelas abertas travando a instalação.
+- **Renomeação do Computador (`RenameComputerAsync`)**:
+  - Verifica se o nome atual já corresponde ao desejado (ignorando maiúsculas/minúsculas), registrando `[ok]` sem acionar erro desnecessário de `NewNameIsOldName`.
+
+---
+
+## [2.0.0.101] - 2026-11-23
+
+### Aprimorado / Adicionado — Gerenciador Independente de Perfis do Windows
+- **Reorganização da Aba Funcionalidades**:
+  - As opções preliminares de desinstalação de jogos e antivírus de terceiros permanecem no topo com legenda informativa.
+  - A opção de remoção de perfis foi movida para a base da aba, separada por divisória visual sutil, e renomeada para **"Apagar Perfis do Windows"**.
+  - A funcionalidade agora é uma ação independente acionada por botão dedicado (`_btnStartProfileCleanup`), permitindo limpeza de perfis sob demanda sem disparar a instalação de softwares.
+- **Seleção Interativa na Mesma Tela ("In-Place View")**:
+  - Ao clicar no botão, a mesma área da aba alterna para a visualização dos perfis de usuário encontrados no Windows, com suporte a barra de rolagem corporativa `DarkScrollBar`.
+  - Cada perfil é exibido com um `DarkCheckBox` para seleção granular.
+  - Perfis em uso e contas essenciais do sistema (`Environment.UserName`, `Administrador`, `DefaultAccount`, `Guest`, `WDAGUtilityAccount`, `systemprofile` e perfis com sessão carregada) são automaticamente protegidos, exibindo o status `[Protegido]` e mantendo o checkbox desabilitado.
+  - Adicionado controle rápido para marcar/desmarcar todos os perfis elegíveis.
+  - Botão de execução `[ APAGAR PERFIS SELECIONADOS ]` realiza a remoção direta e assíncrona (conta local, WMI, ProfileList e pasta física em disco) emitindo logs linha a linha em tempo real no console de terminal inferior, com recarregamento automático da lista após a conclusão.
+  - Removidos avisos e diálogos modais de confirmação redundantes, uma vez que a seleção seletiva é manual e independente na própria tela.
+
+---
+
 ## [2.0.0.100] - 2026-11-21
 
 ### Segurança operacional e confiabilidade
