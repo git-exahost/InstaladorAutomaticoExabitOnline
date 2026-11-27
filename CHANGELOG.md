@@ -7,6 +7,40 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ---
 
+## [2.0.0.112] - 2026-11-26
+
+### Corrigido — "Impedir que o usuário altere a senha" Aplicado Também a Usuários Padrão Existentes
+- **Desacoplamento do campo "Usuário padrão" (`Forms\MainForm.cs`, `Services\InstallerService.cs`)**:
+  - `options.StandardUserCannotChangePassword` deixou de exigir o preenchimento de um novo usuário padrão para ser repassado ao serviço.
+  - Adicionado `EnsureStandardUsersCannotChangePasswordAsync()`, executado somente quando a opção estiver marcada, aplicando `UserMayChangePassword $false` (e fallback `[ADSI]` `0x0040`) a todos os usuários locais padrão ativos (excluindo administradores e contas internas do sistema).
+
+---
+
+## [2.0.0.111] - 2026-11-26
+
+### Corrigido — Execução Estrita das Opções Somente Quando Marcadas
+- **Preservação das configurações existentes quando opções ficam desmarcadas (`Services\InstallerService.cs`)**:
+  - `EnsureGlobalPasswordNeverExpiresPolicyAsync()` agora só é executada quando **Ativar (senha nunca expira) para todos os perfis** estiver marcada (removido o bloco que desmarcava `PasswordNeverExpires` de todos os usuários locais quando desativada).
+  - Em `ConfigureLocalAccountAsync`, **Impedir que o usuário altere a senha** e **Ativar senha nunca expira** só modificam ou ativam as respectivas restrições/flags (`-UserMayChangePassword $false`, `-PasswordNeverExpires $true`, bits `0x0040`/`0x10000`) quando marcadas, preservando o estado existente das contas caso contrário.
+  - Construtor de `InstallationOptions` atualizado para iniciar `EnableLocationServices` e `PasswordNeverExpiresGlobal` em `false`.
+- **Preservação de bloqueio prévio do papel de parede (`Scripts\apply_wallpapers.ps1`)**:
+  - Caso o usuário atual (`HKCU`) já possua `NoChangingWallPaper` ou `Policies\System\Wallpaper` configurados e **Bloquear alteração do papel de parede** esteja desmarcada, o bloqueio pré-existente é restaurado após a aplicação ao vivo da nova imagem.
+
+---
+
+## [2.0.0.110] - 2026-11-26
+
+### Adicionado — Imagem e Bloqueio da Tela de Bloqueio
+- **Novas opções na aba `Opções` (`Forms\MainForm.cs`)**:
+  - Adicionada a opção **"Aplicar imagem do papel de parede à tela de bloqueio"** logo abaixo de *"Bloquear alteração do papel de parede"*.
+  - Adicionada a opção **"Bloquear alteração da tela de bloqueio"** logo abaixo da anterior.
+  - Ambas passam a ser marcadas automaticamente ao selecionar o perfil **Nortel/Neoenergia** (e desmarcadas no perfil **Padrão**).
+- **Aplicação e bloqueio da tela de bloqueio (`Services\InstallerService.cs`, `Scripts\apply_wallpapers.ps1`)**:
+  - Estendidos `InstallationOptions`, `SetWallpaperAsync` e `apply_wallpapers.ps1` com `-SkipDesktopWallpaper`, `-ApplyLockScreen` e `-PreventChangingLockScreen`.
+  - Aplica a imagem principal em `C:\Windows\Web\Screen\img100.jpg` (com permissões de leitura), configura `PersonalizationCSP` (`LockScreenImageStatus=1`, `LockScreenImagePath`, `LockScreenImageUrl`), `Policies\Personalization\LockScreenImage`, desativa rotação do Windows Spotlight e aplica `NoChangingLockScreen=1` quando o bloqueio é selecionado.
+
+---
+
 ## [2.0.0.109] - 2026-11-26
 
 ### Corrigido — Aplicação Efetiva do Papel de Parede Antes do Bloqueio + Modo Preencher

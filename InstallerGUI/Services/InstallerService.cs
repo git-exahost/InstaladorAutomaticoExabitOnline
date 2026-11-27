@@ -200,8 +200,8 @@ namespace InstallerGUI.Services
         /// ao grupo de administradores locais, ou apenas altera sua senha caso já exista.
         /// </summary>
         /// <param name="password">Senha do usuário admin</param>
-        /// <param name="passwordNeverExpires">Se true, ativa 'senha nunca expira'; se false, desmarca</param>
-        public async Task CreateAdminUserAsync(string password, bool passwordNeverExpires = true)
+        /// <param name="passwordNeverExpires">Se true, ativa 'senha nunca expira'; se false, preserva a configuração atual/padrão</param>
+        public async Task CreateAdminUserAsync(string password, bool passwordNeverExpires = false)
         {
             try
             {
@@ -216,37 +216,25 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Define a política global de segurança do Windows para a duração máxima de senhas.
-        /// Se neverExpires for true: maxpwage:unlimited e PasswordNeverExpires $true para todos os perfis.
-        /// Se neverExpires for false: PasswordNeverExpires $false para todos os perfis locais existentes.
+        /// Define a política global de segurança do Windows para a duração máxima de senhas
+        /// como ilimitada e ativa PasswordNeverExpires para todos os perfis locais existentes.
+        /// Só deve ser executada quando explicitamente marcada pelo usuário.
         /// </summary>
-        private async Task EnsureGlobalPasswordNeverExpiresPolicyAsync(bool neverExpires)
+        private async Task EnsureGlobalPasswordNeverExpiresPolicyAsync()
         {
             try
             {
-                if (neverExpires)
+                int code = await RunProcessAsync("net", "accounts /maxpwage:unlimited", 10000, null, false, true);
+                if (code == 0)
                 {
-                    int code = await RunProcessAsync("net", "accounts /maxpwage:unlimited", 10000, null, false, true);
-                    if (code == 0)
-                    {
-                        Log("[ok] Política global do Windows: expiração de senhas definida como NUNCA (ilimitada).", ConsoleColor.Green);
-                    }
-
-                    string psCmd = "Get-LocalUser -ErrorAction SilentlyContinue | Set-LocalUser -PasswordNeverExpires $true -ErrorAction SilentlyContinue";
-                    int psCode = await RunPowerShellScriptWithLoggingAsync(psCmd, 15000);
-                    if (psCode == 0)
-                    {
-                        Log("[ok] Senha definida como 'nunca expira' para todos os perfis locais.", ConsoleColor.Green);
-                    }
+                    Log("[ok] Política global do Windows: expiração de senhas definida como NUNCA (ilimitada).", ConsoleColor.Green);
                 }
-                else
+
+                string psCmd = "Get-LocalUser -ErrorAction SilentlyContinue | Set-LocalUser -PasswordNeverExpires $true -ErrorAction SilentlyContinue";
+                int psCode = await RunPowerShellScriptWithLoggingAsync(psCmd, 15000);
+                if (psCode == 0)
                 {
-                    string psCmd = "Get-LocalUser -ErrorAction SilentlyContinue | Set-LocalUser -PasswordNeverExpires $false -ErrorAction SilentlyContinue";
-                    int psCode = await RunPowerShellScriptWithLoggingAsync(psCmd, 15000);
-                    if (psCode == 0)
-                    {
-                        Log("[ok] Opção 'A senha nunca expira' desmarcada para todos os perfis locais.", ConsoleColor.Yellow);
-                    }
+                    Log("[ok] Senha definida como 'nunca expira' para todos os perfis locais.", ConsoleColor.Green);
                 }
             }
             catch
@@ -255,14 +243,91 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
+        /// Aplica a restrição 'O usuário não pode alterar a senha' para todos os perfis locais ativos
+        /// que não pertencem ao grupo Administradores (contas padrão existentes e recém-criadas).
+        /// Só deve ser executada quando explicitamente marcada pelo usuário.
+        /// </summary>
+        private async Task EnsureStandardUsersCannotChangePasswordAsync()
+        {
+            try
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("[Console]::OutputEncoding = [System.Text.Encoding]::UTF8");
+                sb.AppendLine("Import-Module Microsoft.PowerShell.LocalAccounts -ErrorAction SilentlyContinue");
+                sb.AppendLine("$useLocalAccounts = [bool](Get-Command Get-LocalUser -ErrorAction SilentlyContinue)");
+                sb.AppendLine("$excluded = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)");
+                sb.AppendLine("foreach ($n in @('Administrator','Administrador','admin','Guest','Convidado','DefaultAccount','WDAGUtilityAccount')) { [void]$excluded.Add($n) }");
+                sb.AppendLine("$adminSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-32-544')");
+                sb.AppendLine("$adminGroupName = ($adminSid.Translate([System.Security.Principal.NTAccount]).Value -split '\\\\')[-1]");
+                sb.AppendLine("$loadedAdmins = $false");
+                sb.AppendLine("if ($useLocalAccounts) {");
+                sb.AppendLine("    try {");
+                sb.AppendLine("        $admGrp = Get-LocalGroup -SID $adminSid -ErrorAction Stop");
+                sb.AppendLine("        Get-LocalGroupMember -Group $admGrp -ErrorAction Stop | ForEach-Object {");
+                sb.AppendLine("            if ($_.Name) { [void]$excluded.Add(($_.Name -split '\\\\')[-1]) }");
+                sb.AppendLine("        }");
+                sb.AppendLine("        $loadedAdmins = $true");
+                sb.AppendLine("    } catch {}");
+                sb.AppendLine("}");
+                sb.AppendLine("if (-not $loadedAdmins) {");
+                sb.AppendLine("    try {");
+                sb.AppendLine("        $admAdsi = [ADSI]\"WinNT://$env:COMPUTERNAME/$adminGroupName,group\"");
+                sb.AppendLine("        foreach ($m in @($admAdsi.Invoke('Members'))) {");
+                sb.AppendLine("            try {");
+                sb.AppendLine("                $mName = $m.GetType().InvokeMember('Name', 'GetProperty', $null, $m, $null)");
+                sb.AppendLine("                if ($mName) { [void]$excluded.Add([string]$mName) }");
+                sb.AppendLine("            } catch {}");
+                sb.AppendLine("        }");
+                sb.AppendLine("    } catch {}");
+                sb.AppendLine("}");
+                sb.AppendLine("$appliedCount = 0");
+                sb.AppendLine("if ($useLocalAccounts) {");
+                sb.AppendLine("    Get-LocalUser -ErrorAction SilentlyContinue | Where-Object { $_.Enabled -and -not $excluded.Contains($_.Name) } | ForEach-Object {");
+                sb.AppendLine("        try {");
+                sb.AppendLine("            Set-LocalUser -Name $_.Name -UserMayChangePassword $false -ErrorAction Stop");
+                sb.AppendLine("            Write-Host ('[ok] Restrição ''usuário não pode alterar a senha'' aplicada para: ' + $_.Name)");
+                sb.AppendLine("            $appliedCount++");
+                sb.AppendLine("        } catch {");
+                sb.AppendLine("            Write-Host ('X Aviso: Falha ao bloquear alteração de senha para \"' + $_.Name + '\": ' + $_.Exception.Message)");
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
+                sb.AppendLine("} else {");
+                sb.AppendLine("    $comp = [ADSI]\"WinNT://$env:COMPUTERNAME,computer\"");
+                sb.AppendLine("    foreach ($u in @($comp.Children | Where-Object { $_.SchemaClassName -eq 'User' })) {");
+                sb.AppendLine("        try {");
+                sb.AppendLine("            $uName = [string]$u.Name");
+                sb.AppendLine("            $flags = [int]$u.UserFlags.Value");
+                sb.AppendLine("            $isDisabled = (($flags -band 0x0002) -ne 0)");
+                sb.AppendLine("            if (-not $isDisabled -and -not $excluded.Contains($uName)) {");
+                sb.AppendLine("                $u.UserFlags = ($flags -bor 0x0040)");
+                sb.AppendLine("                $u.SetInfo()");
+                sb.AppendLine("                Write-Host ('[ok] Restrição ''usuário não pode alterar a senha'' aplicada para: ' + $uName)");
+                sb.AppendLine("                $appliedCount++");
+                sb.AppendLine("            }");
+                sb.AppendLine("        } catch {}");
+                sb.AppendLine("    }");
+                sb.AppendLine("}");
+                sb.AppendLine("if ($appliedCount -eq 0) {");
+                sb.AppendLine("    Write-Host '  Aviso: Nenhuma conta padrão ativa encontrada para aplicar restrição de alteração de senha.'");
+                sb.AppendLine("}");
+                sb.AppendLine("exit 0");
+
+                await RunPowerShellScriptWithLoggingAsync(sb.ToString(), 20000);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>
         /// Cria um usuário padrão com nome e senha fornecidos (ou atualiza caso já exista),
-        /// aplicando a política de expiração e alteração de senha conforme configurado.
+        /// aplicando restrições somente quando explicitamente marcadas.
         /// </summary>
         /// <param name="username">Nome do usuário</param>
         /// <param name="password">Senha do usuário (opcional)</param>
-        /// <param name="cannotChangePassword">Impede o usuário de alterar a senha</param>
-        /// <param name="passwordNeverExpires">Se true, ativa 'senha nunca expira'; se false, desmarca</param>
-        public async Task CreateStandardUserAsync(string username, string password, bool cannotChangePassword = false, bool passwordNeverExpires = true)
+        /// <param name="cannotChangePassword">Se true, impede o usuário de alterar a senha; se false, preserva a configuração atual/padrão</param>
+        /// <param name="passwordNeverExpires">Se true, ativa 'senha nunca expira'; se false, preserva a configuração atual/padrão</param>
+        public async Task CreateStandardUserAsync(string username, string password, bool cannotChangePassword = false, bool passwordNeverExpires = false)
         {
             if (string.IsNullOrWhiteSpace(username))
             {
@@ -311,7 +376,6 @@ namespace InstallerGUI.Services
             sb.AppendLine(string.Format("$isAdmin = ${0}", isAdmin ? "true" : "false"));
             sb.AppendLine(string.Format("$hasPwd = ${0}", hasPassword ? "true" : "false"));
             sb.AppendLine(string.Format("$cannotChange = ${0}", cannotChangePassword ? "true" : "false"));
-            sb.AppendLine(string.Format("$mayChange = ${0}", !cannotChangePassword ? "true" : "false"));
             sb.AppendLine(string.Format("$neverExpires = ${0}", passwordNeverExpires ? "true" : "false"));
             sb.AppendLine("$pwdPlain = $env:EXABIT_USER_PWD");
             sb.AppendLine("Import-Module Microsoft.PowerShell.LocalAccounts -ErrorAction SilentlyContinue");
@@ -328,41 +392,49 @@ namespace InstallerGUI.Services
             sb.AppendLine("    if ($exists) {");
             sb.AppendLine("        if ($hasPwd) {");
             sb.AppendLine("            Write-Host ('Usuário \"' + $samName + '\" já existe. Alterando a senha...')");
-            sb.AppendLine("            if ($useLocalAccounts) {");
-            sb.AppendLine("                $secPwd = ConvertTo-SecureString -String $pwdPlain -AsPlainText -Force");
-            sb.AppendLine("                Set-LocalUser -Name $samName -Password $secPwd -PasswordNeverExpires $neverExpires -UserMayChangePassword $mayChange -ErrorAction Stop");
-            sb.AppendLine("            } else {");
-            sb.AppendLine("                $u = [ADSI]\"WinNT://$env:COMPUTERNAME/$samName,user\"");
-            sb.AppendLine("                $u.SetPassword($pwdPlain)");
-            sb.AppendLine("                $flags = [int]$u.UserFlags.Value -band (-bnot (0x0040 -bor 0x10000))");
-            sb.AppendLine("                if ($cannotChange) { $flags = $flags -bor 0x0040 }");
-            sb.AppendLine("                if ($neverExpires) { $flags = $flags -bor 0x10000 }");
-            sb.AppendLine("                $u.UserFlags = $flags");
-            sb.AppendLine("                $u.SetInfo()");
-            sb.AppendLine("            }");
-            sb.AppendLine("            Write-Host ('[ok] Senha do usuário \"' + $samName + '\" alterada com sucesso.')");
             sb.AppendLine("        } else {");
             sb.AppendLine("            Write-Host ('Usuário \"' + $samName + '\" já existe e nenhuma senha foi informada. Mantendo senha atual.')");
-            sb.AppendLine("            if ($useLocalAccounts) {");
-            sb.AppendLine("                Set-LocalUser -Name $samName -PasswordNeverExpires $neverExpires -UserMayChangePassword $mayChange -ErrorAction Stop");
-            sb.AppendLine("            } else {");
-            sb.AppendLine("                $u = [ADSI]\"WinNT://$env:COMPUTERNAME/$samName,user\"");
-            sb.AppendLine("                $flags = [int]$u.UserFlags.Value -band (-bnot (0x0040 -bor 0x10000))");
+            sb.AppendLine("        }");
+            sb.AppendLine("        if ($useLocalAccounts) {");
+            sb.AppendLine("            $setParams = @{ Name = $samName; ErrorAction = 'Stop' }");
+            sb.AppendLine("            if ($hasPwd) {");
+            sb.AppendLine("                $secPwd = ConvertTo-SecureString -String $pwdPlain -AsPlainText -Force");
+            sb.AppendLine("                $setParams['Password'] = $secPwd");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if ($neverExpires) { $setParams['PasswordNeverExpires'] = $true }");
+            sb.AppendLine("            if ($cannotChange) { $setParams['UserMayChangePassword'] = $false }");
+            sb.AppendLine("            if ($setParams.Count -gt 2) {");
+            sb.AppendLine("                Set-LocalUser @setParams");
+            sb.AppendLine("            }");
+            sb.AppendLine("        } else {");
+            sb.AppendLine("            $u = [ADSI]\"WinNT://$env:COMPUTERNAME/$samName,user\"");
+            sb.AppendLine("            if ($hasPwd) { $u.SetPassword($pwdPlain) }");
+            sb.AppendLine("            if ($cannotChange -or $neverExpires) {");
+            sb.AppendLine("                $flags = [int]$u.UserFlags.Value");
             sb.AppendLine("                if ($cannotChange) { $flags = $flags -bor 0x0040 }");
             sb.AppendLine("                if ($neverExpires) { $flags = $flags -bor 0x10000 }");
             sb.AppendLine("                $u.UserFlags = $flags");
             sb.AppendLine("                $u.SetInfo()");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
+            sb.AppendLine("        if ($hasPwd) {");
+            sb.AppendLine("            Write-Host ('[ok] Senha do usuário \"' + $samName + '\" alterada com sucesso.')");
+            sb.AppendLine("        }");
             sb.AppendLine("    } else {");
             sb.AppendLine("        Write-Host ('Criando usuário \"' + $samName + '\"...')");
             sb.AppendLine("        if ($useLocalAccounts) {");
+            sb.AppendLine("            $newParams = @{ Name = $samName; FullName = $fullName; ErrorAction = 'Stop' }");
             sb.AppendLine("            if ($hasPwd) {");
             sb.AppendLine("                $secPwd = ConvertTo-SecureString -String $pwdPlain -AsPlainText -Force");
-            sb.AppendLine("                New-LocalUser -Name $samName -FullName $fullName -Password $secPwd -PasswordNeverExpires:$neverExpires -UserMayNotChangePassword:$cannotChange -ErrorAction Stop | Out-Null");
+            sb.AppendLine("                $newParams['Password'] = $secPwd");
+            sb.AppendLine("                if ($neverExpires) { $newParams['PasswordNeverExpires'] = $true }");
             sb.AppendLine("            } else {");
-            sb.AppendLine("                New-LocalUser -Name $samName -FullName $fullName -NoPassword -UserMayNotChangePassword:$cannotChange -ErrorAction Stop | Out-Null");
-            sb.AppendLine("                Set-LocalUser -Name $samName -PasswordNeverExpires $neverExpires -ErrorAction SilentlyContinue");
+            sb.AppendLine("                $newParams['NoPassword'] = $true");
+            sb.AppendLine("            }");
+            sb.AppendLine("            if ($cannotChange) { $newParams['UserMayNotChangePassword'] = $true }");
+            sb.AppendLine("            New-LocalUser @newParams | Out-Null");
+            sb.AppendLine("            if (-not $hasPwd -and $neverExpires) {");
+            sb.AppendLine("                Set-LocalUser -Name $samName -PasswordNeverExpires $true -ErrorAction SilentlyContinue");
             sb.AppendLine("            }");
             sb.AppendLine("        } else {");
             sb.AppendLine("            $comp = [ADSI]\"WinNT://$env:COMPUTERNAME,computer\"");
@@ -370,11 +442,13 @@ namespace InstallerGUI.Services
             sb.AppendLine("            if ($hasPwd) { $u.SetPassword($pwdPlain) } else { $u.SetPassword('') }");
             sb.AppendLine("            $u.Put('FullName', $fullName)");
             sb.AppendLine("            $u.SetInfo()");
-            sb.AppendLine("            $flags = [int]$u.UserFlags.Value -band (-bnot (0x0040 -bor 0x10000))");
-            sb.AppendLine("            if ($cannotChange) { $flags = $flags -bor 0x0040 }");
-            sb.AppendLine("            if ($neverExpires) { $flags = $flags -bor 0x10000 }");
-            sb.AppendLine("            $u.UserFlags = $flags");
-            sb.AppendLine("            $u.SetInfo()");
+            sb.AppendLine("            if ($cannotChange -or $neverExpires) {");
+            sb.AppendLine("                $flags = [int]$u.UserFlags.Value");
+            sb.AppendLine("                if ($cannotChange) { $flags = $flags -bor 0x0040 }");
+            sb.AppendLine("                if ($neverExpires) { $flags = $flags -bor 0x10000 }");
+            sb.AppendLine("                $u.UserFlags = $flags");
+            sb.AppendLine("                $u.SetInfo()");
+            sb.AppendLine("            }");
             sb.AppendLine("        }");
             sb.AppendLine("        Write-Host ('[ok] Usuário \"' + $samName + '\" criado.')");
             sb.AppendLine("    }");
@@ -387,13 +461,9 @@ namespace InstallerGUI.Services
             sb.AppendLine("}");
             sb.AppendLine("if ($neverExpires) {");
             sb.AppendLine("    Write-Host ('[ok] Senha do usuário \"' + $samName + '\" configurada para NUNCA expirar.')");
-            sb.AppendLine("} else {");
-            sb.AppendLine("    Write-Host ('[ok] Senha do usuário \"' + $samName + '\": expiração padrão (nunca expirar: desmarcado).')");
             sb.AppendLine("}");
             sb.AppendLine("if ($cannotChange) {");
             sb.AppendLine("    Write-Host '[ok] Restrição aplicada: usuário impedido de alterar a senha.'");
-            sb.AppendLine("} elseif (-not $isAdmin) {");
-            sb.AppendLine("    Write-Host '[ok] Permissão de senha: usuário poderá alterar a própria senha.'");
             sb.AppendLine("}");
             sb.AppendLine("function Add-UserToLocalGroupBySid([string]$sidStr, [string]$user, [string]$label, [bool]$optional) {");
             sb.AppendLine("    Write-Host ('Adicionando \"' + $user + '\" ao grupo ' + $label + '...')");
@@ -760,19 +830,31 @@ namespace InstallerGUI.Services
         }
 
         /// <summary>
-        /// Configura os papéis de parede copiando todos os arquivos da pasta Wallpapers
-        /// em todos os temas do Windows (Aero, Dark, ThemeA-D, Spotlight)
-        /// e configurando para novos usuários e usuário atual, com opção de bloquear alteração por colaboradores.
+        /// Configura os papéis de parede e/ou a tela de bloqueio do Windows,
+        /// copiando os arquivos da pasta Wallpapers para os temas do sistema,
+        /// com opção de bloquear alteração do papel de parede e da tela de bloqueio.
         /// </summary>
-        public async Task SetWallpaperAsync(string client = null, bool preventChangingWallpaper = false)
+        public async Task SetWallpaperAsync(
+            string client = null,
+            bool preventChangingWallpaper = false,
+            bool applyDesktopWallpaper = true,
+            bool applyLockScreen = false,
+            bool preventChangingLockScreen = false)
         {
-            if (string.IsNullOrEmpty(client))
+            if (applyDesktopWallpaper)
             {
-                Log("Configurando papéis de parede em todos os temas do Windows...", ConsoleColor.Yellow);
+                if (string.IsNullOrEmpty(client))
+                {
+                    Log("Configurando papéis de parede em todos os temas do Windows...", ConsoleColor.Yellow);
+                }
+                else
+                {
+                    Log(string.Format("Configurando papéis de parede ({0}) em todos os temas do Windows...", client), ConsoleColor.Yellow);
+                }
             }
-            else
+            else if (applyLockScreen || preventChangingLockScreen)
             {
-                Log(string.Format("Configurando papéis de parede ({0}) em todos os temas do Windows...", client), ConsoleColor.Yellow);
+                Log("Configurando tela de bloqueio do Windows...", ConsoleColor.Yellow);
             }
 
             string psScript = GetApplyWallpapersScriptPath();
@@ -790,23 +872,38 @@ namespace InstallerGUI.Services
                 string quotedBasePath = QuoteProcessArgument(cleanBasePath);
                 string clientArg = !string.IsNullOrEmpty(client) ? string.Format(" -Client {0}", QuoteProcessArgument(client)) : "";
                 string preventArg = preventChangingWallpaper ? " -PreventChangingWallpaper" : "";
+                string skipDesktopArg = !applyDesktopWallpaper ? " -SkipDesktopWallpaper" : "";
+                string lockScreenArg = applyLockScreen ? " -ApplyLockScreen" : "";
+                string preventLockArg = preventChangingLockScreen ? " -PreventChangingLockScreen" : "";
 
                 int exitCode = await RunProcessAsync("powershell",
-                    string.Format("-NoProfile -ExecutionPolicy Bypass -File {0} -BasePath {1}{2}{3}", quotedPsScript, quotedBasePath, clientArg, preventArg),
+                    string.Format("-NoProfile -ExecutionPolicy Bypass -File {0} -BasePath {1}{2}{3}{4}{5}{6}",
+                        quotedPsScript, quotedBasePath, clientArg, preventArg, skipDesktopArg, lockScreenArg, preventLockArg),
                     120000, null, false);
 
                 if (exitCode == 0)
                 {
-                    Log(string.Format("[ok] Papéis de parede {0}configurados em todos os temas do Windows.",
-                        !string.IsNullOrEmpty(client) ? "(" + client + ") " : ""), ConsoleColor.Green);
+                    if (applyDesktopWallpaper)
+                    {
+                        Log(string.Format("[ok] Papéis de parede {0}configurados em todos os temas do Windows.",
+                            !string.IsNullOrEmpty(client) ? "(" + client + ") " : ""), ConsoleColor.Green);
+                    }
                     if (preventChangingWallpaper)
                     {
                         Log("[ok] Restrição de papel de parede ativada: colaboradores impedidos de alterar a tela de fundo.", ConsoleColor.Green);
                     }
+                    if (applyLockScreen)
+                    {
+                        Log("[ok] Imagem do papel de parede aplicada na tela de bloqueio do Windows.", ConsoleColor.Green);
+                    }
+                    if (preventChangingLockScreen)
+                    {
+                        Log("[ok] Restrição de tela de bloqueio ativada: alteração da tela de bloqueio bloqueada.", ConsoleColor.Green);
+                    }
                 }
                 else
                 {
-                    Log(string.Format("X Aviso: Configuração de papéis de parede retornou código {0}.", exitCode), ConsoleColor.Yellow);
+                    Log(string.Format("X Aviso: Configuração de papéis de parede/tela de bloqueio retornou código {0}.", exitCode), ConsoleColor.Yellow);
                 }
             }
             else
@@ -4254,7 +4351,8 @@ namespace InstallerGUI.Services
             if (options.RenameComputer) totalSteps++;
             if (options.CreateAdmin) totalSteps++;
             if (options.CreateStandardUser) totalSteps++;
-            if (options.SetWallpaper || options.SetWallpaperNortel || options.PreventWallpaperChange) totalSteps++;
+            if (options.SetWallpaper || options.SetWallpaperNortel || options.PreventWallpaperChange
+                || options.SetLockScreenWallpaper || options.PreventLockScreenChange) totalSteps++;
             totalSteps += options.SelectedPrograms.Count;
 
             int currentStep = 0;
@@ -4271,10 +4369,13 @@ namespace InstallerGUI.Services
 
             try
             {
-                // Configura política de 'senha nunca expira' (ativa para todos se marcado, ou desmarca para todos se desmarcado)
-                await EnsureGlobalPasswordNeverExpiresPolicyAsync(options.PasswordNeverExpiresGlobal);
-                if (IsCancellationRequested())
-                    cancelled = true;
+                // Configura política de 'senha nunca expira' somente quando marcada pelo usuário
+                if (!cancelled && options.PasswordNeverExpiresGlobal)
+                {
+                    await EnsureGlobalPasswordNeverExpiresPolicyAsync();
+                    if (IsCancellationRequested())
+                        cancelled = true;
+                }
 
                 // ─── FASE 0: Funcionalidades Preliminares de Limpeza e Preparação do Sistema ───
 
@@ -4364,14 +4465,31 @@ namespace InstallerGUI.Services
                     }
                 }
 
+                // Aplica restrição 'não pode alterar senha' às contas padrão ativas somente quando marcada
+                if (!cancelled && options.StandardUserCannotChangePassword)
+                {
+                    await EnsureStandardUsersCannotChangePasswordAsync();
+                    if (IsCancellationRequested())
+                        cancelled = true;
+                }
+
                 // Configura e ativa os Serviços de Localização do Windows para o Admin e o Usuário
                 if (!cancelled && options.EnableLocationServices)
                 {
                     await ConfigureLocationServicesAsync();
                 }
 
-                // 4. Wallpaper e Bloqueio de Alteração
-                if (!cancelled && (options.SetWallpaper || options.SetWallpaperNortel || options.PreventWallpaperChange))
+                // 4. Wallpaper, Tela de Bloqueio e Bloqueio de Alteração
+                bool anyWallpaperOrLockTask = options.SetWallpaper
+                    || options.SetWallpaperNortel
+                    || options.PreventWallpaperChange
+                    || options.SetLockScreenWallpaper
+                    || options.PreventLockScreenChange;
+                bool applyDesktopWallpaper = options.SetWallpaper
+                    || options.SetWallpaperNortel
+                    || options.PreventWallpaperChange;
+
+                if (!cancelled && anyWallpaperOrLockTask)
                 {
                     if (_cancellationTokenSource != null && _cancellationTokenSource.Token.IsCancellationRequested)
                         cancelled = true;
@@ -4381,7 +4499,12 @@ namespace InstallerGUI.Services
                         currentStep++;
                         ReportProgress(currentStep, totalSteps);
                         string client = options.SetWallpaperNortel ? "Nortel" : null;
-                        await SetWallpaperAsync(client, options.PreventWallpaperChange);
+                        await SetWallpaperAsync(
+                            client,
+                            options.PreventWallpaperChange,
+                            applyDesktopWallpaper,
+                            options.SetLockScreenWallpaper,
+                            options.PreventLockScreenChange);
                     }
                 }
 
@@ -5410,6 +5533,16 @@ namespace InstallerGUI.Services
         /// </summary>
         public bool PreventWallpaperChange { get; set; }
 
+        /// <summary>
+        /// Se true, aplica a imagem do papel de parede selecionado também como imagem ativa da tela de bloqueio.
+        /// </summary>
+        public bool SetLockScreenWallpaper { get; set; }
+
+        /// <summary>
+        /// Se true, bloqueia a alteração da imagem da tela de bloqueio nas configurações do Windows.
+        /// </summary>
+        public bool PreventLockScreenChange { get; set; }
+
         public bool EnableLocationServices { get; set; }
 
         /// <summary>
@@ -5486,9 +5619,9 @@ namespace InstallerGUI.Services
 
         public InstallationOptions()
         {
-            EnableLocationServices = true;
+            EnableLocationServices = false;
             CleanDesktopShortcuts = true;
-            PasswordNeverExpiresGlobal = true;
+            PasswordNeverExpiresGlobal = false;
             SelectedPrograms = new List<ProgramInfo>();
         }
     }

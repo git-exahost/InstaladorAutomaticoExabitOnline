@@ -10,7 +10,10 @@
 param(
     [string]$BasePath = "",
     [string]$Client = "",
-    [switch]$PreventChangingWallpaper
+    [switch]$PreventChangingWallpaper,
+    [switch]$SkipDesktopWallpaper,
+    [switch]$ApplyLockScreen,
+    [switch]$PreventChangingLockScreen
 )
 
 $ErrorActionPreference = "Continue"
@@ -70,17 +73,42 @@ foreach ($dir in $candidateDirs) {
     }
 }
 
-if ($imageFiles.Count -eq 0) {
-    Write-Warning "Nenhum arquivo de imagem (.jpg, .jpeg, .png, .bmp) encontrado na pasta Wallpapers."
-    exit 1
+if ($imageFiles.Count -eq 0 -and (-not $SkipDesktopWallpaper -or $ApplyLockScreen)) {
+    if ($SkipDesktopWallpaper -and $ApplyLockScreen -and (Test-Path "$env:SystemRoot\Web\Screen\img100.jpg")) {
+        $mainImg = Get-Item "$env:SystemRoot\Web\Screen\img100.jpg"
+    }
+    else {
+        Write-Warning "Nenhum arquivo de imagem (.jpg, .jpeg, .png, .bmp) encontrado na pasta Wallpapers."
+        exit 1
+    }
 }
 
-Write-Host "Pasta de origem: $wallpapersDir" -ForegroundColor Gray
-Write-Host "Total de papeis de parede encontrados: $($imageFiles.Count)" -ForegroundColor Green
-foreach ($img in $imageFiles) {
-    Write-Host "  - $($img.Name) ($([math]::Round($img.Length / 1MB, 2)) MB)" -ForegroundColor Gray
+$sysWeb = "$env:SystemRoot\Web"
+$wallpaperSysDir = "$sysWeb\Wallpaper"
+$folderName = if (-not [string]::IsNullOrWhiteSpace($Client)) { $Client } else { "Personalizado" }
+$customSystemDir = "$wallpaperSysDir\$folderName"
+$themesSysDir = "$env:SystemRoot\Resources\Themes"
+
+if ($imageFiles.Count -gt 0) {
+    Write-Host "Pasta de origem: $wallpapersDir" -ForegroundColor Gray
+    Write-Host "Total de papeis de parede encontrados: $($imageFiles.Count)" -ForegroundColor Green
+    foreach ($img in $imageFiles) {
+        Write-Host "  - $($img.Name) ($([math]::Round($img.Length / 1MB, 2)) MB)" -ForegroundColor Gray
+    }
+    Write-Host ""
+
+    # Define imagem principal (prioriza 01-*, img0.jpg ou Porto da Barra se existir, senao a primeira)
+    $mainImg = $imageFiles | Where-Object { $_.Name -like "01-*" -or $_.Name -like "01_*" } | Select-Object -First 1
+    if (-not $mainImg) {
+        $mainImg = $imageFiles | Where-Object { $_.Name -ieq "img0.jpg" } | Select-Object -First 1
+    }
+    if (-not $mainImg) {
+        $mainImg = $imageFiles | Where-Object { $_.Name -like "*Porto da Barra*" } | Select-Object -First 1
+    }
+    if (-not $mainImg) {
+        $mainImg = $imageFiles[0]
+    }
 }
-Write-Host ""
 
 # Funcoes auxiliares para tomar posse e conceder permissoes a Administradores (SID *S-1-5-32-544)
 function Grant-AdminAccess {
@@ -105,14 +133,9 @@ function Grant-AdminFileAccess {
     catch {}
 }
 
-# 3. Diretorios do sistema operacional
-$sysWeb = "$env:SystemRoot\Web"
-$wallpaperSysDir = "$sysWeb\Wallpaper"
-$folderName = if (-not [string]::IsNullOrWhiteSpace($Client)) { $Client } else { "Personalizado" }
-$customSystemDir = "$wallpaperSysDir\$folderName"
-$themesSysDir = "$env:SystemRoot\Resources\Themes"
+if (-not $SkipDesktopWallpaper) {
 
-# Cria pasta central C:\Windows\Web\Wallpaper\<folderName>
+# 3. Diretorios do sistema operacional
 if (-not (Test-Path $customSystemDir)) {
     New-Item -Path $customSystemDir -ItemType Directory -Force | Out-Null
 }
@@ -130,17 +153,6 @@ foreach ($img in $imageFiles) {
     Write-Host "  [+] $dest" -ForegroundColor Gray
 }
 
-# Define imagem principal (prioriza 01-*, img0.jpg ou Porto da Barra se existir, senao a primeira)
-$mainImg = $imageFiles | Where-Object { $_.Name -like "01-*" -or $_.Name -like "01_*" } | Select-Object -First 1
-if (-not $mainImg) {
-    $mainImg = $imageFiles | Where-Object { $_.Name -ieq "img0.jpg" } | Select-Object -First 1
-}
-if (-not $mainImg) {
-    $mainImg = $imageFiles | Where-Object { $_.Name -like "*Porto da Barra*" } | Select-Object -First 1
-}
-if (-not $mainImg) {
-    $mainImg = $imageFiles[0]
-}
 $mainImgPath = Join-Path $customSystemDir $mainImg.Name
 Write-Host ""
 Write-Host "Imagem principal definida: $($mainImg.Name)" -ForegroundColor Cyan
@@ -185,15 +197,7 @@ if (Test-Path "$wallpaperSysDir\Spotlight\img14.jpg") {
     Copy-Item -Path $mainImg.FullName -Destination "$wallpaperSysDir\Spotlight\img14.jpg" -Force
 }
 
-# C) Tela de Bloqueio (Lock Screen)
-$screenDir = "$sysWeb\Screen"
-if (Test-Path $screenDir) {
-    Grant-AdminAccess $screenDir
-    Grant-AdminFileAccess "$screenDir\img100.jpg"
-    Copy-Item -Path $mainImg.FullName -Destination "$screenDir\img100.jpg" -Force
-}
-
-# D) Cache 4K (Windows 10/11)
+# C) Cache 4K (Windows 10/11)
 $fourKDir = "$sysWeb\4K\Wallpaper\Windows"
 if (Test-Path $fourKDir) {
     Grant-AdminAccess $fourKDir
@@ -302,17 +306,26 @@ $mainWallpaperTarget = "$wallpaperSysDir\Windows\img0.jpg"
 $regDesktop = "HKCU:\Control Panel\Desktop"
 $regCuActiveDesktop = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop"
 $regCuSysPol = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\System"
+$hadCuNoChangingWallPaper = $false
+$prevCuNoChangingWallPaper = $null
+$hadCuPolSysWallpaper = $false
+$hadCuPolSysStyle = $false
 
 if (Test-Path $regCuActiveDesktop) {
-    if (Get-ItemProperty -Path $regCuActiveDesktop -Name "NoChangingWallPaper" -ErrorAction SilentlyContinue) {
+    $adProps = Get-ItemProperty -Path $regCuActiveDesktop -Name "NoChangingWallPaper" -ErrorAction SilentlyContinue
+    if ($adProps -ne $null) {
+        $hadCuNoChangingWallPaper = $true
+        $prevCuNoChangingWallPaper = $adProps.NoChangingWallPaper
         Remove-ItemProperty -Path $regCuActiveDesktop -Name "NoChangingWallPaper" -ErrorAction SilentlyContinue
     }
 }
 if (Test-Path $regCuSysPol) {
     if (Get-ItemProperty -Path $regCuSysPol -Name "Wallpaper" -ErrorAction SilentlyContinue) {
+        $hadCuPolSysWallpaper = $true
         Remove-ItemProperty -Path $regCuSysPol -Name "Wallpaper" -ErrorAction SilentlyContinue
     }
     if (Get-ItemProperty -Path $regCuSysPol -Name "WallpaperStyle" -ErrorAction SilentlyContinue) {
+        $hadCuPolSysStyle = $true
         Remove-ItemProperty -Path $regCuSysPol -Name "WallpaperStyle" -ErrorAction SilentlyContinue
     }
 }
@@ -419,6 +432,21 @@ public class NativeWallpaper {
 }
 catch {
     rundll32.exe user32.dll, UpdatePerUserSystemParameters
+}
+if (-not $PreventChangingWallpaper) {
+    if ($hadCuNoChangingWallPaper) {
+        if (-not (Test-Path $regCuActiveDesktop)) { New-Item -Path $regCuActiveDesktop -Force | Out-Null }
+        Set-ItemProperty -Path $regCuActiveDesktop -Name "NoChangingWallPaper" -Value $prevCuNoChangingWallPaper -Type DWord -ErrorAction SilentlyContinue
+    }
+    if ($hadCuPolSysWallpaper -or $hadCuPolSysStyle) {
+        if (-not (Test-Path $regCuSysPol)) { New-Item -Path $regCuSysPol -Force | Out-Null }
+        if ($hadCuPolSysWallpaper) {
+            Set-ItemProperty -Path $regCuSysPol -Name "Wallpaper" -Value $mainWallpaperTarget -ErrorAction SilentlyContinue
+        }
+        if ($hadCuPolSysStyle) {
+            Set-ItemProperty -Path $regCuSysPol -Name "WallpaperStyle" -Value "4" -ErrorAction SilentlyContinue
+        }
+    }
 }
 Write-Host ""
 
@@ -552,6 +580,101 @@ Get-ChildItem -Path "$env:SystemDrive\Users" -Directory | ForEach-Object {
 
             reg unload "HKU\TempUser" >$null 2>&1
         }
+    }
+}
+
+}
+
+# 10. Configura e/ou Bloqueia a Tela de Bloqueio (Lock Screen)
+if ($ApplyLockScreen -or $PreventChangingLockScreen) {
+    $regPolPersonalization = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Personalization"
+    if (-not (Test-Path $regPolPersonalization)) {
+        New-Item -Path $regPolPersonalization -Force | Out-Null
+    }
+
+    if ($ApplyLockScreen) {
+        Write-Host "Configurando imagem da tela de bloqueio do Windows..." -ForegroundColor Yellow
+        $screenDir = "$sysWeb\Screen"
+        if (-not (Test-Path $screenDir)) {
+            New-Item -Path $screenDir -ItemType Directory -Force | Out-Null
+        }
+        Grant-AdminAccess $screenDir
+
+        $lockScreenTarget = "$screenDir\img100.jpg"
+        if ($mainImg -and ($mainImg.FullName -ne $lockScreenTarget)) {
+            Grant-AdminFileAccess $lockScreenTarget
+            Copy-Item -Path $mainImg.FullName -Destination $lockScreenTarget -Force
+        }
+        if (Test-Path $lockScreenTarget) {
+            icacls "$lockScreenTarget" /grant "*S-1-5-32-545:R" /grant "*S-1-5-18:R" /c /q >$null 2>&1
+        }
+
+        # PersonalizationCSP (funciona em Home, Pro, Enterprise e Education no Windows 10/11)
+        $regPersonalizationCsp = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\PersonalizationCSP"
+        if (-not (Test-Path $regPersonalizationCsp)) {
+            New-Item -Path $regPersonalizationCsp -Force | Out-Null
+        }
+        New-ItemProperty -Path $regPersonalizationCsp -Name "LockScreenImageStatus" -Value 1 -PropertyType DWord -Force | Out-Null
+        New-ItemProperty -Path $regPersonalizationCsp -Name "LockScreenImagePath" -Value $lockScreenTarget -PropertyType String -Force | Out-Null
+        New-ItemProperty -Path $regPersonalizationCsp -Name "LockScreenImageUrl" -Value $lockScreenTarget -PropertyType String -Force | Out-Null
+
+        # Politica complementar para edicoes Enterprise/Education
+        New-ItemProperty -Path $regPolPersonalization -Name "LockScreenImage" -Value $lockScreenTarget -PropertyType String -Force | Out-Null
+
+        # Desativa rotacao do Windows Spotlight na tela de bloqueio para nao sobrescrever a imagem
+        $regCdm = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+        if (Test-Path $regCdm) {
+            Set-ItemProperty -Path $regCdm -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $regCdm -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $regCdm -Name "SubscribedContent-338387Enabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        }
+
+        if (Test-Path $defaultNtUser) {
+            reg load "HKU\DefaultUser" "$defaultNtUser" >$null 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                reg add "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v RotatingLockScreenEnabled /t REG_DWORD /d 0 /f >$null 2>&1
+                reg add "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v RotatingLockScreenOverlayEnabled /t REG_DWORD /d 0 /f >$null 2>&1
+                reg add "HKU\DefaultUser\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" /v SubscribedContent-338387Enabled /t REG_DWORD /d 0 /f >$null 2>&1
+                reg unload "HKU\DefaultUser" >$null 2>&1
+            }
+        }
+
+        Get-ChildItem -Path "Registry::HKEY_USERS" -ErrorAction SilentlyContinue | ForEach-Object {
+            $sidName = $_.PSChildName
+            if ($sidName -match '^S-1-5-21-\d+-\d+-\d+-\d+$') {
+                $hkuCdm = "Registry::HKEY_USERS\$sidName\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+                if (Test-Path $hkuCdm) {
+                    Set-ItemProperty -Path $hkuCdm -Name "RotatingLockScreenEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+                    Set-ItemProperty -Path $hkuCdm -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+                    Set-ItemProperty -Path $hkuCdm -Name "SubscribedContent-338387Enabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+                }
+            }
+        }
+
+        # Atualiza tambem via API WinRT de tela de bloqueio para o usuario atual (best-effort)
+        try {
+            if (Test-Path $lockScreenTarget) {
+                Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue
+                $asTaskGeneric = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+                    $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'
+                })[0]
+                $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
+                $null = [Windows.System.UserProfile.LockScreen, Windows.System.UserProfile, ContentType = WindowsRuntime]
+                $storageFile = $asTaskGeneric.MakeGenericMethod([Windows.Storage.StorageFile]).Invoke($null, @([Windows.Storage.StorageFile]::GetFileFromPathAsync($lockScreenTarget))).GetAwaiter().GetResult()
+                $asTaskAction = ([System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object {
+                    $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncAction'
+                })[0]
+                $asTaskAction.Invoke($null, @([Windows.System.UserProfile.LockScreen]::SetImageFileAsync($storageFile))).GetAwaiter().GetResult()
+            }
+        }
+        catch {}
+
+        Write-Host "[ok] Imagem da tela de bloqueio configurada ($lockScreenTarget)." -ForegroundColor Green
+    }
+
+    if ($PreventChangingLockScreen) {
+        New-ItemProperty -Path $regPolPersonalization -Name "NoChangingLockScreen" -Value 1 -PropertyType DWord -Force | Out-Null
+        Write-Host "[ok] Restricao ativada: alteracao da tela de bloqueio bloqueada." -ForegroundColor Green
     }
 }
 

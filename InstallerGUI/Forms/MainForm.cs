@@ -69,6 +69,8 @@ namespace InstallerGUI.Forms
         private CheckBox _chkWallpaper;
         private CheckBox _chkWallpaperNortel;
         private CheckBox _chkPreventWallpaperChange;
+        private CheckBox _chkLockScreenFromWallpaper;
+        private CheckBox _chkPreventLockScreenChange;
         private CheckBox _chkUninstallGames;
         private CheckBox _chkUninstallThirdPartyAntivirus;
         private Panel _pnlFeaturesMain;
@@ -1270,12 +1272,14 @@ namespace InstallerGUI.Forms
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 1,
-                RowCount = 8,
+                RowCount = 10,
                 BackColor = CorPainel,
                 Margin = Padding.Empty,
                 Padding = Padding.Empty,
             };
             tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
+            tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
             tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, (int)(30 * scale)));
@@ -1297,6 +1301,8 @@ namespace InstallerGUI.Forms
             _chkWallpaper = CreateCheckBox("Aplicar papel de parede personalizado", false);
             _chkWallpaperNortel = CreateCheckBox("Aplicar papel de parede Nortel", false);
             _chkPreventWallpaperChange = CreateCheckBox("Bloquear alteração do papel de parede", false);
+            _chkLockScreenFromWallpaper = CreateCheckBox("Aplicar imagem do papel de parede à tela de bloqueio", false);
+            _chkPreventLockScreenChange = CreateCheckBox("Bloquear alteração da tela de bloqueio", false);
 
             _chkWallpaper.CheckedChanged += (s, e) =>
             {
@@ -1321,6 +1327,8 @@ namespace InstallerGUI.Forms
             tbl.Controls.Add(_chkWallpaper, 0, 3);
             tbl.Controls.Add(_chkWallpaperNortel, 0, 4);
             tbl.Controls.Add(_chkPreventWallpaperChange, 0, 5);
+            tbl.Controls.Add(_chkLockScreenFromWallpaper, 0, 6);
+            tbl.Controls.Add(_chkPreventLockScreenChange, 0, 7);
 
             var lblHint = new Label
             {
@@ -1330,7 +1338,7 @@ namespace InstallerGUI.Forms
                 Dock = DockStyle.Fill,
                 TextAlign = ContentAlignment.MiddleLeft,
             };
-            tbl.Controls.Add(lblHint, 0, 6);
+            tbl.Controls.Add(lblHint, 0, 8);
 
             pnl.Controls.Add(tbl);
             return pnl;
@@ -1397,6 +1405,8 @@ namespace InstallerGUI.Forms
                 if (_chkWallpaper != null) _chkWallpaper.Checked = false;
                 if (_chkWallpaperNortel != null) _chkWallpaperNortel.Checked = useNortel;
                 if (_chkPreventWallpaperChange != null) _chkPreventWallpaperChange.Checked = useNortel;
+                if (_chkLockScreenFromWallpaper != null) _chkLockScreenFromWallpaper.Checked = useNortel;
+                if (_chkPreventLockScreenChange != null) _chkPreventLockScreenChange.Checked = useNortel;
 
                 // Aba Funcionalidades
                 if (_chkUninstallGames != null) _chkUninstallGames.Checked = useNortel;
@@ -3609,7 +3619,7 @@ namespace InstallerGUI.Forms
                 options.CreateStandardUser = criarUsuarioPadrao;
                 options.StandardUserName = criarUsuarioPadrao ? stdName : null;
                 options.StandardUserPassword = criarUsuarioPadrao ? _txtStandardUserPass.Text : null;
-                options.StandardUserCannotChangePassword = criarUsuarioPadrao && _chkStandardUserNoPwdChange.Checked;
+                options.StandardUserCannotChangePassword = _chkStandardUserNoPwdChange != null && _chkStandardUserNoPwdChange.Checked;
 
                 options.PasswordNeverExpiresGlobal = _chkPasswordNeverExpiresGlobal != null && _chkPasswordNeverExpiresGlobal.Checked;
 
@@ -3618,6 +3628,8 @@ namespace InstallerGUI.Forms
                 options.SetWallpaper = _chkWallpaper.Checked;
                 options.SetWallpaperNortel = _chkWallpaperNortel.Checked;
                 options.PreventWallpaperChange = _chkPreventWallpaperChange != null && _chkPreventWallpaperChange.Checked;
+                options.SetLockScreenWallpaper = _chkLockScreenFromWallpaper != null && _chkLockScreenFromWallpaper.Checked;
+                options.PreventLockScreenChange = _chkPreventLockScreenChange != null && _chkPreventLockScreenChange.Checked;
                 options.UninstallGames = _chkUninstallGames != null && _chkUninstallGames.Checked;
                 options.RemoveOtherUserProfiles = false;
                 options.UninstallThirdPartyAntivirus = _chkUninstallThirdPartyAntivirus != null && _chkUninstallThirdPartyAntivirus.Checked;
